@@ -1062,9 +1062,9 @@ window.openReviews = async function(rating, revCount, prodName, prodId) {
 }
 
 function setupAuth() {
-    // Check if user is logged in via cookies
-    let username = getCookie('username');
-    let fullName = getCookie('full_name');
+    // Check if user is logged in via cookies or localStorage (for Supabase)
+    let username = getCookie('username') || localStorage.getItem('user_username');
+    let fullName = getCookie('full_name') || localStorage.getItem('user_full_name');
     updateAuthUI(fullName);
 
     const authModal = document.getElementById('authModal');
