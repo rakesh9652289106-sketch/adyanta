@@ -3,7 +3,29 @@ const API_BASE = import.meta.env.VITE_API_URL || 'https://adyanta-commerce.onren
 // Supabase Client Initialization (Frontend)
 const SUPABASE_URL = 'https://ghbecipylczrebqcmrvm.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdoYmVjaXB5bGN6cmVicWNtcnZtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzOTY3MTEsImV4cCI6MjA5Mzk3MjcxMX0.-eE1aso1D-I3F5kGbGlyBxweXsey14w2J_dx1XWYY8E';
-const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+let supabase;
+async function initSupabase() {
+    if (window.supabase) {
+        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    } else {
+        // Retry if not loaded yet
+        return new Promise((resolve) => {
+            let retries = 0;
+            const interval = setInterval(() => {
+                if (window.supabase) {
+                    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                    clearInterval(interval);
+                    resolve();
+                }
+                if (retries++ > 50) { // 5 seconds timeout
+                    console.error("Supabase script failed to load");
+                    clearInterval(interval);
+                    resolve();
+                }
+            }, 100);
+        });
+    }
+}
 
 // Data structures for our grocery shop
 
@@ -23,23 +45,42 @@ let activeFilter = { type: null, value: null };
 
 document.addEventListener("DOMContentLoaded", async () => {
     console.log("DOM Content Loaded - Initializing ADYANTA...");
+    await initSupabase();
     try {
-        console.log("Fetching products...");
-        const prodRes = await fetch(API_BASE + '/api/products');
-        products = await prodRes.json();
+        if (!supabase) throw new Error("Supabase client not initialized");
+        console.log("Fetching data from Supabase...");
+        
+        // Fetch Categories
+        const { data: catData, error: catError } = await supabase.from('categories').select('*');
+        if (catError) throw catError;
+        categories = catData || [];
+        console.log(`Loaded ${categories.length} categories.`);
+
+        // Fetch Products
+        const { data: prodData, error: prodError } = await supabase.from('products').select('*');
+        if (prodError) throw prodError;
+        products = prodData || [];
         console.log(`Loaded ${products.length} products.`);
         
-        console.log("Fetching categories...");
-        const catRes = await fetch(API_BASE + '/api/categories');
-        categories = await catRes.json();
-        console.log(`Loaded ${categories.length} categories.`);
-        
-        console.log("Fetching brands...");
-        const brandRes = await fetch(API_BASE + '/api/brands');
-        brands = await brandRes.json();
+        // Fetch Brands
+        const { data: brandData, error: brandError } = await supabase.from('brands').select('*');
+        if (brandError) throw brandError;
+        brands = brandData || [];
         console.log(`Loaded ${brands.length} brands.`);
+
     } catch(e) {
-        console.error("CRITICAL: Failed fetching data from API", e);
+        console.error("CRITICAL: Failed fetching data from Supabase", e);
+        // Fallback to legacy API if Supabase fails (optional)
+        try {
+            const prodRes = await fetch(API_BASE + '/api/products');
+            products = await prodRes.json();
+            const catRes = await fetch(API_BASE + '/api/categories');
+            categories = await catRes.json();
+            const brandRes = await fetch(API_BASE + '/api/brands');
+            brands = await brandRes.json();
+        } catch(apiErr) {
+            console.error("Legacy API also failed", apiErr);
+        }
     }
 
     console.log("Initializing UI components...");
