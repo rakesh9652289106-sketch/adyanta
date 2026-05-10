@@ -3417,6 +3417,11 @@ function updatePromoSliderUI() {
 
     slides.style.transform = `translateX(-${currentPromoIndex * 100}%)`;
     
+    dots.forEach((dot, i) => {
+        dot.classList.toggle('active', i === currentPromoIndex);
+    });
+}
+
 function setupGoogleAuth() {
     const googleBtn = document.getElementById('googleAuthBtn');
     if (!googleBtn || !supabase) return;
