@@ -1,8 +1,8 @@
 const API_BASE = import.meta.env.VITE_API_URL || 'https://adyanta-commerce.onrender.com';
 
 // Supabase Client Initialization (Frontend)
-const SUPABASE_URL = 'https://your-new-adyanta-project.supabase.co'; // REPLACE THIS
-const SUPABASE_ANON_KEY = 'your-new-adyanta-anon-key'; // REPLACE THIS
+const SUPABASE_URL = 'https://ghbecipylczrebqcmrvm.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdoYmVjaXB5bGN6cmVicWNtcnZtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzOTY3MTEsImV4cCI6MjA5Mzk3MjcxMX0.-eE1aso1D-I3F5kGbGlyBxweXsey14w2J_dx1XWYY8E';
 const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
 // Data structures for our grocery shop
