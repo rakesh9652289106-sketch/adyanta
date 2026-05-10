@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>ADYANTA | Fresh Groceries Delivered in 15 Minutes</title>
+    <meta name="description" content="Shop fresh groceries, dairy, snacks, and household essentials at ADYANTA. Lightning-fast delivery in 15-45 minutes across Nellore. Best quality and lowest prices!">
+    <link rel="canonical" href="https://adyanta.com/" />
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://adyanta.com/">
+    <meta property="og:title" content="ADYANTA | Fresh Groceries Delivered in 15 Minutes">
+    <meta property="og:description" content="Get fresh groceries delivered to your doorstep in minutes. Shop ADYANTA for the best deals on daily essentials.">
+    <meta property="og:image" content="https://adyanta.com/assets/og-image.png">
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://adyanta.com/">
+    <meta property="twitter:title" content="ADYANTA | Fresh Groceries Delivered in 15 Minutes">
+    <meta property="twitter:description" content="Get fresh groceries delivered to your doorstep in minutes. Shop ADYANTA for the best deals on daily essentials.">
+    <meta property="twitter:image" content="https://adyanta.com/assets/og-image.png">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="https://adyanta.com/favicon.svg">
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <link rel="apple-touch-icon" href="assets/favicon.png">
+    <meta name="theme-color" content="#059669">
+    
+    <!-- JSON-LD Structured Data: WebSite & Store Reviews -->
+    <script type="application/ld+json">
+    [
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "ADYANTA",
+        "url": "https://snapbasket.com/",
+        "potentialAction": {
+          "@type": "SearchAction",
+          "target": "https://snapbasket.com/?search={search_term_string}",
+          "query-input": "required name=search_term_string"
+        }
+      },
+      {
+        "@context": "https://schema.org",
+        "@type": "Store",
+        "name": "ADYANTA SnapBasket",
+        "image": "https://snapbasket.com/assets/og-image.png",
+        "telephone": "+91-98765-43210",
+        "url": "https://snapbasket.com/",
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": "123 Grocery Avenue",
+          "addressLocality": "Nellore",
+          "postalCode": "524004",
+          "addressCountry": "IN"
+        },
+        "aggregateRating": {
+          "@type": "AggregateRating",
+          "ratingValue": "4.9",
+          "reviewCount": "1854"
+        },
+        "priceRange": "$$"
+      }
+    ]
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="cart-styles.css">
+
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/fill/style.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/bold/style.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/light/style.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/thin/style.css">
+    <script type="module" src="theme-manager.js"></script>
+    <script type="module" src="splash-manager.js"></script>
+    <script type="module" src="translations.js"></script>
+    <script type="module" src="analytics.js"></script>
+</head>
+<body>
+    <div class="creative-blob"></div>
+    <div class="creative-blob" style="animation-delay: -10s; background: linear-gradient(135deg, rgba(212, 175, 55, 0.05) 0%, rgba(10, 92, 54, 0.05) 100%);"></div>
+    
+    <!-- Splash Screen Intro -->
+    <div id="splashScreen" class="splash-screen">
+        <div class="splash-video-container">
+            <video id="splashVideo" autoplay muted playsinline>
+                <source src="https://assets.mixkit.co/videos/preview/mixkit-shopping-in-a-grocery-store-4433-large.mp4" type="video/mp4">
+            </video>
+        </div>
+        <div class="splash-content">
+            <div class="splash-logo">
+                <i class="ph-fill ph-shopping-cart"></i>
+                <h1>ADYANTA</h1>
+            </div>
+            <div class="splash-loader"></div>
+            <p class="splash-tagline">Freshness Delivered in Minutes</p>
+        </div>
+        <button id="skipSplash" class="skip-splash">Skip Intro</button>
+    </div>
+
+    <!-- Header Notification (Dynamic Promo Bar) -->
+    <div class="top-notification" id="dynamicNotificationBanner" style="background: #059669; color: white; padding: 0.5rem; text-align: center; font-weight: 600; font-size: 0.85rem; letter-spacing: 0.5px; overflow: hidden; white-space: nowrap;">
+        <marquee behavior="scroll" direction="left" scrollamount="6" id="notificationText">📣 Loading latest updates...</marquee>
+    </div>
+
+    <!-- Main Navigation -->
+    <header class="navbar">
+        <div class="nav-container">
+            <div class="nav-left" style="display:flex; align-items:center; gap: 1rem; flex: 1;">
+                <button class="nav-menu-btn" id="navMenuBtn" style="background:none; border:none; color:var(--text-main); font-size:1.75rem; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0.25rem;">
+                    <i class="ph ph-list"></i>
+                </button>
+                <a href="/" class="brand-logo">
+                    <i class="ph ph-basket"></i> ADYANTA
+                </a>
+                
+                <!-- Location Selector -->
+                <div class="location-selector" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; color: var(--text-soft); font-size: 0.9rem; border-left: 1px solid var(--border); padding-left: 1.5rem;">
+                    <i class="ph ph-map-pin" style="color: var(--primary); font-size: 1.25rem;"></i>
+                    <div style="display: flex; flex-direction: column; line-height: 1.2;">
+                        <span style="font-size: 0.75rem;" data-i18n="nav_deliver_to">Deliver to</span>
+                        <strong style="color: var(--text-main);">Nellore 524004 <i class="ph ph-caret-down"></i></strong>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mobile Only Actions -->
+            <div class="mobile-nav-actions" style="display: flex; align-items: center; gap: 0.75rem;">
+                <div id="mobileDynamicAuthContent" style="font-size: 0.75rem; font-weight: 700;"></div>
+                <button class="theme-toggle-btn mobile-theme-btn" style="background:none; border:none; color:var(--text-main); font-size:1.4rem;">
+                    <i class="ph ph-moon"></i>
+                </button>
+                <div class="mobile-notifications-btn" style="position: relative; color:var(--text-main); font-size:1.6rem; cursor: pointer; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 1px solid var(--border);">
+                    <i class="ph ph-bell"></i>
+                    <span class="badge mobile-notif-badge" style="position: absolute; top: -2px; right: -2px; background: #F59E0B; color: white; width: 20px; height: 20px; border-radius: 50%; display: none; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 800; border: 2px solid var(--card-bg); box-shadow: 0 2px 4px rgba(0,0,0,0.1);">0</span>
+                </div>
+            </div>
+            
+            <div class="search-bar" style="position: relative;">
+                <i class="ph ph-magnifying-glass search-icon"></i>
+                <input type="text" id="mainSearchInput" autocomplete="off" data-i18n="nav_search_placeholder" placeholder="Search for 'Atta', 'Maggi' or 'Milk'...">
+                <span class="search-brand-watermark">ADYANTA</span>
+                <div id="searchHistoryDropdown" style="display: none; position: absolute; top: 100%; left: 0; width: 100%; background: var(--card-bg); border: 1px solid var(--border); box-shadow: var(--shadow-md); border-radius: var(--radius-md); z-index: 1000; margin-top: 0.5rem; overflow: hidden;">
+                    <div style="padding: 0.5rem 1rem; font-size: 0.75rem; color: var(--text-soft); font-weight: 600; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border);">
+                        Recent Searches
+                        <button id="clearSearchHistoryBtn" style="background: none; border: none; color: var(--primary); font-size: 0.7rem; cursor: pointer;">Clear</button>
+                    </div>
+                    <ul id="searchHistoryList" style="list-style: none; margin: 0; padding: 0;">
+                        <!-- History items injected here -->
+                    </ul>
+                </div>
+            </div>            <div class="nav-actions">
+                <!-- User requested authentication links -->
+                <div class="auth-links">
+                    <button class="theme-toggle-btn" id="themeToggle" title="Toggle Dark Mode">
+                        <i class="ph ph-moon"></i>
+                    </button>
+                    <div id="dynamicAuthContent" style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; font-weight: 600;">
+                        <a href="#" class="nav-link" data-i18n="nav_sign_in">Sign In</a>
+                        <span class="divider">|</span>
+                        <a href="#" class="nav-link" data-i18n="nav_log_in">Log In</a>
+                    </div>
+
+                    <!-- Notifications -->
+                    <div class="notifications-btn" id="notificationsToggle" style="position: relative; cursor: pointer; display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--border); transition: var(--transition); background: var(--card-bg);">
+                        <i class="ph ph-bell" style="font-size: 1.4rem; color: #1E293B;"></i>
+                        <span id="notifBadge" class="badge" style="position: absolute; top: -2px; right: -2px; background-color: #F59E0B; color: white; width: 22px; height: 22px; border-radius: 50%; display: none; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 900; border: 2px solid var(--card-bg); box-shadow: 0 2px 4px rgba(0,0,0,0.1);">0</span>
+                    </div>
+                </div>
+
+                <a href="wishlist.html" class="wishlist-link-btn" style="background-color: transparent; border: 1px solid var(--border); color: var(--text-soft); border-radius: var(--radius-md); width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; position: relative;">
+                    <i class="ph ph-heart"></i>
+                    <span class="cart-badge" id="wishlistBadge" style="background-color: #EF4444;">0</span>
+                </a>
+
+                <a href="#" class="cart-btn">
+                    <i class="ph ph-shopping-cart"></i>
+                    <span class="cart-badge" id="cartBadge">0</span>
+                    <div class="cart-info">
+                        <span class="cart-label" data-i18n="nav_my_cart">My Cart</span>
+                        <span class="cart-total">₹0</span>
+                    </div>
+                </a>
+            </div>
+        </div>
+        
+        <!-- Sticky Categories Bar (Visible only when scrolling) -->
+        <div class="sticky-categories-bar" id="stickyCategoriesBar">
+            <!-- Populated by JS -->
+        </div>
+
+        <!-- Notifications Dropdown (Global) -->
+        <div id="notificationsDropdown" style="display: none; position: absolute; top: 70px; right: 1rem; width: 300px; max-width: calc(100vw - 2rem); background: var(--card-bg); border: 1px solid var(--border); box-shadow: var(--shadow-md); border-radius: var(--radius-md); padding: 1rem; z-index: 1000;">
+            <h4 style="font-size: 0.9rem; margin-bottom: 0.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
+                <span style="display: flex; align-items: center; gap: 0.4rem;"><i class="ph-fill ph-megaphone" style="color: var(--secondary);"></i> Store Alerts</span>
+                <div style="display: flex; align-items: center; gap: 0.8rem;">
+                    <span id="notifTotalText" style="font-size: 0.7rem; font-weight: normal; color: var(--text-soft);">Total: 0</span>
+                    <button id="clearNotifsBtn" style="background: none; border: none; color: var(--primary); font-size: 0.7rem; font-weight: 600; cursor: pointer; padding: 0;">Clear All</button>
+                </div>
+            </h4>
+            <ul id="notifList" style="list-style: none; margin: 0; padding: 0; font-size: 0.85rem; display: flex; flex-direction: column; gap: 0.5rem; color: var(--text-soft); max-height: 250px; overflow-y: auto;">
+                <li style="text-align: center; padding: 1rem;">Loading...</li>
+            </ul>
+        </div>
+    </header>
+
+    <!-- Category Quick Chips (Mobile Only) -->
+    <div class="category-chips-container" id="categoryChips">
+        <!-- Populated by JS -->
+    </div>
+
+    <main class="main-content">
+        <!-- Promotional Banners Slider -->
+        <section class="promo-slider-section">
+            <div class="promo-slider-container">
+                <div class="promo-slides" id="promoSlides">
+                    <!-- Populated by JS -->
+                </div>
+                <div class="slider-dots" id="sliderDots">
+                    <!-- Populated by JS -->
+                </div>
+                <button class="slider-btn prev-btn" onclick="movePromoSlider(-1)"><i class="ph ph-caret-left"></i></button>
+                <button class="slider-btn next-btn" onclick="movePromoSlider(1)"><i class="ph ph-caret-right"></i></button>
+            </div>
+        </section>
+
+        <!-- Category Section -->
+
+        <!-- Dynamic Category Section -->
+        <section class="category-section">
+            <div class="section-header">
+                <h3 class="section-title" data-i18n="section_category_title">Shop by Category</h3>
+                <a href="category.html?name=All" class="view-all"><span data-i18n="view_all">View All</span> <i class="ph ph-caret-right"></i></a>
+            </div>
+            <div class="carousel-wrapper">
+                <button class="carousel-arrow left-arrow" id="categoryLeftArrow" onclick="document.getElementById('categoryScroll').scrollBy({left: -300, behavior: 'smooth'})"><i class="ph ph-caret-left"></i></button>
+                <div class="category-scroll carousel-content" id="categoryScroll">
+                    <!-- Populated by JS -->
+                </div>
+                <button class="carousel-arrow right-arrow" id="categoryRightArrow" onclick="document.getElementById('categoryScroll').scrollBy({left: 300, behavior: 'smooth'})"><i class="ph ph-caret-right"></i></button>
+            </div>
+        </section>
+
+        <!-- Special Offers -->
+        <section class="special-offers" style="margin-top: 0.5rem; padding: 0.5rem 0; clear: both; position: relative; z-index: 1;">
+            <h3 class="section-title">Special Offers</h3>
+            <div class="offers-grid" id="specialOffersGrid">
+                <!-- Populated by JS -->
+            </div>
+        </section>
+
+        <!-- Horizontal Trending List -->
+        <section class="trending-section">
+            <div class="section-header">
+                <h3 class="section-title" data-i18n="section_trending_title">Trending Near You</h3>
+                <a href="category.html?type=trending" class="view-all"><span data-i18n="view_all">View All</span> <i class="ph ph-caret-right"></i></a>
+            </div>
+            <div class="carousel-wrapper">
+                <button class="carousel-arrow left-arrow" id="trendingLeftArrow" onclick="document.getElementById('trendingList').scrollBy({left: -300, behavior: 'smooth'})"><i class="ph ph-caret-left"></i></button>
+                <div class="trending-scroll carousel-content" id="trendingList">
+                    <!-- Populated by JS -->
+                </div>
+                <button class="carousel-arrow right-arrow" id="trendingRightArrow" onclick="document.getElementById('trendingList').scrollBy({left: 300, behavior: 'smooth'})"><i class="ph ph-caret-right"></i></button>
+            </div>
+        </section>
+
+        <!-- Top Banner Slider -->
+        <section class="banner-section">
+            <div class="banner-slider" id="bannerSlider">
+                <!-- Populated by JS -->
+            </div>
+        </section>
+
+        <!-- Category Results (Shown when a category is selected) -->
+        <section class="category-results-section" id="categoryResultsSection" style="display: none; padding-top: 2rem;">
+            <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                <h3 class="section-title" id="selectedCategoryTitle">Category Results</h3>
+                <button class="btn btn-outline" onclick="window.clearCategoryFilter()" style="padding: 0.5rem 1rem; font-size: 0.85rem;">Clear Filter</button>
+            </div>
+            <div class="product-grid" id="categoryProductGrid">
+                <!-- Populated by JS -->
+            </div>
+            <div style="text-align: center; margin-top: 2rem;">
+                <a href="category.html" id="viewAllInCat" class="btn btn-primary">Explore All in Category</a>
+            </div>
+        </section>
+
+        <!-- Product Grid Listing (Daily Essentials) -->
+        <section class="product-listing">
+            <div class="section-header">
+                <h3 class="section-title">Daily Essentials</h3>
+                <a href="category.html?type=daily-essentials" class="view-all">View All <i class="ph ph-caret-right"></i></a>
+            </div>
+            <div class="product-grid" id="productGrid">
+                <!-- Populated by JS -->
+            </div>
+        </section>
+
+        <!-- Morning Fresh Specialty Banner -->
+        <section class="banner-section" id="morningFreshBannerSection" style="display: none; margin-top: -1rem; margin-bottom: 2rem;">
+            <div id="morningFreshBannerContainer"></div>
+        </section>
+
+        <section class="brands-section">
+            <div class="section-header">
+                <h3 class="section-title" data-i18n="section_brands_title">Brands in Focus</h3>
+                <a href="brands.html" class="view-all"><span data-i18n="view_all">View All</span> <i class="ph ph-caret-right"></i></a>
+            </div>
+            <div class="carousel-wrapper">
+                <button class="carousel-arrow left-arrow" id="brandsLeftArrow" onclick="document.getElementById('brandsGrid').scrollBy({left: -300, behavior: 'smooth'})"><i class="ph ph-caret-left"></i></button>
+                <div class="brands-scroll carousel-content" id="brandsGrid">
+                    <!-- Populated by JS -->
+                </div>
+                <button class="carousel-arrow right-arrow" id="brandsRightArrow" onclick="document.getElementById('brandsGrid').scrollBy({left: 300, behavior: 'smooth'})"><i class="ph ph-caret-right"></i></button>
+            </div>
+        </section>
+
+        <!-- Dynamic Brand Results Section (Initially Hidden) -->
+        <section id="brandResultsSection" class="product-listing brand-results-listing" style="display: none; background: var(--primary-light-alpha); padding: 2rem 0; border-radius: var(--radius-lg); margin: 2rem 0;">
+            <div class="container">
+                <div class="section-header">
+                    <h3 class="section-title" id="brandResultsTitle">Brand Products</h3>
+                    <button class="btn btn-sm btn-outline" onclick="clearBrandFilter()" style="display: flex; align-items: center; gap: 0.5rem;">
+                        <i class="ph ph-x-circle"></i> Clear Filter
+                    </button>
+                </div>
+                <div class="product-grid" id="brandProductGrid">
+                    <!-- Populated by JS when a brand is clicked -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Web Platform Section -->
+        <section class="web-platform-section">
+            <div class="web-platform-content">
+                <h2>The Future of Digital Grocery Shopping</h2>
+                <p>Access ADYANTA SnapBasket from any device. Our powerful web platform is optimized for seamless shopping on your Desktop, Tablet, and Mobile browser.</p>
+                <div class="platform-features">
+                    <div class="feature-badge">
+                        <i class="ph-fill ph-globe"></i>
+                        <span>Browser Friendly</span>
+                    </div>
+                    <div class="feature-badge">
+                        <i class="ph-fill ph-shield-check"></i>
+                        <span>Secure Checkout</span>
+                    </div>
+                    <div class="feature-badge">
+                        <i class="ph-fill ph-lightning"></i>
+                        <span>Instant Loading</span>
+                    </div>
+                </div>
+                <div style="margin-top: 2rem;">
+                    <a href="#" class="btn btn-primary" style="padding: 1rem 2rem; font-size: 1.1rem;">Start Shopping Now</a>
+                </div>
+            </div>
+            <div class="web-platform-image">
+                <img src="assets/web-mockup.png" alt="ADYANTA Web Platform">
+            </div>
+        </section>
+
+        <section class="testimonials-section">
+            <div class="section-header">
+                <h3 class="section-title" data-i18n="section_testimonials_title">Customer Testimonials</h3>
+            </div>
+            <div class="testimonials-grid" id="testimonialsGrid">
+                <!-- Populated by JS -->
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+        <div class="footer-container">
+            <div class="footer-col">
+                <a href="/" class="brand-logo footer-logo">
+                    <i class="ph ph-basket"></i> ADYANTA
+                </a>
+                <p>Bringing fresh groceries to your doorstep in 15 minutes.</p>
+            </div>
+            <div class="footer-col">
+                <h4>Categories</h4>
+                <a href="#">Fresh Vegetables</a>
+                <a href="#">Snacks & Drinks</a>
+                <a href="#">Household Care</a>
+            </div>
+            <div class="footer-col">
+                <h4>Customer Service</h4>
+                <div style="display: flex; flex-direction: column; gap: 0.5rem; color: var(--text-soft); font-size: 0.9rem; margin-top: 0.5rem;">
+                    <div style="display: flex; align-items: flex-start; gap: 0.5rem;"><i class="ph ph-envelope" style="margin-top: 3px;"></i> <span id="csEmail">Loading...</span></div>
+                    <div style="display: flex; align-items: flex-start; gap: 0.5rem;"><i class="ph ph-phone" style="margin-top: 3px;"></i> <span id="csPhone">Loading...</span></div>
+                    <div style="display: flex; align-items: flex-start; gap: 0.5rem;"><i class="ph ph-map-pin" style="margin-top: 3px;"></i> <span id="csAddress">Loading...</span></div>
+                </div>
+            </div>
+            <div class="footer-col">
+                <h4>Help</h4>
+                <a href="#">Track Order</a>
+                <a href="support.html">Contact Us</a>
+                <a href="#">FAQs</a>
+            </div>
+        </div>
+        <div class="copy-right">
+            <p>&copy; 2026 ADYANTA. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- Cart Sidebar -->
+    <div class="cart-overlay" id="cartOverlay"></div>
+    <aside class="cart-sidebar" id="cartSidebar">
+        <div class="cart-header">
+            <h3>Your Cart</h3>
+            <button class="close-cart" id="closeCartBtn"><i class="ph ph-x"></i></button>
+        </div>
+        <div class="cart-items">
+            <!-- Empty state -->
+            <div class="empty-cart" id="emptyCartMessage">
+                <i class="ph ph-shopping-cart" style="font-size: 3rem; color: var(--border); margin-bottom: 1rem;"></i>
+                <p class="text-muted">Your cart is currently empty.</p>
+                <button class="btn btn-primary" style="margin-top: 1rem;" id="startShoppingBtn">Start Shopping</button>
+            </div>
+            <!-- Cart items will be loaded here dynamically -->
+        </div>
+        <div class="cart-footer">
+            <div class="cart-summary-line">
+                <span>Subtotal</span>
+                <strong id="cartSubtotalEl">₹0</strong>
+            </div>
+            <div id="discountLine" class="cart-summary-line" style="display: none; color: #10B981;">
+                <span>Discount (<span id="discountTag">0%</span>)</span>
+                <strong id="discountAmountEl">-₹0</strong>
+            </div>
+            
+            <div class="cart-summary-line" style="border-top: 1px solid var(--border); margin-top: 0.5rem; padding-top: 0.5rem;">
+                <span>Total Amount</span>
+                <strong id="finalTotalEl">₹0</strong>
+            </div>
+            <button class="btn btn-primary" id="checkoutBtn" style="width: 100%; margin-top: 1rem; font-weight: 800; letter-spacing: 0.5px;">PROCEED TO CHECKOUT</button>
+        </div>
+    </aside>
+
+    <!-- Checkout Modal -->
+    <div class="checkout-modal-overlay" id="checkoutModal">
+        <div class="checkout-modal" style="max-width: 450px;">
+            <!-- Step 1: Delivery Selection -->
+            <div id="checkoutStepDelivery" class="checkout-step" style="display: none;">
+                <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem;">
+                    <button class="back-circle-btn" id="backToCartBtn" style="background: var(--bg-color); border: 1px solid var(--border); width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--primary); cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+                        <i class="ph ph-arrow-left" style="font-size: 1.25rem;"></i>
+                    </button>
+                    <h2 style="font-size: 1.5rem; font-weight: 800; color: var(--text-main); margin: 0; letter-spacing: -0.5px;">How would you like your order?</h2>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 2.5rem;">
+                    <div class="delivery-option-card active" id="optionHome" onclick="selectDeliveryType('Home Delivery', this)">
+                        <div class="delivery-icon-wrapper">
+                            <i class="ph ph-house" style="font-size: 2.25rem;"></i>
+                        </div>
+                        <span style="font-weight: 800; font-size: 1.1rem; color: var(--text-main);">Home Delivery</span>
+                        <p style="font-size: 0.8rem; color: #64748B; text-align: center; line-height: 1.5; margin: 0;">Delivery to your door in 30 mins</p>
+                    </div>
+                    
+                    <div class="delivery-option-card" id="optionPickup" onclick="selectDeliveryType('Pickup from Shop', this)">
+                        <div class="delivery-icon-wrapper">
+                            <i class="ph ph-storefront" style="font-size: 2.25rem;"></i>
+                        </div>
+                        <span style="font-weight: 800; font-size: 1.1rem; color: var(--text-main);">Pickup from Shop</span>
+                        <p style="font-size: 0.8rem; color: #64748B; text-align: center; line-height: 1.5; margin: 0;">Pick up from our store yourself</p>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary" id="deliveryNextBtn" style="width: 100%; padding: 1.25rem; border-radius: 16px; font-size: 1.15rem; font-weight: 800; box-shadow: 0 12px 20px -5px rgba(16, 185, 129, 0.4); transform: translateY(0); transition: all 0.3s ease;">Continue to Details</button>
+            </div>
+
+            <div id="checkoutStepAddress" class="checkout-step" style="display: none;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border);">
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <button class="close-cart" onclick="showCheckoutStep('delivery')" title="Back" style="background: var(--bg-color); border: none; cursor: pointer; color: var(--primary); font-size: 1.25rem; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center;"><i class="ph ph-arrow-left"></i></button>
+                        <h3 style="font-size: 1.3rem; margin: 0;">Delivery Details</h3>
+                    </div>
+                </div>
+                <p class="text-muted" style="margin-bottom: 1.5rem;">Please provide your delivery details.</p>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                    <div class="form-group">
+                        <label style="display: block; font-size: 0.85rem; color: var(--text-soft); margin-bottom: 0.4rem;">Recipient Name</label>
+                        <input type="text" id="checkoutName" placeholder="Full Name" style="width: 100%; padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius-sm);">
+                    </div>
+                    <div class="form-group">
+                        <label style="display: block; font-size: 0.85rem; color: var(--text-soft); margin-bottom: 0.4rem;">Mobile Number</label>
+                        <input type="text" id="checkoutPhone" placeholder="10-digit Number" maxlength="10" style="width: 100%; padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius-sm);">
+                    </div>
+                </div>
+                
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label style="display: block; font-size: 0.85rem; color: var(--text-soft); margin-bottom: 0.4rem;">House / Flat Number</label>
+                    <input type="text" id="checkoutHouse" placeholder="e.g. 402, 4th Floor" style="width: 100%; padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius-sm);">
+                </div>
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                    <label style="display: block; font-size: 0.85rem; color: var(--text-soft); margin-bottom: 0.4rem;">Street / Landmark</label>
+                    <textarea id="checkoutStreet" placeholder="e.g. Near Central Park, MG Road" style="width: 100%; padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius-sm); min-height: 80px;"></textarea>
+                </div>
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                    <label style="display: block; font-size: 0.85rem; color: var(--text-soft); margin-bottom: 0.4rem;">Pincode / Zip Code</label>
+                    <input type="text" id="checkoutPincode" placeholder="e.g. 524004" style="width: 100%; padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius-sm);">
+                </div>
+
+
+                <button class="btn btn-primary" id="addressNextBtn" style="width: 100%;">Next: Payment Method</button>
+            </div>
+
+            <div id="checkoutStepPayment" class="checkout-step" style="display: none;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <button class="close-cart" id="paymentBackBtn" title="Back" style="background: var(--bg-color); border: none; cursor: pointer; color: var(--primary); font-size: 1.25rem; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center;"><i class="ph ph-arrow-left"></i></button>
+                        <h3 style="font-size: 1.3rem; margin: 0;">Payment Method</h3>
+                    </div>
+                </div>
+                
+                <div id="checkoutPaymentCouponSection" class="checkout-section-card">
+                    <h4 style="font-size: 0.9rem; margin-bottom: 0.8rem; display: flex; align-items: center; gap: 0.5rem;"><i class="ph ph-ticket" style="color: var(--primary);"></i> Have a Coupon?</h4>
+                    <div style="display: flex; gap: 0.5rem; margin-bottom: 0.8rem;">
+                        <input type="text" id="checkoutCouponInput" placeholder="Enter Coupon Code" class="form-control" style="flex: 1; padding: 0.6rem; border-radius: 4px; font-size: 0.85rem;">
+                        <button id="checkoutCouponBtn" class="btn btn-primary btn-sm" style="width: auto; padding: 0 1rem; border-radius: 4px;">Apply</button>
+                    </div>
+                    <div id="checkoutCouponMsg" style="font-size: 0.75rem; margin-bottom: 0.8rem;"></div>
+                    
+                    <div id="availableCouponsCheckout" style="display: none;">
+                        <p style="font-size: 0.7rem; color: var(--text-soft); margin-bottom: 0.4rem; font-weight: 600; text-transform: uppercase;">Available Coupons:</p>
+                        <div id="couponsListCheckout" style="display: flex; flex-wrap: wrap; gap: 0.5rem;"></div>
+                    </div>
+                </div>
+
+                <!-- Order Summary Integrated into Payment Step -->
+                <div id="checkoutOrderSummary" class="checkout-summary-card">
+                    <h4 style="font-size: 0.9rem; margin-bottom: 0.8rem; display: flex; align-items: center; gap: 0.5rem;"><i class="ph ph-receipt" style="color: var(--primary);"></i> Order Total</h4>
+                    <div style="display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.85rem;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--text-soft);">Subtotal</span>
+                            <span id="modalSubtotal">₹0</span>
+                        </div>
+                        <div id="modalDiscountRow" style="display: none; justify-content: space-between; color: #10B981; font-weight: 600;">
+                            <span>Coupon Discount</span>
+                            <span id="modalDiscount">-₹0</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; border-top: 1px dashed #CBD5E1; padding-top: 0.5rem; margin-top: 0.2rem; font-weight: 700; font-size: 1.1rem; color: var(--text-main);">
+                            <span>Final Total</span>
+                            <span id="modalFinalTotal">₹0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="payment-methods">
+                    <div class="payment-option" onclick="selectPayment('card', this)">
+                        <i class="ph ph-credit-card"></i>
+                        <div class="payment-details">
+                            <strong>Credit / Debit Card</strong>
+                            <span>Visa, MasterCard, RuPay</span>
+                        </div>
+                    </div>
+                    <div class="payment-option" onclick="selectPayment('upi', this)">
+                        <i class="ph ph-qr-code"></i>
+                        <div class="payment-details">
+                            <strong>UPI</strong>
+                            <span>GPay, PhonePe, Paytm</span>
+                        </div>
+                    </div>
+                    <div class="payment-option" onclick="selectPayment('cash', this)">
+                        <i class="ph ph-money"></i>
+                        <div class="payment-details">
+                            <strong>Cash on Delivery</strong>
+                            <span>Pay when you receive items</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <button class="btn btn-primary" id="confirmOrderBtn" style="width: 100%; margin-top: 1.5rem;" disabled>Confirm & Place Order</button>
+            </div>
+            
+            <div id="checkoutStepSuccess" class="checkout-step" style="display: none; flex-direction: column; align-items: center; text-align: center;">
+                <div class="success-check-icon shadow-lg">
+                    <i class="ph ph-check" style="font-weight: 800; font-size: 5rem;"></i>
+                </div>
+                <h3 style="font-size: 1.85rem; color: var(--text-main); margin-bottom: 0.5rem; font-family: 'Outfit';">Order Placed!</h3>
+                <p style="color: var(--text-soft); margin-bottom: 2rem; line-height: 1.5; font-size: 1rem;">Thank you for shopping with ADYANTA. Your order is being processed.</p>
+                
+                <div class="order-receipt-card">
+                    <div class="receipt-item">
+                        <span>Order Number</span>
+                        <strong id="successOrderId">#0</strong>
+                    </div>
+                    <div class="receipt-item">
+                        <span>Payment Method</span>
+                        <strong id="successMethod">COD</strong>
+                    </div>
+                    <div class="receipt-divider"></div>
+                    <div class="receipt-total">
+                        <span>Total Paid</span>
+                        <span id="successTotalAmount" class="amount">₹0</span>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary" id="closeSuccessBtn">
+                    <i class="ph ph-shopping-bag"></i> Continue Shopping
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Auth Modal -->
+    <div class="checkout-modal-overlay" id="authModal" style="z-index: 2000;">
+        <div class="checkout-modal" style="width: 90%; max-width: 400px;">
+            <button class="close-cart" id="closeAuthBtn" style="position: absolute; top: 1rem; right: 1rem;"><i class="ph ph-x"></i></button>
+            <h3 style="font-size: 1.5rem; margin-bottom: 0.5rem;" id="authTitle">Sign In</h3>
+            <p class="text-muted" style="margin-bottom: 1.5rem;" id="authDesc">Sign in to your ADYANTA account</p>
+            
+            <div id="authFields">
+                <!-- Mobile Number (Required for Login & Register) -->
+                <div id="loginIdentifierField">
+                    <input type="text" id="usernameInput" placeholder="10-digit Mobile Number" maxlength="10" oninput="this.value = this.value.replace(/[^0-9]/g, '');" class="form-control" style="width: 100%; padding: 0.75rem; margin-bottom: 1rem; font-size: 1rem;">
+                </div>
+                
+                <!-- Full Name (Required for Login & Register) -->
+                <div id="nameField">
+                    <input type="text" id="fullNameInput" placeholder="Full Name" class="form-control" style="width: 100%; padding: 0.75rem; margin-bottom: 1rem; font-size: 1rem;">
+                </div>
+                
+                <!-- Phone Number (for Register/Forgot) -->
+                <div id="phoneField" style="display: none;">
+                    <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                        <input type="text" value="+91" disabled class="form-control" style="width: 60px; padding: 0.75rem; font-size: 1rem; text-align: center;">
+                        <input type="text" id="phoneInput" placeholder="10-digit Mobile Number" maxlength="10" class="form-control" style="flex: 1; padding: 0.75rem; font-size: 1rem;">
+                    </div>
+                </div>
+
+                <div style="position: relative; margin-bottom: 1rem;">
+                    <input type="password" id="passwordInput" placeholder="Password" autocomplete="new-password" class="form-control" style="width: 100%; padding: 0.75rem; font-size: 1rem;">
+                    <i class="ph ph-eye password-toggle" onclick="togglePasswordVisibility('passwordInput', this)" style="position: absolute; right: 1rem; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-soft); font-size: 1.1rem;"></i>
+                </div>
+                
+                <div id="confirmPasswordField" style="display: none; position: relative; margin-bottom: 1rem;">
+                    <input type="password" id="confirmPasswordInput" placeholder="Confirm Password" autocomplete="new-password" class="form-control" style="width: 100%; padding: 0.75rem; font-size: 1rem;">
+                    <i class="ph ph-eye password-toggle" onclick="togglePasswordVisibility('confirmPasswordInput', this)" style="position: absolute; right: 1rem; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-soft); font-size: 1.1rem;"></i>
+                </div>
+                
+                <!-- Security Questions (for Register) -->
+                <div id="regSecurityFields" style="display: none; border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 0.5rem;">
+                    <p style="font-size: 0.8rem; color: var(--text-soft); margin-bottom: 0.5rem;">Setup Security Questions</p>
+                    <select id="securityQ1" autocomplete="off" style="width: 100%; padding: 0.75rem; margin-bottom: 0.5rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 0.9rem; background: var(--card-bg); color: var(--text-main);">
+                        <option value="" disabled selected>Select Question 1</option>
+                        <option value="What was the name of your first school?">What was the name of your first school?</option>
+                        <option value="What is your birthplace?">What is your birthplace?</option>
+                        <option value="What is the name of your first pet?">What is the name of your first pet?</option>
+                        <option value="What is your favorite movie?">What is your favorite movie?</option>
+                        <option value="What was your childhood nickname?">What was your childhood nickname?</option>
+                    </select>
+                    <input type="text" id="securityA1" placeholder="Answer 1" autocomplete="off" style="width: 100%; padding: 0.75rem; margin-bottom: 1rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 0.9rem;">
+                    
+                    <select id="securityQ2" autocomplete="off" style="width: 100%; padding: 0.75rem; margin-bottom: 0.5rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 0.9rem; background: var(--card-bg); color: var(--text-main);">
+                        <option value="" disabled selected>Select Question 2</option>
+                        <option value="What was the name of your first school?">What was the name of your first school?</option>
+                        <option value="What is your birthplace?">What is your birthplace?</option>
+                        <option value="What is the name of your first pet?">What is the name of your first pet?</option>
+                        <option value="What is your favorite movie?">What is your favorite movie?</option>
+                        <option value="What was your childhood nickname?">What was your childhood nickname?</option>
+                    </select>
+                    <input type="text" id="securityA2" placeholder="Answer 2" autocomplete="off" style="width: 100%; padding: 0.75rem; margin-bottom: 1rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 0.9rem;">
+                </div>
+
+                <!-- Recovery Questions (for Forgot Password) -->
+                <div id="recoverySection" style="display: none; border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 0.5rem;">
+                    <p id="recoveryStepLabel" style="font-size: 0.75rem; color: var(--primary); font-weight: 700; text-transform: uppercase; margin-bottom: 0.25rem;">Security Verification</p>
+                    <div id="recoveryQ1Container" style="margin-bottom: 1rem;">
+                        <p id="recoveryQ1Label" style="font-size: 0.85rem; color: var(--text-main); margin-bottom: 0.4rem; font-weight: 600;"></p>
+                        <input type="text" id="recoveryA1Input" placeholder="Your Answer to Question 1" autocomplete="off" style="width: 100%; padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 1rem;">
+                    </div>
+                    <div id="recoveryQ2Container" style="margin-bottom: 1rem;">
+                        <p id="recoveryQ2Label" style="font-size: 0.85rem; color: var(--text-main); margin-bottom: 0.4rem; font-weight: 600;"></p>
+                        <input type="text" id="recoveryA2Input" placeholder="Your Answer to Question 2" autocomplete="off" style="width: 100%; padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 1rem;">
+                    </div>
+                    <p style="font-size: 0.7rem; color: var(--text-soft); font-style: italic;">Answer either question to verify your identity.</p>
+                </div>
+            </div>
+            
+            <div id="authActions">
+                <button class="btn btn-outline" id="sendOtpBtn" style="width: 100%; margin-bottom: 1rem; display: none;">Verify Number</button>
+                <button class="btn btn-primary" id="submitAuthBtn" style="width: 100%; margin-bottom: 1rem;">Sign In</button>
+                
+                <div style="display: flex; align-items: center; margin: 1rem 0; color: var(--text-soft); font-size: 0.8rem;">
+                    <div style="flex: 1; height: 1px; background: var(--border);"></div>
+                    <span style="padding: 0 1rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">OR</span>
+                    <div style="flex: 1; height: 1px; background: var(--border);"></div>
+                </div>
+
+                <button class="btn btn-outline" id="googleAuthBtn" style="width: 100%; margin-bottom: 1rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem; border: 1px solid #E2E8F0; background: #fff; color: #1e293b; font-weight: 600;">
+                    <img src="https://www.google.com/favicon.ico" width="18" height="18" alt="Google">
+                    Continue with Google
+                </button>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem;">
+                <a href="#" id="toggleAuthMode" style="color: var(--primary); text-decoration: underline; font-weight: 500;">Sign Up</a>
+                <a href="#" id="forgotPassBtn" style="color: var(--text-soft); text-decoration: none;">Forgot Password?</a>
+            </div>
+            
+            <div id="authErrorMsg" style="color: #ef4444; margin-top: 1rem; display: none; font-size: 0.9rem; padding: 0.5rem; background: #fef2f2; border-radius: 4px; border: 1px solid #fee2e2;"></div>
+        </div>
+    </div>
+
+    <!-- Reviews Modal -->
+    <div class="checkout-modal-overlay" id="reviewsModal">
+        <div class="checkout-modal" style="width: 90%; max-width: 500px; text-align: left;">
+            <button class="close-cart" id="closeReviewsBtn" style="position: absolute; top: 1rem; right: 1rem;"><i class="ph ph-x"></i></button>
+            <h3 style="font-size: 1.5rem; margin-bottom: 0.5rem;" id="reviewsTitle">Customer Reviews</h3>
+            <div class="product-rating" style="margin-bottom: 1.5rem;">
+                <i class="ph-fill ph-star" style="font-size: 1.25rem;"></i>
+                <span id="reviewsAverage" style="font-size: 1rem; font-weight: 600;">4.8 (120 reviews)</span>
+            </div>
+            <div id="reviewFormContainer" style="margin-bottom: 2rem; padding: 1rem; background: var(--bg-color); border-radius: var(--radius-md); border: 1px solid var(--border);">
+                <h4 style="margin-bottom: 1rem; font-size: 1rem;">Write a Review</h4>
+                <div id="reviewAuthMessage" style="display: none; color: var(--text-soft); font-size: 0.9rem;">
+                    Please <a href="#" onclick="document.getElementById('authModal').classList.add('active'); return false;" style="color: var(--primary); font-weight: 600;">Sign In</a> to leave a review.
+                </div>
+                <form id="addReviewForm" style="display: none;">
+                    <input type="hidden" id="reviewProdId">
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                        <label style="display: block; margin-bottom: 0.5rem; font-size: 0.85rem;">Rating</label>
+                        <select id="reviewRating" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px;">
+                            <option value="5">5 Stars - Excellent</option>
+                            <option value="4">4 Stars - Very Good</option>
+                            <option value="3">3 Stars - Average</option>
+                            <option value="2">2 Stars - Poor</option>
+                            <option value="1">1 Star - Terrible</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                        <label style="display: block; margin-bottom: 0.5rem; font-size: 0.85rem;">Comments</label>
+                        <textarea id="reviewComment" placeholder="Share your experience with this product..." style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px; height: 80px; resize: none;"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%; padding: 0.6rem;">Post Review</button>
+                    <div id="reviewSuccessMsg" style="color: green; margin-top: 0.5rem; font-size: 0.85rem; display: none;">Review posted successfully!</div>
+                </form>
+            </div>
+            
+            <div id="reviewsList" style="max-height: 300px; overflow-y: auto; padding-right: 0.5rem; display: flex; flex-direction: column; gap: 1rem; border-top: 1px solid var(--border); padding-top: 1.5rem;">
+                <!-- Reviews will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Location Modal -->
+    <div class="checkout-modal-overlay" id="locationModal">
+        <div class="checkout-modal" style="max-width: 400px; text-align: center;">
+            <button class="close-cart" id="closeLocationBtn" style="position: absolute; top: 1rem; right: 1rem;"><i class="ph ph-x"></i></button>
+            <i class="ph ph-map-pin" style="font-size: 3rem; color: var(--primary); margin-bottom: 1rem;"></i>
+            <h3 style="font-size: 1.5rem; margin-bottom: 0.5rem;">Select Delivery Location</h3>
+            <p class="text-muted" style="margin-bottom: 1.5rem;">Enter your pincode to see availability and delivery times in your area.</p>
+            
+            <div class="form-group" style="margin-bottom: 1.5rem;">
+                <input type="text" id="pincodeInput" maxlength="6" placeholder="Enter 6-digit Pincode" style="width: 100%; padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 1.1rem; text-align: center; letter-spacing: 2px;">
+            </div>
+            
+            <button class="btn btn-primary" id="saveLocationBtn" style="width: 100%;">Set Location</button>
+        </div>
+    </div>
+
+    <!-- Navigation Sidebar (Hamburger Menu) -->
+    <div class="nav-overlay" id="navOverlay"></div>
+    <aside class="nav-sidebar" id="navSidebar">
+        <div class="nav-sidebar-header">
+            <div class="user-profile-brief">
+                <div class="user-avatar-circle">
+                    <i class="ph ph-user"></i>
+                </div>
+                <div class="user-info-text">
+                    <h4 id="sidebarUsername">Guest User</h4>
+                    <p>Welcome to ADYANTA</p>
+                </div>
+            </div>
+            <button class="close-nav" id="closeNavBtn"><i class="ph ph-x"></i></button>
+        </div>
+        
+        <div class="nav-sidebar-content">
+            <div class="nav-section">
+                <h5 data-i18n="sidebar_section_account">My Account</h5>
+                <a href="profile.html?tab=orders" class="nav-item"><i class="ph ph-package"></i> <span data-i18n="sidebar_my_orders">My Orders</span></a>
+                <a href="wishlist.html" class="nav-item"><i class="ph ph-heart"></i> <span data-i18n="sidebar_my_wishlist">My Wishlist</span></a>
+                <a href="profile.html?tab=coupons" class="nav-item"><i class="ph ph-ticket"></i> <span data-i18n="sidebar_my_coupons">My Coupons</span></a>
+                <a href="profile.html?tab=profile" class="nav-item"><i class="ph ph-user-circle"></i> <span data-i18n="sidebar_edit_profile">Edit Profile</span></a>
+                <a href="profile.html?tab=addresses" class="nav-item"><i class="ph ph-map-pin"></i> <span data-i18n="sidebar_saved_addresses">Address</span></a>
+            </div>
+            
+            <div class="nav-divider"></div>
+            
+            <div class="nav-section">
+                <h5 data-i18n="sidebar_section_settings">Settings & Privacy</h5>
+                <a href="#" class="nav-item" id="nav-language"><i class="ph ph-translate"></i> <span data-i18n="sidebar_app_language">Language</span></a>
+                <a href="notifications.html" class="nav-item"><i class="ph ph-bell-ringing"></i> <span data-i18n="sidebar_notification_settings">Notifications</span></a>
+                <a href="#" class="nav-item" id="nav-privacy"><i class="ph ph-shield-check"></i> <span data-i18n="sidebar_privacy_center">Privacy Center</span></a>
+                <a href="#" class="nav-item" id="nav-activity" style="position: relative;">
+                    <i class="ph ph-clock-counter-clockwise"></i> 
+                    <span data-i18n="sidebar_my_activity">My Activity</span>
+                    <span id="activityDot" style="display: none; position: absolute; right: 15px; top: 50%; transform: translateY(-50%); width: 8px; height: 8px; background: #10B981; border-radius: 50%; border: 2px solid var(--card-bg); box-shadow: 0 0 5px rgba(16, 185, 129, 0.5);"></span>
+                </a>
+            </div>
+
+            <div class="nav-divider"></div>
+            
+            <div class="nav-section">
+                <h5 data-i18n="sidebar_section_others">Others</h5>
+                <a href="admin.html" class="nav-item" style="color: var(--primary); font-weight: 700;"><i class="ph ph-shield-check"></i> <span>Admin Panel</span></a>
+                <a href="support.html" class="nav-item"><i class="ph ph-info"></i> <span data-i18n="sidebar_help_support">Help & Support</span></a>
+                <a href="#" class="nav-item" id="sidebarLogout" style="display: none;"><i class="ph ph-sign-out"></i> <span data-i18n="sidebar_logout">Logout</span></a>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Unified Feature Modal -->
+    <div class="feature-modal-overlay" id="featureModalOverlay">
+        <div class="feature-modal">
+            <div class="feature-modal-header">
+                <h3 id="featureModalTitle">Settings</h3>
+                <button class="close-feature-modal" id="closeFeatureModal"><i class="ph ph-x"></i></button>
+            </div>
+            <div class="feature-modal-content" id="featureModalContent">
+                <!-- Populated dynamically by JS -->
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="toast.js"></script>
+    <!-- Mobile Bottom Navigation (Visible only on mobile) -->
+    <div class="mobile-bottom-nav">
+        <a href="/" class="nav-item active">
+            <i class="ph-fill ph-house"></i>
+            <span>Home</span>
+        </a>
+        <a href="category.html?name=All" class="nav-item">
+            <i class="ph ph-squares-four"></i>
+            <span>Categories</span>
+        </a>
+        <a href="wishlist.html" class="nav-item" style="position: relative;">
+            <i class="ph ph-heart"></i>
+            <span class="badge" id="bottomWishlistBadge" style="position: absolute; top: -5px; right: 10px; background-color: #EF4444; color: white; width: 16px; height: 16px; border-radius: 50%; display: none; align-items: center; justify-content: center; font-size: 0.6rem; font-weight: bold;">0</span>
+            <span>Wishlist</span>
+        </a>
+        <a href="#" class="nav-item cart-btn-mobile" id="mobileBottomCartBtn" style="position: relative;">
+            <i class="ph ph-shopping-cart"></i>
+            <span class="badge" id="bottomCartBadge" style="position: absolute; top: -5px; right: 10px; background-color: var(--primary); color: white; width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.6rem; font-weight: bold;">0</span>
+            <span>Cart</span>
+        </a>
+        <a href="#" class="nav-item" id="mobileBottomProfileBtn">
+            <i class="ph ph-user-circle"></i>
+            <span>Profile</span>
+        </a>
+    </div>
+
+    <script type="module" src="script.js"></script>
+    <script>
+        // Bind bottom cart button to open cart overlay
+        document.getElementById('mobileBottomCartBtn').addEventListener('click', function(e) {
+            e.preventDefault();
+            document.getElementById('cartSidebar').classList.add('active');
+            document.getElementById('cartOverlay').classList.add('active');
+            document.body.style.overflow = 'hidden';
+            if (typeof updateCartSidebar === 'function') updateCartSidebar();
+        });
+        
+        // Link bottom profile btn
+        document.getElementById('mobileBottomProfileBtn').addEventListener('click', function(e) {
+            e.preventDefault();
+            const token = localStorage.getItem('token');
+            if (token) {
+                window.location.href = 'profile.html';
+            } else {
+                const authModal = document.getElementById('authModal');
+                if (authModal) authModal.classList.add('active');
+            }
+        });
+    </script>
+    <!-- Notifications Dropdown (Global) -->
+    <div id="notificationsDropdown" style="display: none; position: fixed; top: 80px; right: 20px; width: 350px; max-width: calc(100vw - 40px); background: #0F172A; border: 1px solid #1E293B; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); border-radius: 16px; padding: 1.25rem; z-index: 10000; animation: slideInDown 0.3s cubic-bezier(0, 0, 0.2, 1);">
+        <h4 style="font-size: 1.1rem; margin-bottom: 1rem; border-bottom: 1px solid #1E293B; padding-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; color: #F8FAFC; font-family: 'Outfit', sans-serif;">
+            <span style="display: flex; align-items: center; gap: 0.6rem;"><i class="ph-fill ph-megaphone" style="color: #F59E0B;"></i> Store Alerts</span>
+            <div style="display: flex; align-items: center; gap: 0.8rem;">
+                <span id="notifTotalText" style="font-size: 0.8rem; font-weight: 400; color: #94A3B8;">Total: 0</span>
+                <button id="clearNotifsBtn" style="background: none; border: none; color: #10B981; font-size: 0.85rem; font-weight: 700; cursor: pointer; padding: 0; transition: opacity 0.2s;">Clear All</button>
+            </div>
+        </h4>
+        <ul id="notifList" style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0; max-height: 400px; overflow-y: auto; scrollbar-width: none;">
+            <li style="text-align: center; padding: 2rem; color: #64748B;">Loading alerts...</li>
+        </ul>
+        <div style="margin-top: 1rem; border-top: 1px solid #1E293B; padding-top: 1rem; text-align: center;">
+            <a href="notifications.html" style="color: #10B981; font-size: 0.95rem; font-weight: 700; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 0.5rem; transition: transform 0.2s;">
+                Read Full Alerts <i class="ph ph-arrow-right"></i>
+            </a>
+        </div>
+    </div>
+        <div style="margin-top: 0.75rem; border-top: 1px solid var(--border); padding-top: 0.75rem; text-align: center;">
+            <a href="notifications.html" style="color: var(--primary); font-size: 0.85rem; font-weight: 700; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 0.4rem;">
+                Read Full Alerts <i class="ph ph-arrow-right"></i>
+            </a>
+        </div>
+    </div>
+</body>
+</html>

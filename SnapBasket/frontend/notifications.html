@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Notifications | ADYANTA</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Phosphor Icons -->
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+    <script type="module" src="theme-manager.js"></script>
+    <script type="module" src="script.js"></script>
+    <style>
+        .notif-container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .notif-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            padding-top: 20px;
+        }
+        .back-btn {
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-main);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        .back-btn:hover {
+            transform: scale(1.1);
+            background: var(--primary-light);
+            color: var(--primary);
+        }
+        
+        /* Reading Mode Card (Screenshot Aesthetic) */
+        .read-card {
+            background: var(--card-bg);
+            border-radius: 24px;
+            padding: 40px 30px;
+            text-align: center;
+            box-shadow: var(--shadow-lg);
+            border: 1px solid var(--border);
+            display: none; /* Hidden by default, shown when reading */
+            animation: slideUp 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px) scale(0.95); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        .notif-icon-circle {
+            width: 100px;
+            height: 100px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 25px;
+            position: relative;
+            box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);
+        }
+        .notif-icon-circle i {
+            font-size: 3.5rem;
+            color: white;
+        }
+        .notif-icon-circle::after {
+            content: '';
+            position: absolute;
+            top: -8px;
+            left: -8px;
+            right: -8px;
+            bottom: -8px;
+            border: 2px dashed var(--primary);
+            border-radius: 50%;
+            opacity: 0.3;
+            animation: rotateDashed 12s linear infinite;
+        }
+
+        .notif-icon-circle.danger {
+            background: linear-gradient(135deg, #EF4444 0%, #B91C1C 100%) !important;
+            box-shadow: 0 10px 25px rgba(239, 68, 68, 0.3) !important;
+        }
+        .notif-icon-circle.danger::after {
+            border-color: #EF4444 !important;
+        }
+
+        .notif-title {
+            font-size: 1.75rem;
+            font-weight: 800;
+            color: var(--text-main);
+            margin-bottom: 15px;
+        }
+        .notif-desc {
+            color: var(--text-soft);
+            font-size: 1.1rem;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+
+        .notif-detail-box {
+            background: var(--bg-color);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 25px;
+            margin-bottom: 35px;
+            position: relative;
+            text-align: left;
+        }
+        .notif-detail-box::before {
+            content: '';
+            position: absolute;
+            top: -12px;
+            left: 10%;
+            right: 10%;
+            height: 24px;
+            background-image: radial-gradient(circle, var(--card-bg) 6px, transparent 7px);
+            background-size: 20px 24px;
+            background-position: center;
+            z-index: 3;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            font-size: 0.95rem;
+        }
+        .detail-row:last-child { margin-bottom: 0; }
+        .detail-label { color: var(--text-soft); }
+        .detail-value { font-weight: 700; color: var(--text-main); }
+        
+        .divider-dashed {
+            height: 1px;
+            border-top: 1px dashed var(--border);
+            margin: 15px 0;
+        }
+
+        .btn-continue {
+            width: 100%;
+            background: var(--primary);
+            color: white;
+            padding: 18px;
+            border-radius: 16px;
+            font-weight: 700;
+            font-size: 1.1rem;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            box-shadow: 0 8px 20px rgba(16, 185, 129, 0.2);
+            transition: var(--transition);
+        }
+        .btn-continue:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 25px rgba(16, 185, 129, 0.3);
+            background: var(--primary-hover);
+        }
+
+        /* List View */
+        .notif-list-view {
+            display: block;
+        }
+        body.dark-theme {
+            background-color: #0F172A;
+            color: #F8FAFC;
+        }
+        .notif-item {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 16px;
+            display: flex;
+            gap: 18px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        body.dark-theme .notif-item {
+            background: #1E293B;
+            border-color: #334155;
+        }
+        .notif-item:hover {
+            border-color: var(--primary);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+        .notif-item-icon {
+            width: 54px;
+            height: 54px;
+            border-radius: 50%;
+            border: 2px solid #10B981;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #10B981;
+            font-size: 1.6rem;
+            flex-shrink: 0;
+        }
+        .notif-item-content { flex: 1; }
+        .notif-item-title { font-weight: 800; color: var(--text-main); margin-bottom: 6px; font-family: 'Outfit'; font-size: 1.1rem; }
+        .notif-item-snippet { 
+            font-size: 0.95rem; 
+            color: var(--text-soft); 
+            line-height: 1.5;
+        }
+        .notif-item-time { font-size: 0.8rem; color: var(--text-muted); margin-top: 10px; font-weight: 600; }
+
+        body.dark-theme .read-card {
+            background: #1E293B;
+            border-color: #334155;
+        }
+        body.dark-theme .notif-detail-box {
+            background: #0F172A;
+            border-color: #334155;
+        }
+        body.dark-theme .notif-title { color: #F8FAFC; }
+        body.dark-theme .detail-value { color: #F1F5F9; }
+    </style>
+</head>
+<body>
+    <div class="notif-container">
+        <div class="notif-header">
+            <button class="back-btn" id="backBtn">
+                <i class="ph ph-caret-left"></i>
+            </button>
+            <h2 style="color: var(--text-main); font-weight: 800;">Notifications</h2>
+            <div style="width: 45px;"></div> <!-- Spacer -->
+        </div>
+
+        <!-- List View -->
+        <div id="listView" class="notif-list-view">
+            <div id="notifItemsList">
+                <!-- Populated by JS -->
+                <div style="text-align: center; padding: 50px; color: var(--text-soft);">
+                    <i class="ph ph-spinner-gap ph-spin" style="font-size: 2rem;"></i>
+                    <p style="margin-top: 10px;">Syncing alerts...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detail View (Screenshot Style) -->
+        <div id="detailView" class="read-card">
+            <div class="notif-icon-circle" id="detailIconCircle">
+                <i class="ph-fill ph-megaphone" id="detailIcon"></i>
+            </div>
+            <h2 class="notif-title" id="detailTitle">Store Alert!</h2>
+            <p class="notif-desc" id="detailMessage">Loading notification content...</p>
+
+            <div class="notif-detail-box">
+                <div class="detail-row">
+                    <span class="detail-label">Alert Type</span>
+                    <span class="detail-value" id="detailType">Promotion</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Received</span>
+                    <span class="detail-value" id="detailTime">Just now</span>
+                </div>
+                <div class="divider-dashed"></div>
+                <div class="detail-row" id="detailStatusRow">
+                    <span class="detail-label">Status</span>
+                    <span class="detail-value" id="detailStatusText" style="color: var(--primary);">Verified Message</span>
+                </div>
+            </div>
+
+            <button class="btn-continue" id="closeDetailBtn">
+                <i class="ph ph-house"></i> Continue Shopping
+            </button>
+        </div>
+    </div>
+
+    <div class="mobile-bottom-nav">
+        <a href="/" class="nav-item">
+            <i class="ph-fill ph-house"></i>
+            <span>Home</span>
+        </a>
+        <a href="category.html?name=All" class="nav-item">
+            <i class="ph ph-squares-four"></i>
+            <span>Categories</span>
+        </a>
+        <a href="wishlist.html" class="nav-item" style="position: relative;">
+            <i class="ph ph-heart"></i>
+            <span class="badge" id="bottomWishlistBadge" style="position: absolute; top: -5px; right: 10px; background-color: #EF4444; color: white; width: 16px; height: 16px; border-radius: 50%; display: none; align-items: center; justify-content: center; font-size: 0.6rem; font-weight: bold;">0</span>
+            <span>Wishlist</span>
+        </a>
+        <a href="#" class="nav-item cart-btn-mobile" id="mobileBottomCartBtn" style="position: relative;">
+            <i class="ph ph-shopping-cart"></i>
+            <span class="badge" id="bottomCartBadge" style="position: absolute; top: -5px; right: 10px; background-color: var(--primary); color: white; width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.6rem; font-weight: bold;">0</span>
+            <span>Cart</span>
+        </a>
+        <a href="#" class="nav-item" id="mobileBottomProfileBtn">
+            <i class="ph ph-user-circle"></i>
+            <span>Profile</span>
+        </a>
+    </div>
+
+    <script>
+        const API_BASE = 'https://adyanta-commerce.onrender.com'; // Injected production API
+        const listView = document.getElementById('listView');
+        const detailView = document.getElementById('detailView');
+        const listItems = document.getElementById('notifItemsList');
+        const backBtn = document.getElementById('backBtn');
+
+        // Logic to toggle views
+        function showDetail(notif) {
+            listView.style.display = 'none';
+            detailView.style.display = 'block';
+            
+            const isImportant = notif.is_important == 1 || notif.is_important === true;
+            
+            const iconCircle = document.getElementById('detailIconCircle');
+            const detailStatus = document.getElementById('detailStatusText');
+            
+            if (isImportant) {
+                iconCircle.classList.add('danger');
+                document.getElementById('detailIcon').className = 'ph-fill ph-warning-circle';
+                document.getElementById('detailTitle').style.color = '#EF4444';
+                if (detailStatus) {
+                    detailStatus.innerText = 'Important Alert';
+                    detailStatus.style.color = '#EF4444';
+                }
+            } else {
+                iconCircle.classList.remove('danger');
+                document.getElementById('detailIcon').className = 'ph-fill ph-megaphone';
+                document.getElementById('detailTitle').style.color = '';
+                if (detailStatus) {
+                    detailStatus.innerText = 'Verified Message';
+                    detailStatus.style.color = 'var(--primary)';
+                }
+            }
+
+            document.getElementById('detailTitle').innerText = notif.title || (isImportant ? "IMPORTANT ALERT" : "Store Alert");
+            document.getElementById('detailMessage').innerText = notif.message;
+            document.getElementById('detailTime').innerText = new Date(notif.created_at).toLocaleString();
+            document.getElementById('detailType').innerText = notif.type === 'order' ? 'Order Update' : 'ADYANTA Update';
+            
+            // Adjust back button behavior
+            backBtn.onclick = () => {
+                detailView.style.display = 'none';
+                listView.style.display = 'block';
+                backBtn.onclick = () => window.location.href = '/';
+            };
+        }
+
+        async function fetchNotifications() {
+            try {
+                const res = await fetch(API_BASE + '/api/notifications/history', { credentials: 'include' });
+                const history = await res.json();
+                window.allNotifs = history;
+                
+                if (history.length === 0) {
+                    listItems.innerHTML = `
+                        <div style="text-align: center; padding: 100px 20px;">
+                            <i class="ph ph-bell-slash" style="font-size: 4rem; color: var(--border); margin-bottom: 20px;"></i>
+                            <h3 style="color: var(--text-main);">No Notifications</h3>
+                            <p style="color: var(--text-soft);">You're all caught up! Check back later.</p>
+                            <button class="btn-continue" style="margin-top: 30px;" onclick="window.location.href='/'">Go Home</button>
+                        </div>
+                    `;
+                    return;
+                }
+
+                listItems.innerHTML = history.map(n => {
+                    const safeNotif = JSON.stringify(n).replace(/'/g, "&apos;");
+                    const isImportant = n.is_important == 1 || n.is_important === true;
+                    return `
+                        <div class="notif-item" onclick='showDetail(${safeNotif})' style="${isImportant ? 'border-left: 4px solid #EF4444; background: #FEF2F2;' : ''}">
+                            <div class="notif-item-icon">
+                                <i class="ph-fill ${n.type === 'order' ? 'ph-package' : (isImportant ? 'ph-warning-circle' : 'ph-megaphone')}" 
+                                   style="${isImportant ? 'color: #EF4444;' : ''}"></i>
+                            </div>
+                            <div class="notif-item-content">
+                                <div class="notif-item-title" style="${isImportant ? 'color: #EF4444; font-weight: 800;' : ''}">
+                                    ${isImportant ? 'IMPORTANT ALERT' : (n.type === 'order' ? 'Order Update' : 'ADYANTA Update')}
+                                </div>
+                                <div class="notif-item-snippet" style="${isImportant ? 'color: #B91C1C; font-weight: 500;' : ''}">${n.message}</div>
+                                <div class="notif-item-time">${new Date(n.created_at).toLocaleDateString()}</div>
+                            </div>
+                            <i class="ph ph-caret-right" style="align-self: center; color: ${isImportant ? '#EF4444' : 'var(--border)'};"></i>
+                        </div>
+                    `;
+                }).join('');
+
+            } catch (err) {
+                console.error(err);
+                listItems.innerHTML = '<p style="text-align: center; padding: 20px; color: red;">Failed to load alerts.</p>';
+            }
+        }
+
+        backBtn.onclick = () => window.location.href = '/';
+        document.getElementById('closeDetailBtn').onclick = () => window.location.href = '/';
+
+        // Bind bottom cart button to open cart overlay (if exists, else go home)
+        document.getElementById('mobileBottomCartBtn').addEventListener('click', function(e) {
+            e.preventDefault();
+            window.location.href = '/'; 
+        });
+        
+        // Link bottom profile btn
+        document.getElementById('mobileBottomProfileBtn').addEventListener('click', function(e) {
+            e.preventDefault();
+            window.location.href = 'profile.html';
+        });
+
+        async function init() {
+            await fetchNotifications();
+            
+            // Check for ID in URL to auto-open
+            const params = new URLSearchParams(window.location.search);
+            const id = params.get('id');
+            if (id && window.allNotifs) {
+                const target = window.allNotifs.find(n => String(n.id) === String(id));
+                if (target) showDetail(target);
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "name": "adyanta-frontend",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@vercel/analytics": "^1.3.1",
+    "phosphor-icons": "^1.4.2"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}

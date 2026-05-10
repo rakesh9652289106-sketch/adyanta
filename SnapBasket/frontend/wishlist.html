@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>My Wishlist - ADYANTA</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="cart-styles.css">
+    <!-- Phosphor Icons (All Weights) -->
+
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/fill/style.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/bold/style.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/light/style.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/thin/style.css">
+    <link rel="icon" type="image/png" href="assets/favicon.png">
+    <script type="module" src="theme-manager.js"></script>
+</head>
+<body>
+    <header class="navbar">
+        <div class="nav-container">
+            <a href="/" class="brand-logo">
+                <i class="ph ph-basket"></i> ADYANTA
+            </a>
+            <div class="nav-actions" style="display: flex; align-items: center; gap: 1rem;">
+                <button class="theme-toggle-btn" title="Toggle Dark Mode" style="background:none; border:none; color:var(--text-main); font-size:1.4rem; cursor:pointer;">
+                    <i class="ph ph-moon"></i>
+                </button>
+                <a href="/" class="nav-link"><i class="ph ph-arrow-left"></i> Back to Store</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <section class="product-listing">
+            <div class="section-header">
+                <h3 class="section-title">My Wishlist <i class="ph-fill ph-heart" style="color: #EF4444;"></i></h3>
+            </div>
+            
+            <div id="emptyWishlistMsg" style="display: none; text-align: center; padding: 4rem; color: var(--text-muted);">
+                <i class="ph ph-heart-break" style="font-size: 4rem; margin-bottom: 1rem;"></i>
+                <h4>Your wishlist is empty</h4>
+                <p>Add items you love to your wishlist to easily find them later.</p>
+                <a href="/" class="btn btn-primary" style="margin-top: 1rem;">Go Shopping</a>
+            </div>
+
+            <div class="product-grid" id="wishlistGrid">
+                <!-- Populated by JS -->
+            </div>
+        </section>
+    </main>
+
+    <script type="module" src="toast.js"></script>
+    <script type="module">
+        const API_BASE = 'https://adyanta-commerce.onrender.com';
+        document.addEventListener("DOMContentLoaded", async () => {
+
+            const wishlistJSON = localStorage.getItem('wishlist');
+            let wishlist = wishlistJSON ? JSON.parse(wishlistJSON).map(id => Number(id)) : [];
+            const grid = document.getElementById("wishlistGrid");
+            const emptyMsg = document.getElementById("emptyWishlistMsg");
+
+
+            // Load existing cart
+            let cart = JSON.parse(localStorage.getItem('cart')) || [];
+
+            if (wishlist.length === 0) {
+                emptyMsg.style.display = "block";
+                return;
+            }
+
+            try {
+                const res = await fetch(API_BASE + '/api/products');
+                const products = await res.json();
+                
+                // Load backend wishlist if logged in to be fully synced
+                const user_id = getCookie('user_id');
+                if (user_id) {
+                    try {
+                        const wishRes = await fetch(API_BASE + '/api/user/wishlist', { credentials: 'include' });
+                        if (wishRes.ok) {
+                            const wishData = await wishRes.json();
+                            wishlist = wishData.map(item => Number(item.id || item.product_id));
+                            localStorage.setItem('wishlist', JSON.stringify(wishlist));
+                        }
+                    } catch(e) { console.error("Wishlist sync failed", e); }
+                }
+                function updateAuthUI(name) {
+            const authContent = document.getElementById('dynamicAuthContent');
+            if (!authContent) return;
+            
+            const userFullName = name || getCookie('full_name') || localStorage.getItem('user_full_name');
+            const isMobile = window.innerWidth <= 768;
+
+            if (userFullName && userFullName !== 'undefined' && userFullName !== 'null') {
+                const displayName = decodeURIComponent(userFullName).toUpperCase();
+                if (isMobile) {
+                    authContent.innerHTML = `
+                        <div style="display: flex; align-items: center; gap: 0.6rem; background: rgba(5, 150, 105, 0.05); padding: 6px 12px; border-radius: 30px; border: 1px solid rgba(16, 185, 129, 0.15);">
+                            <div style="width: 20px; height: 20px; background: var(--primary); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.7rem;">
+                                <i class="ph ph-user"></i>
+                            </div>
+                            <span style="color: var(--primary); font-weight: 700; font-size: 0.8rem; letter-spacing: 0.3px;">HI, ${firstName}</span>
+                        </div>
+                    `;
+                } else {
+                    authContent.innerHTML = `
+                        <div class="user-profile-wrapper" style="position: relative;">
+                            <div class="premium-user-badge" id="userMenuTrigger" style="display: flex; align-items: center; gap: 0.8rem; background: white; padding: 6px 16px; border-radius: 30px; border: 1.5px solid var(--primary); cursor: pointer; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.08); transition: all 0.2s;">
+                                <div class="avatar-circle" style="width: 26px; height: 26px; background: linear-gradient(135deg, var(--primary), #059669); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.9rem;">
+                                    <i class="ph ph-user"></i>
+                                </div>
+                                <span style="font-weight: 700; color: var(--primary); font-size: 0.9rem; letter-spacing: 0.5px;">HI, ${displayName}</span>
+                                <i class="ph ph-caret-down" style="font-size: 0.8rem; color: var(--primary);"></i>
+                            </div>
+
+                            <div class="user-dropdown" id="userDropdownMenu" style="position: absolute; top: calc(100% + 8px); right: 0; background: white; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); border: 1px solid var(--border); min-width: 180px; display: none; z-index: 1000; overflow: hidden; animation: slideUp 0.3s ease;">
+                                <a href="profile.html" style="display: flex; align-items: center; gap: 0.75rem; padding: 12px 16px; color: var(--text-main); text-decoration: none; font-size: 0.9rem; border-bottom: 1px solid var(--border); transition: background 0.2s;">
+                                    <i class="ph ph-user-circle"></i> Profile
+                                </a>
+                                <a href="#" class="logout-trigger" style="display: flex; align-items: center; gap: 0.75rem; padding: 12px 16px; color: #EF4444; text-decoration: none; font-size: 0.9rem; transition: background 0.2s;">
+                                    <i class="ph ph-sign-out"></i> Log Out
+                                </a>
+                            </div>
+                        </div>
+                    `;
+                    
+                    const trigger = authContent.querySelector('#userMenuTrigger');
+                    const dropdown = authContent.querySelector('#userDropdownMenu');
+                    if (trigger && dropdown) {
+                        trigger.onclick = (e) => {
+                            e.stopPropagation();
+                            dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
+                        };
+                        document.addEventListener('click', () => { dropdown.style.display = 'none'; });
+                    }
+                }
+                
+                if (window.phosphor) window.phosphor.replace();
+
+                authContent.querySelector('.logout-trigger')?.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    if (confirm("Are you sure you want to log out?")) {
+                        await fetch(API_BASE + '/api/auth/logout', { method: 'POST', credentials: 'include' });
+                        document.cookie = "full_name=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+                        document.cookie = "username=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+                        document.cookie = "user_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+                        localStorage.removeItem('user_full_name');
+                        localStorage.removeItem('user_username');
+                        localStorage.removeItem('user_id');
+                        location.reload();
+                    }
+                });
+            } else {
+                authContent.innerHTML = `<a href="/" class="nav-link">Sign In</a> | <a href="/" class="nav-link">Log In</a>`;
+            }
+        }
+
+                // Filter products that are in the wishlist
+                const wishlistProducts = products.filter(p => wishlist.includes(p.id));
+                
+                if (wishlistProducts.length === 0) {
+                    emptyMsg.style.display = "block";
+                    return;
+                }
+
+                window.removeFromWishlist = async function(e, prodId) {
+                    const pid = Number(prodId);
+                    const prod = wishlistProducts.find(p => p.id == pid);
+                    const prodName = prod ? prod.name : "Product";
+                    
+                    const user_id = getCookie('user_id');
+                    if (user_id) {
+                        try {
+                            await fetch(API_BASE + `/api/user/wishlist/${pid}`, { method: 'DELETE', credentials: 'include' });
+                        } catch(e) {}
+                    }
+
+                    const idx = wishlist.indexOf(pid);
+                    if (idx > -1) {
+                        wishlist.splice(idx, 1);
+                        localStorage.setItem('wishlist', JSON.stringify(wishlist));
+                        if (window.Toast) window.Toast.show(`${prodName} removed`, 'info');
+                        renderWishlist();
+                        updateWishlistBadge();
+                    }
+                }
+
+                function getCookie(name) {
+                    const value = `; ${document.cookie}`;
+                    const parts = value.split(`; ${name}=`);
+                    if (parts.length === 2) return parts.pop().split(';').shift();
+                    return null;
+                }
+
+                window.updateVariantPrice = function(select, prodId) {
+                    const option = select.options[select.selectedIndex];
+                    const price = option.getAttribute('data-price');
+                    const oldPrice = option.getAttribute('data-old-price');
+                    
+                    const currPriceEl = document.getElementById(`currPrice-${prodId}`);
+                    const oldPriceEl = document.getElementById(`oldPrice-${prodId}`);
+                    if (currPriceEl) currPriceEl.innerText = `₹${price}`;
+                    if (oldPriceEl) oldPriceEl.innerText = oldPrice ? `₹${oldPrice}` : '';
+                }
+
+                function renderWishlist() {
+                    if (wishlist.length === 0) {
+                        grid.innerHTML = "";
+                        emptyMsg.style.display = "block";
+                        return;
+                    }
+                    emptyMsg.style.display = "none";
+                    grid.innerHTML = products.filter(p => wishlist.includes(Number(p.id))).map(prod => {
+                        const escapedName = prod.name.replace(/'/g, "&apos;");
+                        const imgurl = prod.imgUrl || prod.imgurl || "";
+                        const originalprice = prod.originalPrice || prod.originalprice || 0;
+
+                        return `
+                            <div class="product-card" data-product-id="${prod.id}">
+                                <i class="ph-fill ph-heart" style="position: absolute; top: 1rem; right: 1rem; font-size: 1.5rem; color: #EF4444; z-index: 2; cursor: pointer;" onclick="removeFromWishlist(event, '${prod.id}')"></i>
+                                ${prod.discount ? '<span class="discount-badge">' + prod.discount + '</span>' : ''}
+                                <img src="${imgurl}" alt="${prod.name}" class="product-img" onerror="this.src='https://via.placeholder.com/200/F8FAFC/94A3B8?text=Product'">
+                                <div class="product-info">
+                                    ${prod.variants && prod.variants.length > 0 ? `
+                                        <select class="variant-select-inline" onchange="updateVariantPrice(this, '${prod.id}')">
+                                            <option data-weight="${prod.weight}" data-price="${prod.price}" data-old-price="${originalprice}">${prod.weight}</option>
+                                            ${prod.variants.map(v => `<option data-weight="${v.weight}" data-price="${v.price}" data-old-price="${v.originalprice || v.originalPrice || v.price}">${v.weight}</option>`).join('')}
+                                        </select>
+                                    ` : `<span class="product-weight" id="weight-${prod.id}">${prod.weight}</span>`}
+                                    
+                                    <h4 class="product-title">${prod.name}</h4>
+                                    <div class="product-rating">
+                                        <i class="ph-fill ph-star"></i>
+                                        <span>${prod.rating || 4.5} (${prod.reviews || '10+'})</span>
+                                    </div>
+                                    <div class="product-bottom">
+                                        <div class="price">
+                                            <div style="display: flex; flex-direction: column;">
+                                                <span class="current-price" id="currPrice-${prod.id}">₹${prod.price}</span>
+                                                <span class="old-price" id="oldPrice-${prod.id}">${originalprice ? '₹' + originalprice : ''}</span>
+                                            </div>
+                                        </div>
+                                        <div class="product-action-container" data-name="${escapedName}" data-product-id="${prod.id}">
+                                            <!-- Hydrated by refreshWishlistButtons -->
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                    refreshWishlistButtons();
+                    if (window.phosphor) window.phosphor.replace();
+                }
+
+                window.addToCartDirectly = function(prodName, prodId) {
+                    const prod = wishlistProducts.find(p => p.id == prodId || p.name === prodName);
+                    if (prod) {
+                        const card = document.querySelector(`.product-card[data-product-id="${prod.id}"]`);
+                        const select = card?.querySelector('.variant-select');
+                        
+                        let selectedVariant = null;
+                        if (select) {
+                            const opt = select.options[select.selectedIndex];
+                            selectedVariant = {
+                                weight: opt.getAttribute('data-weight'),
+                                price: Number(opt.getAttribute('data-price')),
+                                originalprice: Number(opt.getAttribute('data-old-price'))
+                            };
+                        }
+
+                        const weight = selectedVariant ? selectedVariant.weight : prod.weight;
+                        const price = selectedVariant ? selectedVariant.price : prod.price;
+                        const originalprice = selectedVariant ? selectedVariant.originalprice : (prod.originalPrice || prod.originalprice);
+
+                        const existing = cart.find(item => Number(item.id) === Number(prod.id) && String(item.weight) === String(weight));
+                        if (existing) {
+                            existing.quantity += 1;
+                        } else {
+                            cart.push({ ...prod, weight, price, originalprice, quantity: 1 });
+                        }
+                        localStorage.setItem('cart', JSON.stringify(cart));
+                        Toast.show("Added to cart", "success");
+                        updateCartBadgeLocal();
+                        refreshWishlistButtons();
+                    }
+                }
+
+                window.gridChangeQty = function(prodName, delta, prodId) {
+                    const prod = wishlistProducts.find(p => p.id == prodId || p.name === prodName);
+                    if (!prod) return;
+
+                    const card = document.querySelector(`.product-card[data-product-id="${prod.id}"]`);
+                    const select = card?.querySelector('.variant-select');
+                    const weight = select ? select.options[select.selectedIndex].getAttribute('data-weight') : prod.weight;
+
+                    const cartItem = cart.find(item => Number(item.id) === Number(prod.id) && String(item.weight) === String(weight));
+                    if (cartItem) {
+                        cartItem.quantity += delta;
+                        if (cartItem.quantity <= 0) {
+                            cart = cart.filter(item => !(Number(item.id) === Number(prod.id) && String(item.weight) === String(weight)));
+                        }
+                        localStorage.setItem('cart', JSON.stringify(cart));
+                        updateCartBadgeLocal();
+                        refreshWishlistButtons();
+                    }
+                }
+
+                function refreshWishlistButtons() {
+                    const containers = document.querySelectorAll('.product-action-container');
+                    containers.forEach(container => {
+                        const prodName = container.dataset.name;
+                        const prodId = container.dataset.productId;
+                        const prod = wishlistProducts.find(p => p.id == prodId);
+                        if (!prod) return;
+
+                        const card = container.closest('.product-card');
+                        const select = card?.querySelector('.variant-select');
+                        const weight = select ? select.options[select.selectedIndex].getAttribute('data-weight') : prod.weight;
+
+                        const cartItem = cart.find(item => Number(item.id) === Number(prod.id) && String(item.weight) === String(weight));
+                        
+                        if (cartItem && cartItem.quantity > 0) {
+                            container.innerHTML = `
+                                <div class="qty-toggle-sm" style="display: flex; align-items: center; gap: 0.75rem; background: var(--primary); color: white; padding: 4px 8px; border-radius: 20px;">
+                                    <button onclick="gridChangeQty('${prodName.replace(/'/g, "\\'")}', -1, '${prodId}')" style="background:none; border:none; color:white; cursor:pointer;"><i class="ph ph-minus"></i></button>
+                                    <span style="font-weight: 600; font-size: 0.9rem; min-width: 15px; text-align: center;">${cartItem.quantity}</span>
+                                    <button onclick="gridChangeQty('${prodName.replace(/'/g, "\\'")}', 1, '${prodId}')" style="background:none; border:none; color:white; cursor:pointer;"><i class="ph ph-plus"></i></button>
+                                </div>
+                            `;
+                        } else {
+                            container.innerHTML = `<button class="btn btn-outline btn-sm" onclick="addToCartDirectly('${prodName.replace(/'/g, "\\'")}', '${prodId}')">Add to Cart</button>`;
+                        }
+                    });
+                    if (window.phosphor) window.phosphor.replace();
+                }
+
+                function updateCartBadgeLocal() {
+                    const badge = document.getElementById('cartBadge');
+                    if (badge) {
+                        const count = cart.reduce((sum, item) => sum + item.quantity, 0);
+                        badge.textContent = count;
+                        badge.style.display = count > 0 ? 'flex' : 'none';
+                    }
+                }
+
+                function updateWishlistBadge() {
+                    const badge = document.getElementById('wishlistBadge');
+                    if (badge) {
+                        // User previous request: remove notification numbering for wishlist
+                        // If you want it on this specific page ONLY, you could set it here
+                        // but to stay consistent with your request to remove it, we'll keep it hidden
+                        badge.style.display = 'none';
+                    }
+                }
+
+                renderWishlist();
+                updateCartBadgeLocal();
+                updateWishlistBadge();
+
+            } catch(e) {
+                console.error("Failed to fetch products for wishlist", e);
+                grid.innerHTML = "<p>Couldn't load wishlist. Is the server running?</p>";
+            }
+        });
+    </script>
+
+    <!-- Mobile Bottom Navigation (Visible only on mobile) -->
+    <div class="mobile-bottom-nav">
+        <a href="/" class="nav-item">
+            <i class="ph-fill ph-house"></i>
+            <span>Home</span>
+        </a>
+        <a href="category.html?name=All" class="nav-item">
+            <i class="ph ph-squares-four"></i>
+            <span>Categories</span>
+        </a>
+        <a href="wishlist.html" class="nav-item active" style="position: relative;">
+            <i class="ph ph-heart"></i>
+            <span class="badge" id="bottomWishlistBadge" style="position: absolute; top: -5px; right: 10px; background-color: #EF4444; color: white; width: 16px; height: 16px; border-radius: 50%; display: none; align-items: center; justify-content: center; font-size: 0.6rem; font-weight: bold;">0</span>
+            <span>Wishlist</span>
+        </a>
+        <a href="#" class="nav-item cart-btn-mobile" id="mobileBottomCartBtn" style="position: relative;">
+            <i class="ph ph-shopping-cart"></i>
+            <span class="badge" id="bottomCartBadge" style="position: absolute; top: -5px; right: 10px; background-color: var(--primary); color: white; width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.6rem; font-weight: bold;">0</span>
+            <span>Cart</span>
+        </a>
+        <a href="#" class="nav-item" id="mobileBottomProfileBtn">
+            <i class="ph ph-user-circle"></i>
+            <span>Profile</span>
+        </a>
+    </div>
+
+    <script>
+        // Bind bottom cart button to open cart overlay
+        document.getElementById('mobileBottomCartBtn').addEventListener('click', function(e) {
+            e.preventDefault();
+            if (document.getElementById('cartSidebar')) {
+                document.getElementById('cartSidebar').classList.add('active');
+                if (document.getElementById('cartOverlay')) document.getElementById('cartOverlay').classList.add('active');
+                document.body.style.overflow = 'hidden';
+                if (typeof updateCartSidebar === 'function') updateCartSidebar();
+            } else {
+                window.location.href = '/'; 
+            }
+        });
+        
+        // Link bottom profile btn
+        document.getElementById('mobileBottomProfileBtn').addEventListener('click', function(e) {
+            e.preventDefault();
+            window.location.href = 'profile.html';
+        });
+    </script>
+</body>
+</html>
