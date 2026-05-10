@@ -64,25 +64,10 @@ async function checkInitialAuth() {
     const overlay = document.getElementById('adminLoginOverlay');
     const main = document.getElementById('adminLayoutMain');
 
-    try {
-        const res = await adminFetch(API_BASE + '/api/admin/check-session');
-        const data = await res.json();
-        
-        if (data.authenticated) {
-            if (overlay) overlay.style.display = 'none';
-            if (main) main.style.display = 'flex';
-            initDashboard();
-        } else {
-            if (overlay) overlay.style.display = 'flex';
-            if (main) main.style.display = 'none';
-            setAuthMode('login');
-        }
-    } catch (e) {
-        // Fallback if API fails
-        if (overlay) overlay.style.display = 'none';
-        if (main) main.style.display = 'flex';
-        initDashboard();
-    }
+    // Admin Panel Lock Removed: Always show dashboard
+    if (overlay) overlay.style.display = 'none';
+    if (main) main.style.display = 'flex';
+    initDashboard();
 }
 
 function setAuthMode(mode) {
