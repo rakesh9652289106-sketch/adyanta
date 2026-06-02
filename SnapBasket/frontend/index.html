@@ -25,6 +25,27 @@
     <link rel="apple-touch-icon" href="assets/favicon.png">
     <meta name="theme-color" content="#059669">
     
+    <!-- Switchboard custom toggle switch style for coins and admin switches -->
+    <style>
+        .switch input:checked + .slider {
+            background-color: #EAB308 !important;
+        }
+        .switch .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+        .switch input:checked + .slider:before {
+            transform: translateX(20px);
+        }
+    </style>
+    
     <!-- JSON-LD Structured Data: WebSite & Store Reviews -->
     <script type="application/ld+json">
     [
@@ -129,7 +150,6 @@
 
             <!-- Mobile Only Actions -->
             <div class="mobile-nav-actions" style="display: flex; align-items: center; gap: 0.75rem;">
-                <div id="mobileDynamicAuthContent" style="font-size: 0.75rem; font-weight: 700;"></div>
                 <button class="theme-toggle-btn mobile-theme-btn" style="background:none; border:none; color:var(--text-main); font-size:1.4rem;">
                     <i class="ph ph-moon"></i>
                 </button>
@@ -224,6 +244,43 @@
                 </div>
                 <button class="slider-btn prev-btn" onclick="movePromoSlider(-1)"><i class="ph ph-caret-left"></i></button>
                 <button class="slider-btn next-btn" onclick="movePromoSlider(1)"><i class="ph ph-caret-right"></i></button>
+            </div>
+        </section>
+
+        <!-- Storefront Context Header Banner (displayed when customer enters a specific store) -->
+        <div id="storefrontBanner" style="display: none; background: linear-gradient(135deg, #0A5C36, #06341D); color: white; padding: 2rem; border-radius: var(--radius-md); margin-bottom: 2rem; box-shadow: var(--shadow-md); position: relative; overflow: hidden;">
+            <div style="position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1.5rem;">
+                <div style="display: flex; align-items: center; gap: 1.5rem;">
+                    <img id="storeBannerLogo" src="" alt="Store Logo" style="width: 80px; height: 80px; border-radius: 50%; border: 3px solid white; background: white; object-fit: cover;">
+                    <div>
+                        <h2 id="storeBannerName" style="font-size: 2rem; font-family: 'Outfit', sans-serif; font-weight: 800; margin: 0 0 0.5rem 0; letter-spacing: 0.5px; color: white;">Shop Name</h2>
+                        <p id="storeBannerDesc" style="margin: 0; font-size: 1rem; opacity: 0.9; max-width: 600px; color: rgba(255,255,255,0.9);">Shop custom description goes here.</p>
+                        <div style="display: flex; gap: 1.5rem; margin-top: 1rem; font-size: 0.85rem; opacity: 0.85; font-weight: 600;">
+                            <span><i class="ph-fill ph-clock" style="color: var(--accent);"></i> <span id="storeBannerTimings">9:00 AM - 9:00 PM</span></span>
+                            <span><i class="ph-fill ph-star" style="color: #F1C40F;"></i> <span id="storeBannerRating">4.9</span> (Shop Reviews)</span>
+                            <span><i class="ph-fill ph-truck" style="color: var(--accent);"></i> <span id="storeBannerDelivery">15-30 mins delivery</span></span>
+                        </div>
+                    </div>
+                </div>
+                <button id="exitStorefrontBtn" style="background: rgba(255, 255, 255, 0.2); border: 1.5px solid white; color: white; padding: 8px 18px; border-radius: var(--radius-sm); cursor: pointer; font-weight: 700; font-size: 0.9rem; transition: all 0.3s ease; display: flex; align-items: center; gap: 0.4rem;">
+                    <i class="ph ph-arrow-left"></i> Exit Storefront
+                </button>
+            </div>
+            <div style="position: absolute; right: -50px; bottom: -50px; opacity: 0.05; font-size: 15rem; pointer-events: none;">
+                <i class="ph ph-storefront"></i>
+            </div>
+        </div>
+
+        <!-- Dynamic Marketplace Shops Browser Section -->
+        <section class="shops-browser-section" id="shopsBrowserSection" style="margin-top: 1rem; margin-bottom: 2.5rem; clear: both; position: relative;">
+            <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h3 class="section-title" style="font-size: 1.4rem; font-weight: 700; color: var(--text-main); font-family: 'Outfit', sans-serif; display: flex; align-items: center; gap: 0.5rem;"><i class="ph-fill ph-storefront" style="color: var(--primary);"></i> Browse Multi-Vendor Stores</h3>
+                <span style="font-size: 0.8rem; color: var(--text-soft); font-weight: 600;" id="activeShopsCount">Loading stores...</span>
+            </div>
+            <div class="shops-carousel-wrapper" style="position: relative;">
+                <div class="shops-scroll" id="shopsScroll" style="display: flex; gap: 1.25rem; overflow-x: auto; padding: 0.5rem 0.25rem; scrollbar-width: none; -ms-overflow-style: none;">
+                    <!-- Dynamically populated vendor shops cards -->
+                </div>
             </div>
         </section>
 
@@ -532,6 +589,28 @@
                     </div>
                 </div>
 
+                <!-- loyalty coins redemption -->
+                <div id="checkoutCoinsRedemptionCard" class="checkout-section-card" style="margin-top: 1rem; border-left: 4px solid #EAB308; display: none;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            <div style="background: #FEF3C7; color: #D97706; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;">
+                                <i class="ph ph-coins"></i>
+                            </div>
+                            <div>
+                                <h4 style="font-size: 0.9rem; margin: 0; font-weight: 700; color: var(--text-main);">SURAJ Coins Balance</h4>
+                                <p style="font-size: 0.75rem; color: var(--text-soft); margin: 2px 0 0 0;" id="checkoutCoinsAvailableText">Available: 0 Coins (Worth ₹0)</p>
+                            </div>
+                        </div>
+                        <label class="switch" style="position: relative; display: inline-block; width: 44px; height: 24px; cursor: pointer;">
+                            <input type="checkbox" id="useCoinsToggle" style="opacity: 0; width: 0; height: 0; cursor: pointer;">
+                            <span class="slider round" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #CBD5E1; transition: .3s; border-radius: 24px;"></span>
+                        </label>
+                    </div>
+                    <div id="coinDiscountInfo" style="display: none; font-size: 0.75rem; margin-top: 0.75rem; color: #10B981; font-weight: 600; padding: 0.5rem; background: #F0FDF4; border-radius: 6px; border: 1px solid #DCFCE7;">
+                        <i class="ph ph-check-circle"></i> Coins redeemed! Instant discount of <span id="checkoutCoinDiscountAmountVal">₹0</span> applied.
+                    </div>
+                </div>
+
                 <!-- Order Summary Integrated into Payment Step -->
                 <div id="checkoutOrderSummary" class="checkout-summary-card">
                     <h4 style="font-size: 0.9rem; margin-bottom: 0.8rem; display: flex; align-items: center; gap: 0.5rem;"><i class="ph ph-receipt" style="color: var(--primary);"></i> Order Total</h4>
@@ -543,6 +622,10 @@
                         <div id="modalDiscountRow" style="display: none; justify-content: space-between; color: #10B981; font-weight: 600;">
                             <span>Coupon Discount</span>
                             <span id="modalDiscount">-₹0</span>
+                        </div>
+                        <div id="modalCoinDiscountRow" style="display: none; justify-content: space-between; color: #EAB308; font-weight: 600;">
+                            <span>Coins Discount</span>
+                            <span id="modalCoinDiscount">-₹0</span>
                         </div>
                         <div style="display: flex; justify-content: space-between; border-top: 1px dashed #CBD5E1; padding-top: 0.5rem; margin-top: 0.2rem; font-weight: 700; font-size: 1.1rem; color: var(--text-main);">
                             <span>Final Total</span>
@@ -594,6 +677,14 @@
                         <span>Payment Method</span>
                         <strong id="successMethod">COD</strong>
                     </div>
+                    <div class="receipt-item" id="successCoinsEarnedRow" style="display: none; color: #10B981; font-weight: 600;">
+                        <span>Coins Earned</span>
+                        <strong id="successCoinsEarnedText">+0 Coins</strong>
+                    </div>
+                    <div class="receipt-item" id="successCoinsUsedRow" style="display: none; color: #EF4444; font-weight: 600;">
+                        <span>Coins Used</span>
+                        <strong id="successCoinsUsedText">-0 Coins</strong>
+                    </div>
                     <div class="receipt-divider"></div>
                     <div class="receipt-total">
                         <span>Total Paid</span>
@@ -609,105 +700,7 @@
         </div>
     </div>
 
-    <!-- Auth Modal -->
-    <div class="checkout-modal-overlay" id="authModal" style="z-index: 2000;">
-        <div class="checkout-modal" style="width: 90%; max-width: 400px;">
-            <button class="close-cart" id="closeAuthBtn" style="position: absolute; top: 1rem; right: 1rem;"><i class="ph ph-x"></i></button>
-            <h3 style="font-size: 1.5rem; margin-bottom: 0.5rem;" id="authTitle">Sign In</h3>
-            <p class="text-muted" style="margin-bottom: 1.5rem;" id="authDesc">Sign in to your ADYANTA account</p>
-            
-            <div id="authFields">
-                <!-- Mobile Number (Required for Login & Register) -->
-                <div id="loginIdentifierField">
-                    <input type="text" id="usernameInput" placeholder="10-digit Mobile Number" maxlength="10" oninput="this.value = this.value.replace(/[^0-9]/g, '');" class="form-control" style="width: 100%; padding: 0.75rem; margin-bottom: 1rem; font-size: 1rem;">
-                </div>
-                
-                <!-- Full Name (Required for Login & Register) -->
-                <div id="nameField">
-                    <input type="text" id="fullNameInput" placeholder="Full Name" class="form-control" style="width: 100%; padding: 0.75rem; margin-bottom: 1rem; font-size: 1rem;">
-                </div>
-                
-                <!-- Phone Number (for Register/Forgot) -->
-                <div id="phoneField" style="display: none;">
-                    <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
-                        <input type="text" value="+91" disabled class="form-control" style="width: 60px; padding: 0.75rem; font-size: 1rem; text-align: center;">
-                        <input type="text" id="phoneInput" placeholder="10-digit Mobile Number" maxlength="10" class="form-control" style="flex: 1; padding: 0.75rem; font-size: 1rem;">
-                    </div>
-                </div>
 
-                <div style="position: relative; margin-bottom: 1rem;">
-                    <input type="password" id="passwordInput" placeholder="Password" autocomplete="new-password" class="form-control" style="width: 100%; padding: 0.75rem; font-size: 1rem;">
-                    <i class="ph ph-eye password-toggle" onclick="togglePasswordVisibility('passwordInput', this)" style="position: absolute; right: 1rem; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-soft); font-size: 1.1rem;"></i>
-                </div>
-                
-                <div id="confirmPasswordField" style="display: none; position: relative; margin-bottom: 1rem;">
-                    <input type="password" id="confirmPasswordInput" placeholder="Confirm Password" autocomplete="new-password" class="form-control" style="width: 100%; padding: 0.75rem; font-size: 1rem;">
-                    <i class="ph ph-eye password-toggle" onclick="togglePasswordVisibility('confirmPasswordInput', this)" style="position: absolute; right: 1rem; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-soft); font-size: 1.1rem;"></i>
-                </div>
-                
-                <!-- Security Questions (for Register) -->
-                <div id="regSecurityFields" style="display: none; border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 0.5rem;">
-                    <p style="font-size: 0.8rem; color: var(--text-soft); margin-bottom: 0.5rem;">Setup Security Questions</p>
-                    <select id="securityQ1" autocomplete="off" style="width: 100%; padding: 0.75rem; margin-bottom: 0.5rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 0.9rem; background: var(--card-bg); color: var(--text-main);">
-                        <option value="" disabled selected>Select Question 1</option>
-                        <option value="What was the name of your first school?">What was the name of your first school?</option>
-                        <option value="What is your birthplace?">What is your birthplace?</option>
-                        <option value="What is the name of your first pet?">What is the name of your first pet?</option>
-                        <option value="What is your favorite movie?">What is your favorite movie?</option>
-                        <option value="What was your childhood nickname?">What was your childhood nickname?</option>
-                    </select>
-                    <input type="text" id="securityA1" placeholder="Answer 1" autocomplete="off" style="width: 100%; padding: 0.75rem; margin-bottom: 1rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 0.9rem;">
-                    
-                    <select id="securityQ2" autocomplete="off" style="width: 100%; padding: 0.75rem; margin-bottom: 0.5rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 0.9rem; background: var(--card-bg); color: var(--text-main);">
-                        <option value="" disabled selected>Select Question 2</option>
-                        <option value="What was the name of your first school?">What was the name of your first school?</option>
-                        <option value="What is your birthplace?">What is your birthplace?</option>
-                        <option value="What is the name of your first pet?">What is the name of your first pet?</option>
-                        <option value="What is your favorite movie?">What is your favorite movie?</option>
-                        <option value="What was your childhood nickname?">What was your childhood nickname?</option>
-                    </select>
-                    <input type="text" id="securityA2" placeholder="Answer 2" autocomplete="off" style="width: 100%; padding: 0.75rem; margin-bottom: 1rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 0.9rem;">
-                </div>
-
-                <!-- Recovery Questions (for Forgot Password) -->
-                <div id="recoverySection" style="display: none; border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 0.5rem;">
-                    <p id="recoveryStepLabel" style="font-size: 0.75rem; color: var(--primary); font-weight: 700; text-transform: uppercase; margin-bottom: 0.25rem;">Security Verification</p>
-                    <div id="recoveryQ1Container" style="margin-bottom: 1rem;">
-                        <p id="recoveryQ1Label" style="font-size: 0.85rem; color: var(--text-main); margin-bottom: 0.4rem; font-weight: 600;"></p>
-                        <input type="text" id="recoveryA1Input" placeholder="Your Answer to Question 1" autocomplete="off" style="width: 100%; padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 1rem;">
-                    </div>
-                    <div id="recoveryQ2Container" style="margin-bottom: 1rem;">
-                        <p id="recoveryQ2Label" style="font-size: 0.85rem; color: var(--text-main); margin-bottom: 0.4rem; font-weight: 600;"></p>
-                        <input type="text" id="recoveryA2Input" placeholder="Your Answer to Question 2" autocomplete="off" style="width: 100%; padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 1rem;">
-                    </div>
-                    <p style="font-size: 0.7rem; color: var(--text-soft); font-style: italic;">Answer either question to verify your identity.</p>
-                </div>
-            </div>
-            
-            <div id="authActions">
-                <button class="btn btn-outline" id="sendOtpBtn" style="width: 100%; margin-bottom: 1rem; display: none;">Verify Number</button>
-                <button class="btn btn-primary" id="submitAuthBtn" style="width: 100%; margin-bottom: 1rem;">Sign In</button>
-                
-                <div style="display: flex; align-items: center; margin: 1rem 0; color: var(--text-soft); font-size: 0.8rem;">
-                    <div style="flex: 1; height: 1px; background: var(--border);"></div>
-                    <span style="padding: 0 1rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">OR</span>
-                    <div style="flex: 1; height: 1px; background: var(--border);"></div>
-                </div>
-
-                <button class="btn btn-outline" id="googleAuthBtn" style="width: 100%; margin-bottom: 1rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem; border: 1px solid #E2E8F0; background: #fff; color: #1e293b; font-weight: 600;">
-                    <img src="https://www.google.com/favicon.ico" width="18" height="18" alt="Google">
-                    Continue with Google
-                </button>
-            </div>
-
-            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem;">
-                <a href="#" id="toggleAuthMode" style="color: var(--primary); text-decoration: underline; font-weight: 500;">Sign Up</a>
-                <a href="#" id="forgotPassBtn" style="color: var(--text-soft); text-decoration: none;">Forgot Password?</a>
-            </div>
-            
-            <div id="authErrorMsg" style="color: #ef4444; margin-top: 1rem; display: none; font-size: 0.9rem; padding: 0.5rem; background: #fef2f2; border-radius: 4px; border: 1px solid #fee2e2;"></div>
-        </div>
-    </div>
 
     <!-- Reviews Modal -->
     <div class="checkout-modal-overlay" id="reviewsModal">
@@ -720,10 +713,7 @@
             </div>
             <div id="reviewFormContainer" style="margin-bottom: 2rem; padding: 1rem; background: var(--bg-color); border-radius: var(--radius-md); border: 1px solid var(--border);">
                 <h4 style="margin-bottom: 1rem; font-size: 1rem;">Write a Review</h4>
-                <div id="reviewAuthMessage" style="display: none; color: var(--text-soft); font-size: 0.9rem;">
-                    Please <a href="#" onclick="document.getElementById('authModal').classList.add('active'); return false;" style="color: var(--primary); font-weight: 600;">Sign In</a> to leave a review.
-                </div>
-                <form id="addReviewForm" style="display: none;">
+                <form id="addReviewForm">
                     <input type="hidden" id="reviewProdId">
                     <div class="form-group" style="margin-bottom: 1rem;">
                         <label style="display: block; margin-bottom: 0.5rem; font-size: 0.85rem;">Rating</label>
@@ -904,6 +894,44 @@
                 Read Full Alerts <i class="ph ph-arrow-right"></i>
             </a>
         </div>
+    </div>
+    <!-- AI Customer Support Chatbot Floating UI -->
+    <div id="aiChatbotWidget" style="position: fixed; bottom: 85px; right: 25px; width: 360px; height: 500px; background: var(--card-bg); border: 1.5px solid var(--border); box-shadow: var(--shadow-lg); border-radius: 20px; z-index: 9999; display: none; flex-direction: column; overflow: hidden; animation: fadeIn 0.3s ease;">
+        <div style="background: linear-gradient(135deg, var(--primary), var(--primary-hover)); color: white; padding: 1.25rem; display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <div style="width: 38px; height: 38px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.4rem;">
+                    <i class="ph-fill ph-robot" style="color: white;"></i>
+                </div>
+                <div>
+                    <h4 style="margin: 0; font-family: 'Outfit', sans-serif; font-size: 1.05rem; font-weight: 700; letter-spacing: 0.5px; color: white;">ADYANTA Support Bot</h4>
+                    <span style="font-size: 0.75rem; opacity: 0.85; display: flex; align-items: center; gap: 0.3rem; color: white;"><span style="width: 6px; height: 6px; background: #22C55E; border-radius: 50%; display: inline-block;"></span> Active Marketplace Assistant</span>
+                </div>
+            </div>
+            <button id="closeChatbotBtn" style="background: none; border: none; color: white; font-size: 1.4rem; cursor: pointer; opacity: 0.85; transition: opacity 0.2s;">
+                <i class="ph ph-x"></i>
+            </button>
+        </div>
+        <div id="chatbotMessages" style="flex: 1; padding: 1.25rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem; background: var(--bg-color); scrollbar-width: none;">
+            <div style="align-self: flex-start; background: var(--card-bg); border: 1px solid var(--border); border-radius: 18px 18px 18px 2px; padding: 0.75rem 1rem; font-size: 0.85rem; max-width: 80%; line-height: 1.4; color: var(--text-main);">
+                👋 Hello! Welcome to the ADYANTA Multi-Vendor Marketplace. I am your AI assistant! How can I help you today? You can ask me to:
+                <div style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.4rem;">
+                    <button class="chat-suggest-btn" onclick="sendChatbotSuggestion('🔍 Show active shops in Nellore')" style="text-align: left; background: var(--primary-light); color: var(--primary); border: none; padding: 6px 12px; border-radius: var(--radius-sm); font-size: 0.75rem; font-weight: 600; cursor: pointer;">🔍 Show active shops in Nellore</button>
+                    <button class="chat-suggest-btn" onclick="sendChatbotSuggestion('🎁 Give me active coupons')" style="text-align: left; background: var(--primary-light); color: var(--primary); border: none; padding: 6px 12px; border-radius: var(--radius-sm); font-size: 0.75rem; font-weight: 600; cursor: pointer;">🎁 Give me active coupons</button>
+                    <button class="chat-suggest-btn" onclick="sendChatbotSuggestion('⚡ What is the fastest delivery store?')" style="text-align: left; background: var(--primary-light); color: var(--primary); border: none; padding: 6px 12px; border-radius: var(--radius-sm); font-size: 0.75rem; font-weight: 600; cursor: pointer;">⚡ What is the fastest delivery store?</button>
+                </div>
+            </div>
+        </div>
+        <div style="padding: 0.75rem 1rem; border-top: 1px solid var(--border); background: var(--card-bg); display: flex; gap: 0.75rem; align-items: center;">
+            <input type="text" id="chatbotInput" placeholder="Ask anything about stores & products..." style="flex: 1; border: 1.5px solid var(--border); border-radius: 30px; padding: 8px 16px; font-size: 0.85rem; outline: none; transition: border 0.2s;" />
+            <button id="sendChatbotMsgBtn" style="background: var(--primary); color: white; border: none; border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.2s;">
+                <i class="ph-fill ph-paper-plane-tilt" style="font-size: 1.1rem; color: white;"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- AI Chatbot Trigger Circle -->
+    <div id="aiChatbotBubble" style="position: fixed; bottom: 25px; right: 25px; width: 56px; height: 56px; background: linear-gradient(135deg, var(--primary), var(--primary-hover)); color: white; border-radius: 50%; box-shadow: var(--shadow-lg); display: flex; align-items: center; justify-content: center; font-size: 1.8rem; cursor: pointer; z-index: 9998; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.2); border: 2px solid white;">
+        <i class="ph-fill ph-robot" id="chatBubbleIcon" style="color: white;"></i>
     </div>
 </body>
 </html>

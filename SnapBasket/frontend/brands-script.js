@@ -4,7 +4,9 @@ let cart = JSON.parse(localStorage.getItem('cart')) || [];
 let wishlist = JSON.parse(localStorage.getItem('wishlist')) || [];
 let activeBrand = null;
 
-const API_BASE = import.meta.env.VITE_API_URL || 'https://adyanta-commerce.onrender.com';
+const API_BASE = (typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) 
+    ? import.meta.env.VITE_API_URL 
+    : (typeof window !== 'undefined' && window.location && window.location.port === '5173' ? 'http://localhost:3000' : (typeof window !== 'undefined' && window.location ? window.location.origin : 'https://adyanta-commerce.onrender.com'));
 document.addEventListener("DOMContentLoaded", async () => {
     try {
         console.log("Loading Brands and Products...");

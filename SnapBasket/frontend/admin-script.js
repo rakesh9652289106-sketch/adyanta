@@ -2,12 +2,23 @@
  * ADYANTA Admin Panel Script
  * Consolidated & Fixed Integration
  */
-const API_BASE = import.meta.env.VITE_API_URL || 'https://adyanta-commerce.onrender.com';
+const API_BASE = (typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) 
+    ? import.meta.env.VITE_API_URL 
+    : (typeof window !== 'undefined' && window.location && window.location.port === '5173' ? 'http://localhost:3000' : (typeof window !== 'undefined' && window.location ? window.location.origin : 'https://adyanta-commerce.onrender.com'));
 
 let currentAdmin = null;
 let revenueChart = null;
 let tempVariants = [];
 let currentEditVariants = [];
+let currentPortalRole = 'super_admin';
+
+// Cookie Helper
+function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return null;
+}
 
 // Helper for cross-origin authenticated requests
 async function adminFetch(url, options = {}) {
@@ -15,7 +26,65 @@ async function adminFetch(url, options = {}) {
     return fetch(url, options);
 }
 
+// Switch between Super Admin and Vendor access portals
+function switchPortalRole(role) {
+    currentPortalRole = role;
+    localStorage.setItem('admin_portal_role', role);
+    renderSidebarForRole(role);
+    
+    const defaultSection = role === 'super_admin' ? 'view-dashboard' : 'view-vendor-dashboard';
+    showSection(defaultSection);
+}
+
+// Dynamically render sidebar items based on current portal role
+function renderSidebarForRole(role) {
+    const menu = document.querySelector('.sidebar-menu');
+    if (!menu) return;
+    
+    if (role === 'super_admin') {
+        menu.innerHTML = `
+            <li onclick="showSection('view-dashboard')"><i class="ph ph-chart-pie"></i> Dashboard Overview</li>
+            <li onclick="showSection('view-feature-switchboard')"><i class="ph ph-toggle-left"></i> Feature Switchboard</li>
+            <li onclick="showSection('view-vendor-approvals')"><i class="ph ph-seal-check"></i> Vendor KYC Approvals</li>
+            <li onclick="showSection('view-orders')"><i class="ph ph-receipt"></i> Global Orders</li>
+            <li onclick="showSection('view-products')"><i class="ph ph-package"></i> Global Products</li>
+            <li onclick="showSection('view-notifications')"><i class="ph ph-bell"></i> Push Notifications</li>
+            <li onclick="showSection('view-promo')"><i class="ph ph-presentation"></i> Promotional Ads</li>
+            <li onclick="showSection('view-categories')"><i class="ph ph-list-bullets"></i> Product Categories</li>
+            <li onclick="showSection('view-brands')"><i class="ph ph-copyright"></i> Brand Partners</li>
+            <li onclick="showSection('view-inquiries')"><i class="ph ph-chat-circle-text"></i> Customer Inquiries</li>
+            <li onclick="showSection('view-reviews')"><i class="ph ph-star-half"></i> Product Reviews</li>
+            <li onclick="showSection('view-payment')"><i class="ph ph-currency-circle-dollar"></i> Payment Tracking</li>
+            <li onclick="showSection('view-cancelled-orders')"><i class="ph ph-prohibit"></i> Cancelled Payments</li>
+            <li onclick="showSection('view-users')"><i class="ph ph-users"></i> Manage Users</li>
+            <li onclick="showSection('view-coupons')"><i class="ph ph-ticket"></i> Global & Shop Coupons</li>
+            <li onclick="showSection('view-loyalty')"><i class="ph ph-coins"></i> Loyalty Program</li>
+            <li onclick="showSection('view-settings')"><i class="ph ph-gear"></i> App Settings</li>
+            <li onclick="showSection('view-orders', true)"><i class="ph ph-truck"></i> Manage Delivery</li>
+            <li><a href="/" style="text-decoration: none; color: inherit; display: flex; align-items: center; gap: 0.5rem;"><i class="ph ph-storefront"></i> View Store</a></li>
+            <li onclick="adminLogout()" style="margin-top: 2rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1.5rem; color: #FDA4AF;"><i class="ph ph-sign-out"></i> Admin Logout</li>
+        `;
+    } else if (role === 'vendor') {
+        menu.innerHTML = `
+            <li onclick="showSection('view-vendor-dashboard')"><i class="ph ph-chart-pie"></i> Store Dashboard</li>
+            <li onclick="showSection('view-vendor-shop')"><i class="ph ph-storefront"></i> Customize storefront</li>
+            <li onclick="showSection('view-products')"><i class="ph ph-package"></i> Manage Products</li>
+            <li onclick="showSection('view-orders')"><i class="ph ph-receipt"></i> Recent Orders</li>
+            <li onclick="showSection('view-vendor-wallet')"><i class="ph ph-wallet"></i> Wallet & Payouts</li>
+            <li onclick="showSection('view-promo')"><i class="ph ph-presentation"></i> Shop Banners & Offers</li>
+            <li onclick="showSection('view-coupons')"><i class="ph ph-ticket"></i> Shop Coupons</li>
+            <li onclick="showSection('view-reviews')"><i class="ph ph-star-half"></i> Store Reviews</li>
+            <li onclick="showSection('view-inquiries')"><i class="ph ph-chat-circle-text"></i> Customer Support</li>
+            <li onclick="showSection('view-orders', true)"><i class="ph ph-truck"></i> Manage Delivery</li>
+            <li><a href="/" style="text-decoration: none; color: inherit; display: flex; align-items: center; gap: 0.5rem;"><i class="ph ph-storefront"></i> View Store</a></li>
+            <li onclick="adminLogout()" style="margin-top: 2rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1.5rem; color: #FDA4AF;"><i class="ph ph-sign-out"></i> Vendor Logout</li>
+        `;
+    }
+}
+
 // --- GLOBAL EXPORTS FOR HTML ---
+window.getCookie = getCookie;
+window.switchPortalRole = switchPortalRole;
 window.toggleAdminSidebar = toggleAdminSidebar;
 window.showSection = showSection;
 window.adminLogout = adminLogout;
@@ -61,12 +130,41 @@ document.addEventListener('DOMContentLoaded', () => {
 // --- AUTHENTICATION ---
 
 async function checkInitialAuth() {
+    const userRole = getCookie('role');
+
     const overlay = document.getElementById('adminLoginOverlay');
     const main = document.getElementById('adminLayoutMain');
 
     // Admin Panel Lock Removed: Always show dashboard
     if (overlay) overlay.style.display = 'none';
     if (main) main.style.display = 'flex';
+    
+    // Multi-Vendor Role Setup
+    const roleSelector = document.getElementById('portalRoleSelector');
+    
+    if (userRole === 'vendor') {
+        currentPortalRole = 'vendor';
+        if (roleSelector) {
+            roleSelector.value = 'vendor';
+            roleSelector.disabled = true;
+            const container = document.getElementById('roleSelectorContainer');
+            if (container) container.style.display = 'none';
+        }
+    } else if (userRole === 'super_admin') {
+        const lastSavedRole = localStorage.getItem('admin_portal_role') || 'super_admin';
+        currentPortalRole = lastSavedRole;
+        if (roleSelector) {
+            roleSelector.value = lastSavedRole;
+        }
+    } else {
+        const lastSavedRole = localStorage.getItem('admin_portal_role') || 'super_admin';
+        currentPortalRole = lastSavedRole;
+        if (roleSelector) {
+            roleSelector.value = lastSavedRole;
+        }
+    }
+    
+    renderSidebarForRole(currentPortalRole);
     initDashboard();
 }
 
@@ -207,7 +305,7 @@ function showSection(sectionId, forFulfillment = false) {
         if (sectionId === 'view-orders') {
             window.isFulfillmentMode = forFulfillment;
             document.getElementById('fulfillmentHeading').style.display = forFulfillment ? 'block' : 'none';
-            document.getElementById('deliveryPincodeSettings').style.display = forFulfillment ? 'block' : 'none';
+            document.getElementById('deliveryPincodeSettings').style.display = (forFulfillment && currentPortalRole === 'super_admin') ? 'block' : 'none';
             
             // Update table headers dynamically
             const theadRow = document.querySelector('#view-orders .admin-table thead tr');
@@ -235,20 +333,33 @@ function showSection(sectionId, forFulfillment = false) {
             }
             
             fetchOrders();
-            if (forFulfillment) fetchDeliverySettings();
+            if (forFulfillment && currentPortalRole === 'super_admin') fetchDeliverySettings();
         }
         if (sectionId === 'view-products') { fetchAdminProducts(); fetchCategoriesForSelects(); populateVariantProductDropdown(); }
         if (sectionId === 'view-categories') fetchAdminCategories();
         if (sectionId === 'view-brands') fetchAdminBrands();
-        if (sectionId === 'view-coupons') fetchAdminCoupons();
+        if (sectionId === 'view-coupons') { fetchAdminCoupons(); populateCouponShopsDropdown(); }
         if (sectionId === 'view-notifications') { fetchNotificationsHistory(); loadMarquee(); }
         if (sectionId === 'view-inquiries') fetchMessages();
         if (sectionId === 'view-reviews') fetchAdminReviews();
         if (sectionId === 'view-users') fetchUsers();
         if (sectionId === 'view-payment') fetchPaymentHistory();
-        if (sectionId === 'view-promo') { fetchBanner(); fetchOffers(); fetchCategoriesForSelects(); fetchPromoBannersAdmin(); }
+        if (sectionId === 'view-promo') {
+            if (currentPortalRole !== 'vendor') {
+                fetchBanner();
+                fetchOffers();
+            }
+            fetchCategoriesForSelects();
+            fetchPromoBannersAdmin();
+        }
         if (sectionId === 'view-settings') fetchShopSettings();
+        if (sectionId === 'view-loyalty') fetchLoyaltySettings();
         if (sectionId === 'view-cancelled-orders') fetchCancelledPayments();
+        if (sectionId === 'view-feature-switchboard') fetchFeatureFlags();
+        if (sectionId === 'view-vendor-approvals') fetchVendorApprovals();
+        if (sectionId === 'view-vendor-dashboard') fetchVendorDashboardStats();
+        if (sectionId === 'view-vendor-shop') fetchVendorShopDetails();
+        if (sectionId === 'view-vendor-wallet') fetchVendorWalletDetails();
     }
     
     // UI updates
@@ -409,7 +520,11 @@ async function fetchAdminProducts() {
     const search = document.getElementById('adminProductSearch').value || '';
     const cat = document.getElementById('adminProductCategory').value || 'All';
     try {
-        const res = await fetch(`${API_BASE}/api/products?search=${search}&category=${cat}`);
+        let url = `${API_BASE}/api/products?search=${search}&category=${cat}`;
+        if (currentPortalRole === 'vendor') {
+            url = `${API_BASE}/api/vendor/products?search=${search}&category=${cat}`;
+        }
+        const res = await adminFetch(url);
         const products = await res.json();
         const tbody = document.getElementById('productsTableBody');
         
@@ -812,6 +927,9 @@ window.closeQuickVariantEditor = () => {
 async function fetchOrders(search = "", date = "") {
     try {
         let url = `/api/admin/orders?search=${search}`;
+        if (currentPortalRole === 'vendor') {
+            url = `/api/vendor/orders?search=${search}`;
+        }
         if (date) url += `&date=${date}`;
         const res = await adminFetch(url);
         const orders = await res.json();
@@ -1046,6 +1164,9 @@ async function fetchShopSettings() {
         if (document.getElementById('rzpKeyId')) document.getElementById('rzpKeyId').value = s.razorpay_key_id || '';
         if (document.getElementById('rzpSecret')) document.getElementById('rzpSecret').value = s.razorpay_secret || '';
         if (document.getElementById('sBannerSpeed')) document.getElementById('sBannerSpeed').value = s.banner_speed || 3000;
+        if (document.getElementById('vFeeAmount')) document.getElementById('vFeeAmount').value = s.vendor_fee_amount || 0;
+        if (document.getElementById('vFeeDiscount')) document.getElementById('vFeeDiscount').value = s.vendor_fee_discount || 0;
+        if (document.getElementById('vFeeCoupon')) document.getElementById('vFeeCoupon').value = s.vendor_fee_coupon || '';
         
         // App Config
         if (document.getElementById('defaultLanguage')) document.getElementById('defaultLanguage').value = s.default_language || 'en';
@@ -1072,7 +1193,10 @@ async function handleSaveSettings(e) {
         shop_image: document.getElementById('sImage').value,
         razorpay_key_id: document.getElementById('rzpKeyId')?.value || '',
         razorpay_secret: document.getElementById('rzpSecret')?.value || '',
-        banner_speed: Number(document.getElementById('sBannerSpeed')?.value || 3000)
+        banner_speed: Number(document.getElementById('sBannerSpeed')?.value || 3000),
+        vendor_fee_amount: Number(document.getElementById('vFeeAmount')?.value || 0),
+        vendor_fee_discount: Number(document.getElementById('vFeeDiscount')?.value || 0),
+        vendor_fee_coupon: document.getElementById('vFeeCoupon')?.value || ''
     };
     const res = await fetch(API_BASE + '/api/admin/settings', {
         method: 'PATCH',
@@ -1121,6 +1245,104 @@ async function handleSaveDeliverySettings(e) {
     });
     refreshWithToast("Delivery settings updated", "success");
 }
+
+// --- LOYALTY PROGRAM ---
+
+async function checkLoyaltySchema() {
+    try {
+        const res = await adminFetch(API_BASE + '/api/admin/loyalty/check-schema');
+        const data = await res.json();
+        const banner = document.getElementById('loyaltyMigrationBanner');
+        if (data && data.missing && data.missing.length > 0) {
+            if (banner) banner.style.display = 'block';
+        } else {
+            if (banner) banner.style.display = 'none';
+        }
+    } catch (err) {
+        console.error("Loyalty schema check failed", err);
+    }
+}
+
+async function fetchLoyaltySettings() {
+    try {
+        // Fetch coin settings
+        const settingsRes = await fetch(API_BASE + '/api/settings');
+        const s = await settingsRes.json();
+        if (s) {
+            if (document.getElementById('loyaltySystemActiveToggle')) {
+                document.getElementById('loyaltySystemActiveToggle').checked = s.coins_system_active === 1;
+            }
+            if (document.getElementById('loyaltyRewardRate')) {
+                document.getElementById('loyaltyRewardRate').value = s.coin_reward_rate || 1000;
+            }
+            if (document.getElementById('loyaltyRewardAmount')) {
+                document.getElementById('loyaltyRewardAmount').value = s.coin_reward_amount || 30;
+            }
+            if (document.getElementById('loyaltyValuePerRupee')) {
+                document.getElementById('loyaltyValuePerRupee').value = s.coin_value_per_rupee || 10;
+            }
+        }
+
+        // Fetch stats
+        const statsRes = await adminFetch(API_BASE + '/api/admin/loyalty/stats');
+        if (statsRes.ok) {
+            const stats = await statsRes.json();
+            if (document.getElementById('loyaltyStatDistributed')) {
+                document.getElementById('loyaltyStatDistributed').innerText = stats.totalCoins || 0;
+            }
+            if (document.getElementById('loyaltyStatSavings')) {
+                document.getElementById('loyaltyStatSavings').innerText = '₹' + (stats.totalSavings || 0);
+            }
+            if (document.getElementById('loyaltyStatMembers')) {
+                document.getElementById('loyaltyStatMembers').innerText = stats.activeMembers || 0;
+            }
+        }
+
+        // Trigger schema verification
+        await checkLoyaltySchema();
+    } catch (err) {
+        console.error("Failed to fetch loyalty settings/stats", err);
+    }
+}
+
+async function handleSaveLoyaltySettings(e) {
+    if (e) e.preventDefault();
+    try {
+        const payload = {
+            coins_system_active: document.getElementById('loyaltySystemActiveToggle').checked ? 1 : 0,
+            coin_reward_rate: Number(document.getElementById('loyaltyRewardRate').value || 1000),
+            coin_reward_amount: Number(document.getElementById('loyaltyRewardAmount').value || 30),
+            coin_value_per_rupee: Number(document.getElementById('loyaltyValuePerRupee').value || 10)
+        };
+
+        const res = await fetch(API_BASE + '/api/admin/settings', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+            refreshWithToast("Loyalty rules successfully updated!", "success");
+        } else {
+            const err = await res.json();
+            Toast.show(err.error || "Failed to update loyalty settings", "error");
+        }
+    } catch (err) {
+        Toast.show("Error saving loyalty settings", "error");
+    }
+}
+
+window.copyLoyaltySqlScript = () => {
+    const textEl = document.getElementById('loyaltySqlScriptText');
+    if (textEl) {
+        navigator.clipboard.writeText(textEl.value).then(() => {
+            Toast.show("SQL Script copied to clipboard!", "success");
+        });
+    }
+};
+
+window.fetchLoyaltySettings = fetchLoyaltySettings;
+window.handleSaveLoyaltySettings = handleSaveLoyaltySettings;
 
 // --- NOTIFICATIONS ---
 
@@ -1423,14 +1645,15 @@ async function handleCouponSubmit(e) {
         discount_type: document.getElementById('couponType').value,
         min_amount: Number(document.getElementById('couponMinAmt').value),
         expiry_date: document.getElementById('couponExpiry').value,
-        is_one_time: document.getElementById('couponIsOneTime').checked ? 1 : 0
+        is_one_time: document.getElementById('couponIsOneTime').checked ? 1 : 0,
+        shop_id: document.getElementById('couponShopId')?.value || null
     };
     await fetch(API_BASE + '/api/admin/coupons', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
     });
-    refreshWithToast("Coupon created", "success");
+    refreshWithToast("Coupon distributed successfully", "success");
 }
 
 async function deleteCoupon(id) {
@@ -1453,10 +1676,12 @@ async function fetchUsers(search = "", date = "") {
             <td><div style="font-weight:600;">${u.full_name || 'User'}</div><small>${u.username}</small></td>
             <td>${u.email || 'N/A'}</td>
             <td>${u.phone || 'N/A'}</td>
+            <td><span style="background:#E0E7FF; color:#4F46E5; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight:700; text-transform:uppercase;">${u.role || 'customer'}</span></td>
             <td><span class="badge ${u.status || 'active'}">${u.status || 'active'}</span></td>
             <td><small>${new Date(u.created_at).toLocaleDateString()}</small></td>
             <td>
                 <button onclick="toggleUserStatus(${u.id}, '${u.status === 'blocked' ? 'active' : 'blocked'}')" class="action-btn" style="background:${u.status === 'blocked' ? '#10B981' : '#F59E0B'};" title="${u.status === 'blocked' ? 'Unblock' : 'Block'} User"><i class="ph ph-prohibit"></i></button>
+                <button onclick="changeUserRole('${u.id}', '${u.role === 'vendor' ? 'customer' : 'vendor'}')" class="action-btn" style="background:${u.role === 'vendor' ? '#F59E0B' : '#10B981'}; margin-left:5px;" title="${u.role === 'vendor' ? 'Demote to Customer' : 'Upgrade to Vendor'}"><i class="${u.role === 'vendor' ? 'ph ph-user-minus' : 'ph ph-user-gear'}"></i></button>
                 <button onclick="deleteUser(${u.id})" class="action-btn" style="background:#EF4444; margin-left:5px;"><i class="ph ph-trash"></i></button>
             </td>
         </tr>
@@ -1472,6 +1697,25 @@ async function toggleUserStatus(id, current) {
     });
     refreshWithToast(`User ${status === 'active' ? 'activated' : 'blocked'}`, "success");
 }
+
+async function changeUserRole(id, role) {
+    try {
+        const res = await fetch(`${API_BASE}/api/admin/users/${id}/role`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            refreshWithToast(data.message || `User role updated successfully!`, "success");
+        } else {
+            Toast.show(data.error || "Failed to update role", "error");
+        }
+    } catch (err) {
+        Toast.show("Network error updating role", "error");
+    }
+}
+window.changeUserRole = changeUserRole;
 
 async function deleteUser(id) {
     if (confirm("Delete user?")) {
@@ -1537,6 +1781,9 @@ function setupEventListeners() {
     document.getElementById('adminSecurityForm')?.addEventListener('submit', handleSecurityUpdate);
     document.getElementById('appFeaturesForm')?.addEventListener('submit', handleSaveAppConfig);
     document.getElementById('adminPromoBannerForm')?.addEventListener('submit', handlePromoBannerSubmit);
+    document.getElementById('vendorStorefrontForm')?.addEventListener('submit', handleVendorStorefrontSubmit);
+    document.getElementById('vendorPayoutRequestForm')?.addEventListener('submit', handleVendorPayoutSubmit);
+    document.getElementById('loyaltyProgramSettingsForm')?.addEventListener('submit', handleSaveLoyaltySettings);
 }
 
 async function handleSecurityUpdate(e) {
@@ -1766,7 +2013,22 @@ window.viewOrderDetails = async (id) => {
 
 async function fetchPromoBannersAdmin() {
     try {
-        const res = await fetch(API_BASE + '/api/admin/promo-banners');
+        const heroCard = document.getElementById('platformHeroBannerCard');
+        const morningCard = document.getElementById('platformMorningFreshBannerCard');
+        const offersCard = document.getElementById('platformOffersCard');
+        
+        if (currentPortalRole === 'vendor') {
+            if (heroCard) heroCard.style.display = 'none';
+            if (morningCard) morningCard.style.display = 'none';
+            if (offersCard) offersCard.style.display = 'none';
+        } else {
+            if (heroCard) heroCard.style.display = 'block';
+            if (morningCard) morningCard.style.display = 'block';
+            if (offersCard) offersCard.style.display = 'grid';
+        }
+
+        const url = currentPortalRole === 'vendor' ? `${API_BASE}/api/vendor/promo-banners` : `${API_BASE}/api/admin/promo-banners`;
+        const res = await adminFetch(url);
         const banners = await res.json();
         const tbody = document.getElementById('promoBannersTableBody');
         if (!tbody) return;
@@ -1804,7 +2066,8 @@ async function handlePromoBannerSubmit(e) {
     };
 
     try {
-        const res = await fetch(API_BASE + '/api/admin/promo-banners', {
+        const url = currentPortalRole === 'vendor' ? `${API_BASE}/api/vendor/promo-banners` : `${API_BASE}/api/admin/promo-banners`;
+        const res = await adminFetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
@@ -1827,10 +2090,14 @@ async function handlePromoBannerSubmit(e) {
 async function deletePromoBanner(id) {
     if (confirm("Permanently delete this promo banner?")) {
         try {
-            const res = await adminFetch(`${API_BASE}/api/admin/promo-banners/${id}`, { method: 'DELETE' });
+            const url = currentPortalRole === 'vendor' ? `${API_BASE}/api/vendor/promo-banners/${id}` : `${API_BASE}/api/admin/promo-banners/${id}`;
+            const res = await adminFetch(url, { method: 'DELETE' });
             if (res.ok) {
                 Toast.show("Banner deleted", "warning");
                 fetchPromoBannersAdmin();
+            } else {
+                const resData = await res.json();
+                Toast.show(resData.error || "Error deleting banner", "error");
             }
         } catch (e) {
             Toast.show("Error deleting banner", "error");
@@ -1840,5 +2107,487 @@ async function deletePromoBanner(id) {
 
 window.deletePromoBanner = deletePromoBanner;
 window.fetchPromoBannersAdmin = fetchPromoBannersAdmin;
-window.fetchPromoBannersAdmin = fetchPromoBannersAdmin;
-oBannersAdmin = fetchPromoBannersAdmin;
+
+// ==========================================================================
+// NEW ECOSYSTEM PLATFORM CONTROLLERS (SUPER ADMIN & VENDOR DASHBOARDS)
+// ==========================================================================
+
+// --- FEATURE FLAGS SWITCHBOARD (SUPER ADMIN) ---
+async function fetchFeatureFlags() {
+    try {
+        const res = await fetch('/api/admin/features');
+        if (!res.ok) throw new Error("Could not load features.");
+        const flags = await res.json();
+        
+        const grid = document.getElementById('featureFlagsGrid');
+        if (!grid) return;
+        
+        if (flags.length === 0) {
+            grid.innerHTML = '<div style="text-align:center; padding:3rem; color:#64748B; grid-column:1/-1;">No feature flags configured in the database.</div>';
+            return;
+        }
+        
+        grid.innerHTML = flags.map(flag => {
+            return `
+                <div class="form-card" style="display:flex; justify-content:space-between; align-items:center; padding:1.5rem; border-radius:12px; border:1px solid #E2E8F0; background:white; max-width: none; margin-bottom: 0; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+                    <div>
+                        <h4 style="margin:0 0 0.25rem 0; font-size:1.05rem; color:#1E293B;">${flag.label}</h4>
+                        <span style="font-size:0.75rem; color:#64748B; font-family:monospace;">Flag ID: ${flag.name}</span>
+                    </div>
+                    <label class="toggle-switch" style="position: relative; display: inline-block; width: 50px; height: 24px;">
+                        <input type="checkbox" ${flag.is_active ? 'checked' : ''} onchange="toggleFeatureFlag(${flag.id}, this.checked)" style="opacity:0; width:0; height:0;">
+                        <span class="slider" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 24px;"></span>
+                    </label>
+                </div>
+            `;
+        }).join('');
+    } catch (e) {
+        console.error(e);
+        if (window.Toast) Toast.show("Could not load feature switchboard", "error");
+    }
+}
+
+async function toggleFeatureFlag(id, is_active) {
+    try {
+        const res = await fetch(`/api/admin/features/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ is_active })
+        });
+        if (!res.ok) throw new Error("Failed to toggle feature flag.");
+        const data = await res.json();
+        if (window.Toast) Toast.show(data.message || "Feature flag updated!", "success");
+    } catch (e) {
+        console.error(e);
+        if (window.Toast) Toast.show("Error toggling feature", "error");
+        fetchFeatureFlags(); // Reset visual state
+    }
+}
+
+// --- VENDOR KYC APPROVALS (SUPER ADMIN) ---
+async function fetchVendorApprovals() {
+    try {
+        const res = await adminFetch('/api/admin/vendors');
+        if (!res.ok) throw new Error("Could not load vendors.");
+        const vendors = await res.json();
+        
+        const tbody = document.getElementById('vendorApprovalsTableBody');
+        if (!tbody) return;
+        
+        if (vendors.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:3rem; color:#64748B;">No shop onboarding applications found.</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = vendors.map(v => {
+            const hasKyc = v.kyc_document && v.kyc_document.startsWith('http');
+            const docHtml = hasKyc 
+                ? `<a href="${v.kyc_document}" target="_blank" style="color:var(--primary); font-weight:600; text-decoration:none;"><i class="ph ph-file-pdf"></i> View KYC Document</a>`
+                : `<span style="color:#64748B; font-style:italic;">${v.kyc_document || 'No document uploaded'}</span>`;
+                
+            let statusColor = '#D97706'; // Amber for pending
+            let statusBg = '#FEF3C7';
+            if (v.status === 'active') { statusColor = '#10B981'; statusBg = '#F0FDF4'; }
+            if (v.status === 'suspended') { statusColor = '#EF4444'; statusBg = '#FEF2F2'; }
+
+            return `
+                <tr>
+                    <td style="font-family:monospace; color:#64748B;">#SHOP_${v.id}</td>
+                    <td>
+                        <div style="display:flex; align-items:center; gap:0.75rem;">
+                            <img src="${v.logo || 'https://placehold.co/40'}" style="width:36px; height:36px; border-radius:8px; object-fit:cover;" onerror="this.src='https://placehold.co/40'">
+                            <div>
+                                <div style="font-weight:600; color:#1E293B;">${v.name}</div>
+                                <div style="font-size:0.75rem; color:#64748B;">${v.description || ''}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <div style="font-weight:600; color:#1E293B;">${v.users?.full_name || 'N/A'}</div>
+                        <div style="font-size:0.75rem; color:#64748B;">${v.contact_phone || v.users?.phone || ''}</div>
+                    </td>
+                    <td>${docHtml}</td>
+                    <td>
+                        <div style="font-size:0.85rem; font-weight:600;">${v.category}</div>
+                        <div style="font-size:0.75rem; color:#64748B;">${v.timings || ''}</div>
+                    </td>
+                    <td>
+                        <span style="display:inline-block; padding:4px 10px; border-radius:20px; font-size:0.75rem; font-weight:700; background:${statusBg}; color:${statusColor}; text-transform:uppercase;">
+                            ${v.status}
+                        </span>
+                    </td>
+                    <td>
+                        <div style="display:flex; gap:6px; justify-content:flex-end; padding-right:1rem;">
+                            ${v.status !== 'active' ? `
+                                <button onclick="updateVendorStatus(${v.id}, 'active')" class="action-btn" style="background:#10B981; font-size:0.75rem; padding:4px 10px; width:auto; height:auto; border-radius:6px; font-weight:700; color:white; border:none; cursor:pointer;" title="Approve Store">
+                                    Approve
+                                </button>
+                            ` : ''}
+                            ${v.status !== 'suspended' ? `
+                                <button onclick="updateVendorStatus(${v.id}, 'suspended')" class="action-btn" style="background:#EF4444; font-size:0.75rem; padding:4px 10px; width:auto; height:auto; border-radius:6px; font-weight:700; color:white; border:none; cursor:pointer;" title="Suspend Store">
+                                    Suspend
+                                </button>
+                            ` : ''}
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    } catch (e) {
+        console.error(e);
+        if (window.Toast) Toast.show("Could not load vendor onboarding list", "error");
+    }
+}
+
+async function updateVendorStatus(id, status) {
+    if (!confirm(`Are you sure you want to change shop status to: ${status}?`)) return;
+    try {
+        const res = await adminFetch(`/api/admin/vendors/${id}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status })
+        });
+        if (!res.ok) throw new Error("Failed to update status.");
+        const data = await res.json();
+        if (window.Toast) Toast.show(data.message || "Vendor shop status updated!", "success");
+        fetchVendorApprovals();
+    } catch (e) {
+        console.error(e);
+        if (window.Toast) Toast.show("Error updating status", "error");
+    }
+}
+
+// --- VENDOR PORTAL: DASHBOARD OVERVIEW ---
+async function fetchVendorDashboardStats() {
+    try {
+        const res = await adminFetch('/api/vendor/wallet');
+        if (!res.ok) throw new Error("Could not load vendor stats.");
+        const data = await res.json();
+        
+        // Fill metrics
+        if (document.getElementById('vendorStatWallet')) document.getElementById('vendorStatWallet').innerText = `₹${data.wallet?.balance || 0}`;
+        if (document.getElementById('vendorStatSales')) document.getElementById('vendorStatSales').innerText = `₹${data.wallet?.revenue || 0}`;
+        if (document.getElementById('vendorStatProducts')) document.getElementById('vendorStatProducts').innerText = data.metrics?.totalProducts || 0;
+        if (document.getElementById('vendorStatOrders')) document.getElementById('vendorStatOrders').innerText = data.metrics?.pendingOrders || 0;
+        
+        // Fetch shop details for quick preview card
+        const shopRes = await adminFetch('/api/vendor/shop');
+        const shop = await shopRes.json();
+        
+        if (shop && !shop.error) {
+            if (document.getElementById('vendorShopStatusBadge')) {
+                let badge = document.getElementById('vendorShopStatusBadge');
+                badge.innerText = `Shop Status: ${shop.status.toUpperCase()}`;
+                if (shop.status === 'active') {
+                    badge.style.background = '#F0FDF4'; badge.style.color = '#16A34A'; badge.style.borderColor = '#BBF7D0';
+                } else {
+                    badge.style.background = '#FEF3C7'; badge.style.color = '#D97706'; badge.style.borderColor = '#FDE68A';
+                }
+            }
+            if (document.getElementById('vendorShopQuickName')) document.getElementById('vendorShopQuickName').innerText = shop.name;
+            if (document.getElementById('vendorShopQuickDesc')) document.getElementById('vendorShopQuickDesc').innerText = shop.description || 'No description provided';
+            if (document.getElementById('vendorShopQuickCategory')) document.getElementById('vendorShopQuickCategory').innerHTML = `<i class="ph ph-tag"></i> ${shop.category}`;
+            if (document.getElementById('vendorShopQuickTimings')) document.getElementById('vendorShopQuickTimings').innerHTML = `<i class="ph ph-clock"></i> ${shop.timings || '9:00 AM - 10:00 PM'}`;
+            if (document.getElementById('vendorShopQuickPhone')) document.getElementById('vendorShopQuickPhone').innerHTML = `<i class="ph ph-phone"></i> ${shop.contact_phone || ''}`;
+            if (document.getElementById('vendorShopQuickLogo')) {
+                const img = document.getElementById('vendorShopQuickLogo').querySelector('img');
+                if (img) img.src = shop.logo || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=150';
+            }
+        }
+    } catch (e) {
+        console.error("Failed to load vendor stats", e);
+    }
+}
+
+// --- VENDOR PORTAL: STORE DETAILS CUSTOMIZER ---
+async function fetchVendorShopDetails() {
+    try {
+        const res = await adminFetch('/api/vendor/shop');
+        const shop = await res.json();
+        
+        const onboardingMsg = document.getElementById('vendorOnboardingMessage');
+        const kycContainer = document.getElementById('kycDocContainer');
+        const submitBtn = document.getElementById('vStoreSubmitBtn');
+        
+        if (res.status === 404 || shop.onboardPending) {
+            // Not onboarded yet
+            if (onboardingMsg) onboardingMsg.style.display = 'none';
+            if (kycContainer) kycContainer.style.display = 'block';
+            if (submitBtn) submitBtn.innerText = "Apply for Shop Onboarding";
+            
+            // Clear inputs
+            document.getElementById('vStoreName').value = '';
+            document.getElementById('vStoreDesc').value = '';
+            document.getElementById('vStoreLogo').value = '';
+            document.getElementById('vStoreBanner').value = '';
+            document.getElementById('vStoreTimings').value = '';
+            document.getElementById('vStorePhone').value = '';
+            document.getElementById('vStoreKyc').value = '';
+            
+            // Check settings to show setup fee card
+            try {
+                const settingsRes = await fetch(API_BASE + '/api/settings');
+                const s = await settingsRes.json();
+                window.vendorOnboardingSettings = s; // Save globally
+                
+                const payCard = document.getElementById('vendorPaymentSummaryCard');
+                if (payCard && s.vendor_fee_amount > 0) {
+                    payCard.style.display = 'block';
+                    document.getElementById('vPayBaseFee').innerText = '₹' + s.vendor_fee_amount;
+                    document.getElementById('vPayTotalAmount').innerText = '₹' + s.vendor_fee_amount;
+                    document.getElementById('vPayDiscountRow').style.display = 'none';
+                    const feedback = document.getElementById('vCouponFeedbackMessage');
+                    if (feedback) feedback.style.display = 'none';
+                    const input = document.getElementById('vOnboardingCouponInput');
+                    if (input) input.value = '';
+                    window.appliedOnboardingCoupon = null;
+                } else if (payCard) {
+                    payCard.style.display = 'none';
+                }
+            } catch(err) {
+                console.error("Failed to load setup settings", err);
+            }
+        } else {
+            // Onboarded
+            if (onboardingMsg) onboardingMsg.style.display = shop.status === 'pending' ? 'block' : 'none';
+            if (kycContainer) kycContainer.style.display = 'none'; // Lock KYC once created
+            if (submitBtn) submitBtn.innerText = "Save Storefront Changes";
+            
+            const payCard = document.getElementById('vendorPaymentSummaryCard');
+            if (payCard) payCard.style.display = 'none';
+            
+            document.getElementById('vStoreName').value = shop.name;
+            document.getElementById('vStoreCategory').value = shop.category || 'General Store';
+            document.getElementById('vStoreDesc').value = shop.description || '';
+            document.getElementById('vStoreLogo').value = shop.logo || '';
+            document.getElementById('vStoreBanner').value = shop.banner || '';
+            document.getElementById('vStoreTimings').value = shop.timings || '';
+            document.getElementById('vStorePhone').value = shop.contact_phone || '';
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+function applyOnboardingCoupon() {
+    const input = document.getElementById('vOnboardingCouponInput');
+    const feedback = document.getElementById('vCouponFeedbackMessage');
+    const discountRow = document.getElementById('vPayDiscountRow');
+    const discountEl = document.getElementById('vPayDiscount');
+    const totalEl = document.getElementById('vPayTotalAmount');
+    
+    if (!input || !window.vendorOnboardingSettings) return;
+    
+    const code = input.value.trim().toUpperCase();
+    const settings = window.vendorOnboardingSettings;
+    
+    if (feedback) feedback.style.display = 'block';
+    
+    if (!code) {
+        if (feedback) {
+            feedback.innerText = "Please enter a coupon code.";
+            feedback.style.color = '#EF4444';
+        }
+        return;
+    }
+    
+    if (settings.vendor_fee_coupon && code === settings.vendor_fee_coupon.trim().toUpperCase()) {
+        const disc = settings.vendor_fee_discount || 0;
+        if (feedback) {
+            feedback.innerText = `Coupon Applied! ₹${disc} Discount Unlocked.`;
+            feedback.style.color = '#16A34A';
+        }
+        
+        if (discountRow) discountRow.style.display = 'flex';
+        if (discountEl) discountEl.innerText = `-₹${disc}`;
+        
+        const finalAmt = Math.max(0, settings.vendor_fee_amount - disc);
+        if (totalEl) totalEl.innerText = `₹${finalAmt}`;
+        window.appliedOnboardingCoupon = code;
+    } else {
+        if (feedback) {
+            feedback.innerText = "Invalid Coupon Code. Please check spelling.";
+            feedback.style.color = '#EF4444';
+        }
+        
+        if (discountRow) discountRow.style.display = 'none';
+        if (totalEl) totalEl.innerText = `₹${settings.vendor_fee_amount}`;
+        window.appliedOnboardingCoupon = null;
+    }
+}
+window.applyOnboardingCoupon = applyOnboardingCoupon;
+
+async function handleVendorStorefrontSubmit(e) {
+    e.preventDefault();
+    const isNew = document.getElementById('vStoreSubmitBtn').innerText.includes('Apply');
+    
+    const payload = {
+        name: document.getElementById('vStoreName').value,
+        category: document.getElementById('vStoreCategory').value,
+        description: document.getElementById('vStoreDesc').value,
+        logo: document.getElementById('vStoreLogo').value,
+        banner: document.getElementById('vStoreBanner').value,
+        timings: document.getElementById('vStoreTimings').value,
+        contact_phone: document.getElementById('vStorePhone').value,
+    };
+    
+    if (isNew) {
+        payload.kyc_document = document.getElementById('vStoreKyc').value;
+    }
+    
+    if (isNew && window.vendorOnboardingSettings && window.vendorOnboardingSettings.vendor_fee_amount > 0) {
+        const s = window.vendorOnboardingSettings;
+        const disc = window.appliedOnboardingCoupon ? s.vendor_fee_discount : 0;
+        const finalAmt = Math.max(0, s.vendor_fee_amount - disc);
+        
+        if (finalAmt > 0) {
+            // Initiate Razorpay checkout flow
+            try {
+                const orderRes = await adminFetch(API_BASE + '/api/vendor/create-registration-order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ couponCode: window.appliedOnboardingCoupon || '' })
+                });
+                
+                if (!orderRes.ok) {
+                    const err = await orderRes.json();
+                    return Toast.show(err.error || "Failed to initialize payment order", "error");
+                }
+                
+                const orderData = await orderRes.json();
+                
+                // Open Razorpay Checkout modal
+                const options = {
+                    key: orderData.keyId,
+                    amount: orderData.amount * 100, // in paise
+                    currency: "INR",
+                    name: "ADYANTA Vendor Portal",
+                    description: "Vendor Registration & Onboarding Fee",
+                    order_id: orderData.orderId,
+                    handler: async function (response) {
+                        // Payment successful callback
+                        payload.razorpay_payment_id = response.razorpay_payment_id;
+                        payload.razorpay_order_id = response.razorpay_order_id;
+                        payload.razorpay_signature = response.razorpay_signature;
+                        payload.couponCode = window.appliedOnboardingCoupon || '';
+                        
+                        await submitVendorRegistration(payload, true);
+                    },
+                    prefill: {
+                        contact: payload.contact_phone
+                    },
+                    theme: { color: "#D97706" } // gold color
+                };
+                
+                const rzp1 = new Razorpay(options);
+                rzp1.open();
+                return;
+            } catch (err) {
+                console.error(err);
+                return Toast.show("Error launching Razorpay checkout popup", "error");
+            }
+        }
+    }
+    
+    // Default flow: direct submit
+    await submitVendorRegistration(payload, isNew);
+}
+
+async function submitVendorRegistration(payload, isNew = true) {
+    const url = isNew ? '/api/vendor/register' : '/api/vendor/shop';
+    const method = isNew ? 'POST' : 'PATCH';
+    
+    try {
+        const res = await adminFetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        
+        if (res.ok) {
+            if (window.Toast) Toast.show(data.message || "Store details submitted successfully!", "success");
+            fetchVendorShopDetails();
+        } else {
+            if (window.Toast) Toast.show(data.error || "Failed to submit store details", "error");
+        }
+    } catch(err) {
+        console.error(err);
+        if (window.Toast) Toast.show("Network error submitting storefront details", "error");
+    }
+}
+
+// --- VENDOR PORTAL: WALLET & BANK PAYOUTS ---
+async function fetchVendorWalletDetails() {
+    try {
+        const res = await adminFetch('/api/vendor/wallet');
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        
+        const bal = data.wallet?.balance || 0;
+        const gross = data.wallet?.revenue || 0;
+        const comm = Math.round(gross * 0.05);
+        
+        if (document.getElementById('vendorWalletBal')) document.getElementById('vendorWalletBal').innerText = `₹${bal}`;
+        if (document.getElementById('vendorWalletGross')) document.getElementById('vendorWalletGross').innerText = `₹${gross}`;
+        if (document.getElementById('vendorWalletComm')) document.getElementById('vendorWalletComm').innerText = `₹${comm}`;
+        
+        const amountField = document.getElementById('payoutAmt');
+        if (amountField) {
+            amountField.value = bal;
+            amountField.max = bal;
+        }
+    } catch (e) {}
+}
+
+async function handleVendorPayoutSubmit(e) {
+    e.preventDefault();
+    const amt = Number(document.getElementById('payoutAmt').value);
+    if (amt <= 0) return Toast.show("Invalid payout amount.", "error");
+    
+    // Simulate settlement approval trigger
+    if (window.Toast) Toast.show(`Payout of ₹${amt} requested! Bank settlement completed within 24 hours.`, "success");
+}
+
+// --- TARGET SHOPS FOR COUPONS ---
+async function populateCouponShopsDropdown() {
+    const selector = document.getElementById('couponShopId');
+    const container = document.getElementById('couponShopTargetGroup');
+    if (!selector) return;
+    
+    if (currentPortalRole === 'vendor') {
+        if (container) container.style.display = 'none';
+        try {
+            const res = await adminFetch('/api/vendor/shop');
+            const shop = await res.json();
+            if (shop && shop.id) {
+                selector.innerHTML = `<option value="${shop.id}">${shop.name}</option>`;
+            }
+        } catch(e) {}
+    } else {
+        if (container) container.style.display = 'block';
+        try {
+            const res = await adminFetch('/api/admin/vendors');
+            const shops = await res.json();
+            
+            selector.innerHTML = '<option value="">Global Marketplace Coupon (All Shops)</option>' + 
+                shops.filter(s => s.status === 'active').map(s => {
+                    return `<option value="${s.id}">${s.name}</option>`;
+                }).join('');
+        } catch(e) {
+            selector.innerHTML = '<option value="">Global Marketplace Coupon (All Shops)</option>';
+        }
+    }
+}
+
+// GLOBAL EXPORTS
+window.fetchFeatureFlags = fetchFeatureFlags;
+window.toggleFeatureFlag = toggleFeatureFlag;
+window.fetchVendorApprovals = fetchVendorApprovals;
+window.updateVendorStatus = updateVendorStatus;
+window.fetchVendorDashboardStats = fetchVendorDashboardStats;
+window.fetchVendorShopDetails = fetchVendorShopDetails;
+window.handleVendorStorefrontSubmit = handleVendorStorefrontSubmit;
+window.fetchVendorWalletDetails = fetchVendorWalletDetails;
+window.handleVendorPayoutSubmit = handleVendorPayoutSubmit;
+window.populateCouponShopsDropdown = populateCouponShopsDropdown;

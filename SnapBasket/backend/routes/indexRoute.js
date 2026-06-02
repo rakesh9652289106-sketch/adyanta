@@ -144,7 +144,7 @@ router.get('/user-info', async (req, res) => {
 
 router.post('/orders', async (req, res) => {
     const userId = req.cookies.user_id || null;
-    let { items, paymentMethod, address, couponId, deliveryType } = req.body;
+    let { items, paymentMethod, address, couponId, deliveryType, useCoins } = req.body;
 
     const parsePrice = (p) => typeof p === 'number' ? p : parseFloat(p.toString().replace(/[^0-9.]/g, '')) || 0;
     let subtotal = items?.reduce((sum, item) => sum + (parsePrice(item.price) * (item.quantity || 1)), 0) || 0;
@@ -158,13 +158,46 @@ router.post('/orders', async (req, res) => {
         }
     }
 
+    let coinsUsed = 0;
+    let coinsEarned = 0;
+    let coinDiscount = 0;
+
+    try {
+        const { data: settings } = await supabase.from('settings').select('*').limit(1).single();
+        if (settings && settings.coins_system_active === 1) {
+            if (useCoins && userId) {
+                const { data: user } = await supabase.from('users').select('coins').eq('id', userId).single();
+                if (user && user.coins > 0) {
+                    const coinValue = settings.coin_value_per_rupee || 10;
+                    coinsUsed = user.coins;
+                    coinDiscount = Math.floor(coinsUsed / coinValue);
+                    
+                    if (coinDiscount > finalTotal) {
+                        coinDiscount = finalTotal;
+                        coinsUsed = coinDiscount * coinValue;
+                    }
+                    finalTotal = Math.max(0, finalTotal - coinDiscount);
+                }
+            }
+
+            // Calculate coins earned based on the remaining final total paid
+            const rewardRate = settings.coin_reward_rate || 1000;
+            const rewardAmount = settings.coin_reward_amount || 30;
+            coinsEarned = Math.floor(finalTotal / rewardRate) * rewardAmount;
+        }
+    } catch (err) {
+        console.error("Loyalty calculation failed:", err.message);
+    }
+
     const insertData = {
         total: Math.round(finalTotal),
         items, payment_method: paymentMethod, address,
         discount_amount: Math.round(subtotal - finalTotal),
         coupon_id: couponId,
         delivery_type: deliveryType || 'Home Delivery',
-        user_id: userId
+        user_id: userId,
+        coins_used: coinsUsed,
+        coins_earned: coinsEarned
     };
 
     const { data, error } = await supabase.from('orders').insert([insertData]).select().single();
@@ -174,7 +207,25 @@ router.post('/orders', async (req, res) => {
         await supabase.from('coupon_usage').insert([{ user_id: userId, coupon_id: couponId }]);
     }
 
-    res.status(201).json({ message: "Order placed!", orderId: data.id });
+    // Update user's coin balance
+    if (userId && (coinsUsed > 0 || coinsEarned > 0)) {
+        try {
+            const { data: user } = await supabase.from('users').select('coins').eq('id', userId).single();
+            const currentCoins = user?.coins || 0;
+            const newCoins = Math.max(0, currentCoins - coinsUsed + coinsEarned);
+            await supabase.from('users').update({ coins: newCoins }).eq('id', userId);
+        } catch (uErr) {
+            console.error("Failed to update user coins balance:", uErr.message);
+        }
+    }
+
+    res.status(201).json({ 
+        message: "Order placed!", 
+        orderId: data.id,
+        coinsUsed,
+        coinsEarned,
+        coinDiscount
+    });
 });
 
 router.post('/orders/cancel', async (req, res) => {
@@ -193,6 +244,71 @@ router.get('/notifications/history', async (req, res) => {
     const { data, error } = await supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(20);
     if (error) return res.status(500).json({ error: error.message });
     res.json(data || []);
+});
+
+// ==========================================================================
+// CUSTOMER MARKETPLACE ECOSYSTEM ENDPOINTS
+// ==========================================================================
+
+// 1. Browse active marketplace shops
+router.get('/shops', async (req, res) => {
+    try {
+        const { search, category } = req.query;
+        let query = supabase.from('shops').select('*').eq('status', 'active');
+        
+        if (category && category !== 'All') {
+            query = query.ilike('category', `%${category}%`);
+        }
+        
+        const { data: shops, error } = await query.order('rating', { ascending: false });
+        if (error) throw error;
+
+        let filtered = shops || [];
+        if (search) {
+            const s = search.toLowerCase();
+            filtered = filtered.filter(sh => sh.name.toLowerCase().includes(s) || sh.description.toLowerCase().includes(s));
+        }
+
+        res.json(filtered);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// 2. Fetch specific shop details and its specific products
+router.get('/shops/:id', async (req, res) => {
+    try {
+        const { data: shop, error: shopErr } = await supabase.from('shops').select('*').eq('id', req.params.id).single();
+        if (shopErr || !shop) return res.status(404).json({ error: "Shop not found." });
+
+        const { data: products, error: prodErr } = await supabase
+            .from('products')
+            .select('*')
+            .eq('shop_id', shop.id)
+            .eq('is_available', 1);
+
+        res.json({ shop, products: products || [] });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// 3. Fetch active platform feature flags (for live frontend on/off check)
+router.get('/features', async (req, res) => {
+    try {
+        const { data, error } = await supabase.from('feature_flags').select('name, is_active');
+        if (error) throw error;
+        
+        // Convert to a clean key-value map for quick lookup
+        const flagsMap = {};
+        data?.forEach(flag => {
+            flagsMap[flag.name] = flag.is_active;
+        });
+        
+        res.json(flagsMap);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 module.exports = router;

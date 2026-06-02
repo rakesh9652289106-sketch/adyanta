@@ -144,6 +144,7 @@
 :root {
     /* Premium ADYANTA Palette */
     --primary: #0A5C36; /* Deep Forest Green */
+    --primary-hover: #08492B; /* Darker Forest Green for Hover */
     --primary-light: #E7F3ED;
     --accent: #D4AF37;   /* Soft Gold */
     --accent-glow: rgba(212, 175, 55, 0.4);
@@ -615,7 +616,16 @@ body.dark-theme header.sticky .search-brand-watermark {
     display: inline-block;
 }
 
+/* Premium User Badge styling - Desktop */
 .premium-user-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    background: var(--primary-light);
+    padding: 6px 14px;
+    border-radius: 30px;
+    border: 1px solid rgba(10, 92, 54, 0.15);
+    box-shadow: 0 4px 12px rgba(10, 92, 54, 0.05);
     height: 42px;
     cursor: pointer;
     transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.2);
@@ -624,7 +634,38 @@ body.dark-theme header.sticky .search-brand-watermark {
 
 .premium-user-badge:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.18) !important;
+    box-shadow: 0 6px 20px rgba(10, 92, 54, 0.15) !important;
+    background: var(--primary-light);
+    border-color: var(--primary);
+}
+
+.premium-user-badge span {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    color: var(--primary);
+    font-size: 0.9rem;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+.premium-user-badge i.ph-caret-down {
+    font-size: 0.8rem;
+    color: var(--primary);
+    transition: transform 0.3s ease;
+}
+
+/* Avatar Circle */
+.premium-user-badge .avatar-circle {
+    width: 28px;
+    height: 28px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    box-shadow: 0 2px 6px rgba(10, 92, 54, 0.2);
 }
 
 .user-dropdown {
@@ -2014,6 +2055,52 @@ body.dark-theme {
     --shadow-lg: 0 20px 25px -5px rgb(0 0 0 / 0.7);
     --input-bg: #1E293B;
 }
+
+/* Dark Mode Premium User Badge Overrides */
+body.dark-theme .premium-user-badge {
+    background: rgba(16, 185, 129, 0.08);
+    border-color: rgba(16, 185, 129, 0.25);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+}
+
+body.dark-theme .premium-user-badge:hover {
+    background: rgba(16, 185, 129, 0.15) !important;
+    border-color: #34D399 !important;
+    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.2) !important;
+}
+
+body.dark-theme .premium-user-badge span {
+    color: #34D399;
+}
+
+body.dark-theme .premium-user-badge i.ph-caret-down {
+    color: #34D399;
+}
+
+body.dark-theme .premium-user-badge .avatar-circle {
+    background: linear-gradient(135deg, #10B981, #059669);
+    box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+}
+
+body.dark-theme .user-dropdown {
+    background: #0F172A;
+    border-color: rgba(51, 65, 85, 0.8);
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
+}
+
+body.dark-theme .user-dropdown-item {
+    color: #94A3B8;
+}
+
+body.dark-theme .user-dropdown-item:hover {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34D399;
+}
+
+body.dark-theme .user-dropdown-footer {
+    border-top-color: rgba(51, 65, 85, 0.8);
+}
+
 
 body.dark-theme header.sticky {
     background: rgba(2, 6, 23, 0.98);
@@ -3663,3 +3750,270 @@ body.sidebar-active {
 .badge.important-badge {
     background-color: #EF4444 !important;
 }
+
+/* ==========================================================================
+   PREMIUM FOREST GREEN & GOLD GLOBAL HEADER STYLES (SAME IN BOTH THEMES)
+   ========================================================================== */
+
+/* Header & Sticky Header Backgrounds */
+header, 
+header.sticky, 
+body.dark-theme header, 
+body.dark-theme header.sticky {
+    background: #06341D !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12) !important;
+    box-shadow: 0 8px 32px rgba(6, 52, 29, 0.15) !important;
+    color: #FFFFFF !important;
+}
+
+/* Brand Logo */
+header .brand-logo, 
+header.sticky .brand-logo,
+body.dark-theme header .brand-logo,
+body.dark-theme header.sticky .brand-logo {
+    color: #FFFFFF !important;
+}
+
+header .brand-logo i, 
+header.sticky .brand-logo i,
+body.dark-theme header .brand-logo i,
+body.dark-theme header.sticky .brand-logo i {
+    color: var(--accent) !important; /* Elegant Soft Gold icon */
+}
+
+/* Menu Button */
+header .nav-menu-btn, 
+header.sticky .nav-menu-btn,
+body.dark-theme header .nav-menu-btn,
+body.dark-theme header.sticky .nav-menu-btn {
+    color: #FFFFFF !important;
+}
+
+/* Location Selector text and icons */
+header .location-selector, 
+header.sticky .location-selector,
+body.dark-theme header .location-selector,
+body.dark-theme header.sticky .location-selector {
+    border-left-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+header .location-selector span, 
+header.sticky .location-selector span,
+body.dark-theme header .location-selector span,
+body.dark-theme header.sticky .location-selector span {
+    color: rgba(255, 255, 255, 0.7) !important;
+}
+
+header .location-selector strong, 
+header.sticky .location-selector strong,
+body.dark-theme header .location-selector strong,
+body.dark-theme header.sticky .location-selector strong {
+    color: #FFFFFF !important;
+}
+
+header .location-selector i, 
+header.sticky .location-selector i,
+body.dark-theme header .location-selector i,
+body.dark-theme header.sticky .location-selector i {
+    color: var(--accent) !important;
+}
+
+/* Header Links / Sign In / Log In */
+header .nav-link, 
+header.sticky .nav-link,
+body.dark-theme header .nav-link,
+body.dark-theme header.sticky .nav-link {
+    color: rgba(255, 255, 255, 0.95) !important;
+}
+
+header .nav-link:hover, 
+header.sticky .nav-link:hover,
+body.dark-theme header .nav-link:hover,
+body.dark-theme header.sticky .nav-link:hover {
+    color: var(--accent) !important;
+}
+
+header .divider, 
+header.sticky .divider,
+body.dark-theme header .divider,
+body.dark-theme header.sticky .divider {
+    color: rgba(255, 255, 255, 0.25) !important;
+}
+
+/* Header Action Circular Buttons (wishlist, notification, dark toggle) */
+header .theme-toggle-btn, 
+header.sticky .theme-toggle-btn,
+body.dark-theme header .theme-toggle-btn,
+body.dark-theme header.sticky .theme-toggle-btn,
+header .notifications-btn, 
+header.sticky .notifications-btn,
+body.dark-theme header .notifications-btn,
+body.dark-theme header.sticky .notifications-btn,
+header .wishlist-link-btn, 
+header.sticky .wishlist-link-btn,
+body.dark-theme header .wishlist-link-btn,
+body.dark-theme header.sticky .wishlist-link-btn {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border: 1.5px solid rgba(255, 255, 255, 0.15) !important;
+    color: #FFFFFF !important;
+    border-radius: 50% !important;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.2) !important;
+}
+
+header .theme-toggle-btn:hover, 
+header.sticky .theme-toggle-btn:hover,
+body.dark-theme header .theme-toggle-btn:hover,
+body.dark-theme header.sticky .theme-toggle-btn:hover,
+header .notifications-btn:hover, 
+header.sticky .notifications-btn:hover,
+body.dark-theme header .notifications-btn:hover,
+body.dark-theme header.sticky .notifications-btn:hover,
+header .wishlist-link-btn:hover, 
+header.sticky .wishlist-link-btn:hover,
+body.dark-theme header .wishlist-link-btn:hover,
+body.dark-theme header.sticky .wishlist-link-btn:hover {
+    background: rgba(255, 255, 255, 0.18) !important;
+    border-color: rgba(255, 255, 255, 0.3) !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+}
+
+header .theme-toggle-btn i, 
+header.sticky .theme-toggle-btn i,
+body.dark-theme header .theme-toggle-btn i,
+body.dark-theme header.sticky .theme-toggle-btn i,
+header .notifications-btn i, 
+header.sticky .notifications-btn i,
+body.dark-theme header .notifications-btn i,
+body.dark-theme header.sticky .notifications-btn i,
+header .wishlist-link-btn i, 
+header.sticky .wishlist-link-btn i,
+body.dark-theme header .wishlist-link-btn i,
+body.dark-theme header.sticky .wishlist-link-btn i {
+    color: #FFFFFF !important;
+}
+
+/* User Profile Badge (Pill) */
+header .premium-user-badge, 
+header.sticky .premium-user-badge,
+body.dark-theme header .premium-user-badge,
+body.dark-theme header.sticky .premium-user-badge {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border: 1.5px solid rgba(255, 255, 255, 0.15) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.2) !important;
+}
+
+header .premium-user-badge:hover, 
+header.sticky .premium-user-badge:hover,
+body.dark-theme header .premium-user-badge:hover,
+body.dark-theme header.sticky .premium-user-badge:hover {
+    background: rgba(255, 255, 255, 0.18) !important;
+    border-color: rgba(255, 255, 255, 0.3) !important;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22) !important;
+    transform: translateY(-2px) !important;
+}
+
+header .premium-user-badge span, 
+header.sticky .premium-user-badge span,
+body.dark-theme header .premium-user-badge span,
+body.dark-theme header.sticky .premium-user-badge span {
+    color: #FFFFFF !important;
+}
+
+header .premium-user-badge i.ph-caret-down, 
+header.sticky .premium-user-badge i.ph-caret-down,
+body.dark-theme header .premium-user-badge i.ph-caret-down,
+body.dark-theme header.sticky .premium-user-badge i.ph-caret-down {
+    color: #FFFFFF !important;
+}
+
+header .premium-user-badge .avatar-circle, 
+header.sticky .premium-user-badge .avatar-circle,
+body.dark-theme header .premium-user-badge .avatar-circle,
+body.dark-theme header.sticky .premium-user-badge .avatar-circle {
+    background: linear-gradient(135deg, var(--accent), #B3922E) !important; /* Gold gradient avatar */
+    box-shadow: 0 2px 6px rgba(212, 175, 55, 0.35) !important;
+    color: #FFFFFF !important;
+}
+
+/* Cart Button */
+header .cart-btn, 
+header.sticky .cart-btn,
+body.dark-theme header .cart-btn,
+body.dark-theme header.sticky .cart-btn {
+    background: var(--accent) !important; /* Gold background */
+    color: #06341D !important; /* Dark text for readability */
+    border: none !important;
+    box-shadow: 0 4px 12px rgba(212, 175, 55, 0.25) !important;
+    border-radius: 30px !important;
+    padding: 6px 18px !important;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.2) !important;
+}
+
+header .cart-btn:hover, 
+header.sticky .cart-btn:hover,
+body.dark-theme header .cart-btn:hover,
+body.dark-theme header.sticky .cart-btn:hover {
+    background: #F1C40F !important; /* Brighter gold hover */
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 20px rgba(212, 175, 55, 0.4) !important;
+}
+
+header .cart-btn i, 
+header.sticky .cart-btn i,
+body.dark-theme header .cart-btn i,
+body.dark-theme header.sticky .cart-btn i {
+    color: #06341D !important;
+}
+
+header .cart-btn .cart-label, 
+header.sticky .cart-btn .cart-label,
+body.dark-theme header .cart-btn .cart-label,
+body.dark-theme header.sticky .cart-btn .cart-label {
+    color: #06341D !important;
+    font-weight: 700 !important;
+}
+
+header .cart-btn .cart-total, 
+header.sticky .cart-btn .cart-total,
+body.dark-theme header .cart-btn .cart-total,
+body.dark-theme header.sticky .cart-btn .cart-total {
+    color: #06341D !important;
+    font-weight: 800 !important;
+}
+
+/* Search Bar (Maintained high contrast and solid look) */
+header .search-bar input, 
+header.sticky .search-bar input,
+body.dark-theme header .search-bar input,
+body.dark-theme header.sticky .search-bar input {
+    background: #FFFFFF !important;
+    color: #1E293B !important;
+    border: 1.5px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+header .search-bar input:focus, 
+header.sticky .search-bar input:focus,
+body.dark-theme header .search-bar input:focus,
+body.dark-theme header.sticky .search-bar input:focus {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.2) !important;
+}
+
+header .search-bar .search-icon, 
+header.sticky .search-bar .search-icon,
+body.dark-theme header .search-bar .search-icon,
+body.dark-theme header.sticky .search-bar .search-icon {
+    color: #64748B !important;
+}
+
+header .search-bar .search-brand-watermark, 
+header.sticky .search-bar .search-brand-watermark,
+body.dark-theme header .search-bar .search-brand-watermark,
+body.dark-theme header.sticky .search-bar .search-brand-watermark {
+    color: #0A5C36 !important;
+    opacity: 0.85 !important;
+    display: block !important;
+}
+

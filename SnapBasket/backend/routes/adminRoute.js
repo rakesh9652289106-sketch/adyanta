@@ -5,7 +5,7 @@ const { hashPassword, verifyPassword } = require('./authRoute');
 
 // Admin Auth Middleware
 function checkAdminAuth(req, res, next) {
-    if (req.cookies.admin_auth === 'true') {
+    if (req.cookies.admin_auth === 'true' || req.cookies.role === 'super_admin') {
         next();
     } else {
         res.status(401).json({ error: "Unauthorized. Admin access required." });
@@ -265,6 +265,100 @@ router.patch('/settings', async (req, res) => {
     res.json({ message: "Updated" });
 });
 
+// Loyalty Program Settings & Verification
+router.get('/loyalty/check-schema', async (req, res) => {
+    try {
+        let missing = [];
+
+        // Check users table
+        const { data: userData, error: userErr } = await supabase.from('users').select('*').limit(1);
+        if (userErr) {
+            missing.push("users.coins");
+        } else if (userData && userData.length > 0) {
+            const userCols = Object.keys(userData[0]);
+            if (!userCols.includes('coins')) missing.push("users.coins");
+        } else {
+            const { error: coinsSelectErr } = await supabase.from('users').select('coins').limit(1);
+            if (coinsSelectErr) missing.push("users.coins");
+        }
+
+        // Check orders table
+        const { data: orderData, error: orderErr } = await supabase.from('orders').select('*').limit(1);
+        if (orderErr) {
+            missing.push("orders.coins_earned");
+            missing.push("orders.coins_used");
+        } else if (orderData && orderData.length > 0) {
+            const ordCols = Object.keys(orderData[0]);
+            if (!ordCols.includes('coins_earned')) missing.push("orders.coins_earned");
+            if (!ordCols.includes('coins_used')) missing.push("orders.coins_used");
+        } else {
+            const { error: coinsUsedErr } = await supabase.from('orders').select('coins_earned, coins_used').limit(1);
+            if (coinsUsedErr) {
+                missing.push("orders.coins_earned");
+                missing.push("orders.coins_used");
+            }
+        }
+
+        // Check settings table
+        const { data: settingsData, error: settingsErr } = await supabase.from('settings').select('*').limit(1);
+        if (settingsErr) {
+            missing.push("settings.coins_system_active");
+            missing.push("settings.coin_reward_rate");
+            missing.push("settings.coin_reward_amount");
+            missing.push("settings.coin_value_per_rupee");
+        } else if (settingsData && settingsData.length > 0) {
+            const setCols = Object.keys(settingsData[0]);
+            const required = ['coins_system_active', 'coin_reward_rate', 'coin_reward_amount', 'coin_value_per_rupee'];
+            required.forEach(c => {
+                if (!setCols.includes(c)) missing.push(`settings.${c}`);
+            });
+        } else {
+            const { error: settingsColsErr } = await supabase.from('settings').select('coins_system_active, coin_reward_rate, coin_reward_amount, coin_value_per_rupee').limit(1);
+            if (settingsColsErr) {
+                missing.push("settings.coins_system_active");
+                missing.push("settings.coin_reward_rate");
+                missing.push("settings.coin_reward_amount");
+                missing.push("settings.coin_value_per_rupee");
+            }
+        }
+
+        res.json({ success: true, missing });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.get('/loyalty/stats', async (req, res) => {
+    try {
+        // Fetch coin settings
+        const { data: settings } = await supabase.from('settings').select('coin_value_per_rupee').limit(1).single();
+        const valuePerRupee = settings?.coin_value_per_rupee || 10;
+
+        // 1. Coins in circulation
+        const { data: users, error: userErr } = await supabase.from('users').select('coins');
+        if (userErr) throw userErr;
+        const totalCoins = users?.reduce((sum, u) => sum + (u.coins || 0), 0) || 0;
+
+        // 2. Savings
+        const { data: orders, error: orderErr } = await supabase.from('orders').select('coins_used');
+        if (orderErr) throw orderErr;
+        const totalCoinsUsed = orders?.reduce((sum, o) => sum + (o.coins_used || 0), 0) || 0;
+        const totalSavings = Math.floor(totalCoinsUsed / valuePerRupee);
+
+        // 3. Active Members (coins > 0)
+        const activeMembers = users?.filter(u => (u.coins || 0) > 0).length || 0;
+
+        res.json({
+            success: true,
+            totalCoins,
+            totalSavings,
+            activeMembers
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 router.patch('/settings/payments', async (req, res) => {
     const { card, cash, upi } = req.body;
     const { error } = await supabase.from('settings').update({
@@ -485,10 +579,152 @@ router.patch('/users/:id/status', async (req, res) => {
     res.json({ message: "Updated" });
 });
 
+router.patch('/users/:id/role', async (req, res) => {
+    const { role } = req.body;
+    if (!role) return res.status(400).json({ error: "Role value required." });
+    if (!['customer', 'vendor', 'super_admin'].includes(role)) {
+        return res.status(400).json({ error: "Invalid role value." });
+    }
+
+    try {
+        const { error } = await supabase.from('users').update({ role }).eq('id', req.params.id);
+        if (error) return res.status(500).json({ error: error.message });
+        res.json({ message: `Role updated to ${role}` });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 router.delete('/users/:id', async (req, res) => {
     const { error } = await supabase.from('users').delete().eq('id', req.params.id);
     if (error) return res.status(500).json({ error: error.message });
     res.json({ message: "Deleted" });
+});
+
+// ==========================================================================
+// SUPER ADMIN MULTI-VENDOR MARKETPLACE ENDPOINTS
+// ==========================================================================
+
+// 1. Fetch all Platform Feature Flags
+router.get('/features', async (req, res) => {
+    try {
+        const { data, error } = await supabase.from('feature_flags').select('*').order('name');
+        if (error) throw error;
+        res.json(data || []);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// 2. Toggle Feature Flag (ON/OFF)
+router.patch('/features/:id', async (req, res) => {
+    const { is_active } = req.body;
+    if (is_active === undefined) return res.status(400).json({ error: "is_active state required." });
+
+    try {
+        const { data, error } = await supabase
+            .from('feature_flags')
+            .update({ is_active })
+            .eq('id', req.params.id)
+            .select()
+            .single();
+
+        if (error) throw error;
+        res.json({ message: "Feature flag toggled successfully!", feature: data });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// 3. Fetch all Vendor Shop Onboardings
+router.get('/vendors', async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('shops')
+            .select('*, users(full_name, phone)')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        res.json(data || []);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// 4. Onboard / Suspend Vendor Shop status
+router.patch('/vendors/:id/status', async (req, res) => {
+    const { status } = req.body;
+    if (!status) return res.status(400).json({ error: "Shop status value required." });
+
+    try {
+        const { data: shop, error: shopErr } = await supabase
+            .from('shops')
+            .update({ status })
+            .eq('id', req.params.id)
+            .select()
+            .single();
+
+        if (shopErr) throw shopErr;
+
+        // If approved, verify the vendor user status as active too
+        if (status === 'active' && shop.vendor_id) {
+            await supabase.from('users').update({ status: 'active' }).eq('id', shop.vendor_id);
+        }
+
+        res.json({ message: `Vendor shop status updated to: ${status}`, shop });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// 5. Create platform-wide or respected store Coupon
+router.post('/coupons', async (req, res) => {
+    const { code, discount_value, discount_type, min_amount, is_one_time, expiry_date, shop_id } = req.body;
+    if (!code || !discount_value || !discount_type || !expiry_date) {
+        return res.status(400).json({ error: "Missing required coupon details." });
+    }
+
+    try {
+        const { data, error } = await supabase.from('coupons').insert([{
+            code: code.toUpperCase(),
+            discount_value: parseInt(discount_value) || 0,
+            discount_type,
+            min_amount: parseInt(min_amount) || 0,
+            is_one_time: is_one_time ? 1 : 0,
+            expiry_date,
+            shop_id: shop_id || null // Link to respected shop storefront (or null for global)
+        }]).select().single();
+
+        if (error) throw error;
+        res.status(201).json({ message: "Marketplace coupon distributed successfully!", coupon: data });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// 6. Global Marketplace Metrics and Commission Analytics
+router.get('/marketplace/analytics', async (req, res) => {
+    try {
+        const { data: shops } = await supabase.from('shops').select('id, name, status');
+        const { data: wallets } = await supabase.from('vendor_wallets').select('*');
+        const { data: orders } = await supabase.from('orders').select('id, total, status, created_at');
+
+        const totalSales = orders?.reduce((sum, o) => sum + (o.total || 0), 0) || 0;
+        const totalCommission = Math.round(totalSales * 0.05); // 5% flat platform commission
+
+        res.json({
+            metrics: {
+                totalSales,
+                totalCommission,
+                activeVendors: shops?.filter(s => s.status === 'active')?.length || 0,
+                pendingVendors: shops?.filter(s => s.status === 'pending')?.length || 0,
+            },
+            wallets: wallets || [],
+            recentTransactions: orders?.slice(0, 10) || []
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 module.exports = router;

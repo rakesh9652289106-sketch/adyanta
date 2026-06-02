@@ -49,12 +49,14 @@ const productRouter = require('./routes/productRoute');
 const adminRouter = require('./routes/adminRoute');
 const indexRouter = require('./routes/indexRoute');
 const userRouter = require('./routes/userRoute');
+const vendorRouter = require('./routes/vendorRoute');
 
 // Mount Routes
 app.use('/api/auth', authRouter);
 app.use('/api/products', productRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/user', userRouter);
+app.use('/api/vendor', vendorRouter);
 app.use('/api', indexRouter);
 
 // Admin routes are now handled by adminRouter

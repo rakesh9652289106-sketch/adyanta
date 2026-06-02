@@ -142,6 +142,7 @@
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/thin/style.css">
     <link rel="icon" type="image/png" href="assets/favicon.png">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
     <style>
         /* Existing styles... */
     </style>
@@ -173,6 +174,16 @@
                     style="display: none; background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer; float: right; margin-top: -30px;"><i
                         class="ph ph-x"></i></button>
             </div>
+            
+            <!-- Access Portal Selector Widget -->
+            <div class="portal-selector-wrapper" style="padding: 0 1.5rem 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 1rem;" id="roleSelectorContainer">
+                <label style="color: #94A3B8; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 0.5rem;"><i class="ph ph-shield"></i> Access Portal</label>
+                <select id="portalRoleSelector" onchange="switchPortalRole(this.value)" style="width: 100%; padding: 0.6rem; border-radius: 8px; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.15); color: white; font-weight: 600; font-size: 0.85rem; cursor: pointer; outline: none; transition: all 0.3s;">
+                    <option value="super_admin" style="background: #1E293B; color: white;">👑 Super Admin Panel</option>
+                    <option value="vendor" style="background: #1E293B; color: white;">🏬 Vendor Shop Panel</option>
+                </select>
+            </div>
+
             <ul class="sidebar-menu">
                 <li class="active" onclick="showSection('view-dashboard')"><i class="ph ph-chart-pie"></i> Dashboard Overview</li>
                 <li onclick="showSection('view-orders')"><i class="ph ph-receipt"></i> Recent Orders</li>
@@ -187,6 +198,7 @@
                 <li onclick="showSection('view-cancelled-orders')"><i class="ph ph-prohibit"></i> Cancelled Payments</li>
                 <li onclick="showSection('view-users')"><i class="ph ph-users"></i> Manage Users</li>
                 <li onclick="showSection('view-coupons')"><i class="ph ph-ticket"></i> Coupon Codes</li>
+                <li onclick="showSection('view-loyalty')"><i class="ph ph-coins"></i> Loyalty Program</li>
                 <li onclick="showSection('view-settings')"><i class="ph ph-gear"></i> App Settings</li>
                 <li onclick="showSection('view-orders', true)"><i class="ph ph-truck"></i> Manage Delivery</li>
                 <li><a href="/" style="text-decoration: none; color: inherit; display: flex; align-items: center; gap: 0.5rem;"><i class="ph ph-storefront"></i> View Store</a></li>
@@ -588,7 +600,7 @@
             <!-- Promo View -->
             <section id="view-promo" class="content-section">
                 <h1 class="page-title">Promotions</h1>
-                <div class="form-card" style="margin-bottom:2rem;">
+                <div class="form-card" id="platformHeroBannerCard" style="margin-bottom:2rem;">
                     <h3>Hero Banner</h3>
                     <form id="bannerEditForm">
                         <input type="hidden" id="bannerId">
@@ -607,7 +619,7 @@
                     </form>
                 </div>
 
-                <div class="form-card" style="margin-bottom:2rem; border-left: 5px solid var(--primary);">
+                <div class="form-card" id="platformMorningFreshBannerCard" style="margin-bottom:2rem; border-left: 5px solid var(--primary);">
                     <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem;">
                         <div
                             style="background: var(--primary); color: white; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
@@ -617,6 +629,7 @@
                             <p style="font-size: 0.8rem; color: #64748B; margin:0;">Appears below Daily Essentials
                                 section.</p>
                         </div>
+                    </div>
                                         <form id="morningFreshBannerForm">
                         <div class="form-row">
                             <div class="form-group"><label>Image URL</label><input type="text" id="mfImgUrl"></div>
@@ -637,7 +650,7 @@
                     <h3 class="section-title"><i class="ph ph-presentation"></i> Sliding Promo Banners (Max 6)</h3>
                     <p style="font-size: 0.85rem; color: #64748B; margin-bottom: 1.5rem;">These photos slide automatically on the homepage. Recommended size: 1200x500px.</p>
                     
-                    <form id="adminPromoBannerForm" style="display: grid; grid-template-columns: 1fr 1fr 100px auto; gap: 1rem; align-items: flex-end; margin-bottom: 2rem;">
+                     <form id="adminPromoBannerForm" style="display: grid; grid-template-columns: 1fr 1fr 100px auto; gap: 1rem; align-items: flex-end; margin-bottom: 2rem;">
                         <div class="form-group" style="margin:0;"><label>Image URL</label><input type="text" id="promoImgUrl" placeholder="https://..." required></div>
                         <div class="form-group" style="margin:0;"><label>Link URL (Optional)</label><input type="text" id="promoLinkUrl" placeholder="#" value="#"></div>
                         <div class="form-group" style="margin:0;"><label>Order</label><input type="number" id="promoOrder" value="0"></div>
@@ -660,7 +673,7 @@
                     </div>
                 </div>
 
-                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:1.5rem;">
+                <div id="platformOffersCard" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:1.5rem;">
                     <div class="form-card" style="max-width: none;">
                         <h3>Offer 1 (Orange)</h3>
                         <form id="offerForm1"><input type="hidden" id="offerId1"><input type="text" id="oTitle1"
@@ -797,6 +810,7 @@
                                 <th>Username</th>
                                 <th>Email</th>
                                 <th>Mobile Number</th>
+                                <th>Role</th>
                                 <th>Status</th>
                                 <th>Joined Date</th>
                                 <th>Action</th>
@@ -927,6 +941,104 @@
                 </div>
             </section>
 
+            <!-- Loyalty Program Section -->
+            <section id="view-loyalty" class="content-section">
+                <div class="section-header-row">
+                    <h1 class="page-title">SURAJ Loyalty Coin Program</h1>
+                    <p style="color: #64748B; font-size: 0.9rem; max-width: 500px; text-align: right; margin: 0;">Configure loyalty multiplier rewards, discount rates, and view circulation analytics.</p>
+                </div>
+
+                <!-- Database Migration Fallback Banner (will be toggled via JS) -->
+                <div id="loyaltyMigrationBanner" style="display: none; background: #FFFBEB; border: 1px solid #FCD34D; border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem;">
+                    <div style="display: flex; gap: 1rem; align-items: flex-start;">
+                        <div style="background: #F59E0B; color: white; width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; flex-shrink: 0;">
+                            <i class="ph ph-warning-circle"></i>
+                        </div>
+                        <div style="flex: 1;">
+                            <h3 style="margin: 0 0 0.5rem 0; color: #B45309; font-weight: 700; font-size: 1.1rem;">Loyalty Database Columns Missing</h3>
+                            <p style="margin: 0; font-size: 0.9rem; color: #92400E; line-height: 1.5;">To use the loyalty program, several columns must be added to your Supabase tables. Copy the migration script below and run it in your **Supabase SQL Editor** to sync your schema!</p>
+                            <textarea id="loyaltySqlScriptText" readonly style="width: 100%; height: 120px; font-family: monospace; font-size: 0.8rem; padding: 0.75rem; border-radius: 8px; border: 1px solid #FDE68A; background: #FFFDF5; margin-top: 1rem; color: #78350F; resize: none;">ALTER TABLE public.users ADD COLUMN IF NOT EXISTS coins INTEGER DEFAULT 0;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS coins_earned INTEGER DEFAULT 0;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS coins_used INTEGER DEFAULT 0;
+ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS coins_system_active INTEGER DEFAULT 1;
+ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS coin_reward_rate INTEGER DEFAULT 1000;
+ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS coin_reward_amount INTEGER DEFAULT 30;
+ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS coin_value_per_rupee INTEGER DEFAULT 10;</textarea>
+                            <button onclick="copyLoyaltySqlScript()" class="btn-submit" style="margin-top: 1rem; width: auto; background: #D97706; border: none; padding: 0.5rem 1.25rem; font-size: 0.85rem;"><i class="ph ph-copy"></i> Copy SQL Script</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Loyalty Program Metrics Grid -->
+                <div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem; margin-bottom: 2.5rem;">
+                    <div class="stat-card" style="background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid #E2E8F0; display: flex; align-items: center; gap: 1.25rem;">
+                        <div style="background: #FEF3C7; color: #D97706; width: 48px; height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                            <i class="ph ph-coins"></i>
+                        </div>
+                        <div>
+                            <p style="font-size: 0.85rem; color: #64748B; font-weight: 600;">Coins In Circulation</p>
+                            <h3 id="loyaltyStatDistributed" style="font-size: 1.5rem; color: #0F172A;">0</h3>
+                        </div>
+                    </div>
+                    <div class="stat-card" style="background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid #E2E8F0; display: flex; align-items: center; gap: 1.25rem;">
+                        <div style="background: #DCFCE7; color: #16A34A; width: 48px; height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                            <i class="ph ph-hand-saving"></i>
+                        </div>
+                        <div>
+                            <p style="font-size: 0.85rem; color: #64748B; font-weight: 600;">Total Customer Savings</p>
+                            <h3 id="loyaltyStatSavings" style="font-size: 1.5rem; color: #0F172A;">₹0</h3>
+                        </div>
+                    </div>
+                    <div class="stat-card" style="background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid #E2E8F0; display: flex; align-items: center; gap: 1.25rem;">
+                        <div style="background: #E0E7FF; color: #4F46E5; width: 48px; height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                            <i class="ph ph-users-three"></i>
+                        </div>
+                        <div>
+                            <p style="font-size: 0.85rem; color: #64748B; font-weight: 600;">Active Members</p>
+                            <h3 id="loyaltyStatMembers" style="font-size: 1.5rem; color: #0F172A;">0</h3>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Loyalty Program Settings Form -->
+                <div class="form-card">
+                    <h3 class="section-title"><i class="ph ph-gear-six"></i> Loyalty Campaign Rules</h3>
+                    <form id="loyaltyProgramSettingsForm">
+                        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 2rem; padding: 1rem; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px;">
+                            <label class="switch" style="position: relative; display: inline-block; width: 44px; height: 24px; cursor: pointer; margin: 0;">
+                                <input type="checkbox" id="loyaltySystemActiveToggle" style="opacity: 0; width: 0; height: 0; cursor: pointer;">
+                                <span class="slider round" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #CBD5E1; transition: .3s; border-radius: 24px;"></span>
+                            </label>
+                            <div>
+                                <strong style="display: block; font-size: 0.95rem; color: #1E293B;">Enable SURAJ Coin Loyalty System</strong>
+                                <span style="font-size: 0.8rem; color: #64748B;">Activate coin earning and redemption discount features for all customers globally.</span>
+                            </div>
+                        </div>
+
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+                            <div class="form-group">
+                                <label style="font-weight: 600; color: #1E293B; margin-bottom: 0.5rem; display: block;">Spending Multiplier Reward Rate (₹)</label>
+                                <input type="number" id="loyaltyRewardRate" min="100" step="50" style="width: 100%; padding: 0.8rem; border-radius: 8px; border: 1px solid #CBD5E1;" placeholder="1000">
+                                <p style="font-size: 0.75rem; color: #64748B; margin-top: 0.35rem;">Customer must spend this amount to qualify for the coin reward. Recommended: ₹1000.</p>
+                            </div>
+                            <div class="form-group">
+                                <label style="font-weight: 600; color: #1E293B; margin-bottom: 0.5rem; display: block;">Coin Reward Amount</label>
+                                <input type="number" id="loyaltyRewardAmount" min="5" step="5" style="width: 100%; padding: 0.8rem; border-radius: 8px; border: 1px solid #CBD5E1;" placeholder="30">
+                                <p style="font-size: 0.75rem; color: #64748B; margin-top: 0.35rem;">The amount of coins given per multiplier rate spent. Recommended: 30 Coins.</p>
+                            </div>
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 2rem;">
+                            <label style="font-weight: 600; color: #1E293B; margin-bottom: 0.5rem; display: block;">Coin Redemption Rate (Coins per ₹1)</label>
+                            <input type="number" id="loyaltyValuePerRupee" min="1" step="1" style="width: 100%; padding: 0.8rem; border-radius: 8px; border: 1px solid #CBD5E1;" placeholder="10">
+                            <p style="font-size: 0.75rem; color: #64748B; margin-top: 0.35rem;">Number of coins equivalent to ₹1 discount. E.g. 10 means 10 coins = ₹1 (Worth 10 paise per coin). Recommended: 10.</p>
+                        </div>
+
+                        <button type="submit" class="btn-submit" style="background: #EAB308; color: #78350F; font-weight: 800; border: none; font-size: 0.95rem; padding: 0.9rem 2rem; border-radius: 10px; width: auto;"><i class="ph ph-shield-check"></i> Apply Loyalty Rules</button>
+                    </form>
+                </div>
+            </section>
+
 
                 <!-- Settings -->
                 <section id="view-settings" class="content-section">
@@ -942,11 +1054,30 @@
                             <div class="form-group"><label>Shop Address</label><input type="text" id="sAddress"></div>
                             <div class="form-group"><label>Hero Image URL</label><input type="text" id="sImage"></div>
                             
-                            <!-- Razorpay Keys -->
+                            <!-- Razorpay Keys & Vendor Onboarding Setup Fee -->
                             <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid #E2E8F0;">
                                 <h4 style="margin-bottom: 1rem; color: #1E293B;"><i class="ph ph-credit-card"></i> Razorpay Integration</h4>
                                 <div class="form-group"><label>Razorpay Key ID</label><input type="text" id="rzpKeyId" placeholder="rzp_test_..."></div>
                                 <div class="form-group"><label>Razorpay Key Secret</label><input type="password" id="rzpSecret" placeholder="Enter Key Secret"></div>
+                                
+                                <h5 style="margin: 1.5rem 0 1rem 0; color: #B45309; font-weight: 700; font-size: 0.9rem;"><i class="ph ph-storefront"></i> Vendor Shop Registration Payment Setup</h5>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+                                    <div class="form-group">
+                                        <label>Setup Fee Amount (₹)</label>
+                                        <input type="number" id="vFeeAmount" placeholder="0 (No setup fee)" min="0" step="50">
+                                        <p style="font-size: 0.75rem; color: #64748B; margin-top: 0.25rem;">Standard setup fee to list a store. E.g. ₹500.</p>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Coupon Discount Amount (₹)</label>
+                                        <input type="number" id="vFeeDiscount" placeholder="0" min="0" step="50">
+                                        <p style="font-size: 0.75rem; color: #64748B; margin-top: 0.25rem;">Discount deducted if vendor uses the registration coupon. E.g. ₹100.</p>
+                                    </div>
+                                </div>
+                                <div class="form-group" style="margin-top: 1rem;">
+                                    <label>Registration Coupon Code</label>
+                                    <input type="text" id="vFeeCoupon" placeholder="e.g. WELCOMEVENDOR" style="text-transform: uppercase;">
+                                    <p style="font-size: 0.75rem; color: #64748B; margin-top: 0.25rem;">The coupon code new vendors can apply to get the discount.</p>
+                                </div>
                             </div>
 
                             <!-- Banner Settings -->
@@ -1082,6 +1213,265 @@
                         </table>
                     </div>
                 </section>
+
+                <!-- Super Admin: Feature Switchboard -->
+                <section id="view-feature-switchboard" class="content-section">
+                    <div class="section-header-row">
+                        <h1 class="page-title">Feature Flags Switchboard</h1>
+                        <p style="color: #64748B; font-size: 0.9rem; max-width: 500px; text-align: right; margin: 0;">Real-time ON/OFF control switches for key customer, vendor, and payment system functions.</p>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; margin-top: 1rem;" id="featureFlagsGrid">
+                        <!-- Toggles will be dynamically loaded here -->
+                        <div style="text-align:center; padding:3rem; color:#64748B; grid-column: 1/-1;">
+                            <i class="ph ph-circle-notch ph-spin" style="font-size:2rem; margin-bottom:1rem;"></i>
+                            <p>Loading platform feature flags...</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Super Admin: Vendor KYC Approvals -->
+                <section id="view-vendor-approvals" class="content-section">
+                    <div class="section-header-row">
+                        <h1 class="page-title">Vendor KYC Approvals</h1>
+                    </div>
+
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Shop ID</th>
+                                    <th>Shop Profile</th>
+                                    <th>Vendor Info</th>
+                                    <th>KYC Doc</th>
+                                    <th>Timings / Category</th>
+                                    <th>Status</th>
+                                    <th style="text-align:right; padding-right:2rem;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="vendorApprovalsTableBody">
+                                <tr>
+                                    <td colspan="7" style="text-align:center; padding:3rem; color:#64748B;">
+                                        Loading vendor onboarding applications...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- Vendor: Dashboard Overview -->
+                <section id="view-vendor-dashboard" class="content-section">
+                    <div class="section-header-row">
+                        <div>
+                            <h1 class="page-title" style="margin-bottom: 0.25rem;">Store Dashboard</h1>
+                            <p id="vendorShopSubtitle" style="color: #64748B; font-size: 0.9rem; margin: 0;">Manage your store storefront, catalog, wallet, and orders.</p>
+                        </div>
+                        <div style="background: #F0FDF4; border: 1px solid #BBF7D0; color: #16A34A; padding: 0.5rem 1rem; border-radius: 8px; font-weight: 700; font-size: 0.85rem;" id="vendorShopStatusBadge">
+                            Shop Active
+                        </div>
+                    </div>
+
+                    <!-- Vendor Metrics Grid -->
+                    <div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+                        <div class="stat-card" style="background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid #E2E8F0; display: flex; align-items: center; gap: 1.25rem;">
+                            <div style="background: #DCFCE7; color: #16A34A; width: 48px; height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                                <i class="ph ph-wallet"></i>
+                            </div>
+                            <div>
+                                <p style="font-size: 0.85rem; color: #64748B; font-weight: 600;">Wallet Balance</p>
+                                <h3 id="vendorStatWallet" style="font-size: 1.5rem; color: #0F172A;">₹0</h3>
+                            </div>
+                        </div>
+                        <div class="stat-card" style="background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid #E2E8F0; display: flex; align-items: center; gap: 1.25rem;">
+                            <div style="background: #E0E7FF; color: #4F46E5; width: 48px; height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                                <i class="ph ph-shopping-bag-open"></i>
+                            </div>
+                            <div>
+                                <p style="font-size: 0.85rem; color: #64748B; font-weight: 600;">Gross Sales</p>
+                                <h3 id="vendorStatSales" style="font-size: 1.5rem; color: #0F172A;">₹0</h3>
+                            </div>
+                        </div>
+                        <div class="stat-card" style="background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid #E2E8F0; display: flex; align-items: center; gap: 1.25rem;">
+                            <div style="background: #FEF3C7; color: #D97706; width: 48px; height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                                <i class="ph ph-package"></i>
+                            </div>
+                            <div>
+                                <p style="font-size: 0.85rem; color: #64748B; font-weight: 600;">Active Listings</p>
+                                <h3 id="vendorStatProducts" style="font-size: 1.5rem; color: #0F172A;">0</h3>
+                            </div>
+                        </div>
+                        <div class="stat-card" style="background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid #E2E8F0; display: flex; align-items: center; gap: 1.25rem;">
+                            <div style="background: #FEE2E2; color: #DC2626; width: 48px; height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                                <i class="ph ph-receipt"></i>
+                            </div>
+                            <div>
+                                <p style="font-size: 0.85rem; color: #64748B; font-weight: 600;">Pending Orders</p>
+                                <h3 id="vendorStatOrders" style="font-size: 1.5rem; color: #0F172A;">0</h3>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem;">
+                        <div class="form-card" style="max-width: none;">
+                            <h2 style="margin-bottom: 1.5rem;"><i class="ph ph-storefront"></i> Shop Storefront Quick View</h2>
+                            <div id="vendorShopQuickView" style="display: flex; gap: 2rem; align-items: flex-start; flex-wrap: wrap;">
+                                <div id="vendorShopQuickLogo" style="width: 120px; height: 120px; border-radius: 16px; border: 1px solid #E2E8F0; overflow: hidden; background: #F8FAFC; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                                    <img src="https://images.unsplash.com/photo-1542838132-92c53300491e?w=150" style="width:100%; height:100%; object-fit:cover;">
+                                </div>
+                                <div style="flex: 1; min-width: 250px;">
+                                    <h3 id="vendorShopQuickName" style="font-size: 1.4rem; color: #1E293B; margin: 0 0 0.5rem 0;">Adyanta Organic Farm Store</h3>
+                                    <p id="vendorShopQuickDesc" style="color: #64748B; font-size: 0.9rem; line-height: 1.5; margin: 0 0 1rem 0;">Delicious local farm fresh vegetables and crispy greens.</p>
+                                    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                                        <span style="font-size: 0.8rem; background: #F1F5F9; color: #475569; padding: 4px 10px; border-radius: 12px; font-weight: 600;" id="vendorShopQuickCategory"><i class="ph ph-tag"></i> Vegetables</span>
+                                        <span style="font-size: 0.8rem; background: #F1F5F9; color: #475569; padding: 4px 10px; border-radius: 12px; font-weight: 600;" id="vendorShopQuickTimings"><i class="ph ph-clock"></i> 9:00 AM - 10:00 PM</span>
+                                        <span style="font-size: 0.8rem; background: #F1F5F9; color: #475569; padding: 4px 10px; border-radius: 12px; font-weight: 600;" id="vendorShopQuickPhone"><i class="ph ph-phone"></i> +91 9876543210</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-card" style="background: #F8FAFC; border: 1px dashed #CBD5E1;">
+                            <h2 style="margin-bottom: 1rem;"><i class="ph ph-lightning"></i> Shop Quick Actions</h2>
+                            <button onclick="showSection('view-vendor-shop')" class="btn-submit" style="margin-bottom:0.75rem; background: #4F46E5;"><i class="ph ph-storefront"></i> Storefront Settings</button>
+                            <button onclick="showSection('view-products')" class="btn-submit" style="margin-bottom:0.75rem; background: #10B981;"><i class="ph ph-plus"></i> Add Store Catalog Product</button>
+                            <button onclick="showSection('view-orders')" class="btn-submit" style="background: #F59E0B;"><i class="ph ph-receipt"></i> Process Store Orders</button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Vendor: Customize Storefront -->
+                <section id="view-vendor-shop" class="content-section">
+                    <div class="section-header-row">
+                        <h1 class="page-title">Customize Storefront</h1>
+                    </div>
+
+                    <!-- Store onboarding message (if shop is pending or not onboarded) -->
+                    <div id="vendorOnboardingMessage" style="display: none; padding: 1.5rem; background: #FEF3C7; border: 1px solid #FDE68A; border-radius: 12px; color: #D97706; margin-bottom: 2rem;">
+                        <h3 style="margin-top: 0; display:flex; align-items:center; gap:8px;"><i class="ph ph-warning"></i> Storefront Pending Approval</h3>
+                        <p style="margin: 5px 0 0 0; font-size: 0.9rem;">Your store details have been submitted. The platform Super Admin will verify your KYC documents and activate your storefront shortly!</p>
+                    </div>
+
+                    <!-- Store setup fee payment summary (only shown if not paid yet and setup fee is configured) -->
+                    <div id="vendorPaymentSummaryCard" style="display: none; padding: 2rem; background: #FFFDF5; border: 2px solid #FCD34D; border-radius: 16px; margin-bottom: 2rem;">
+                        <h3 style="margin: 0 0 0.5rem 0; color: #D97706; font-size: 1.2rem; font-weight: 700; display: flex; align-items: center; gap: 8px;"><i class="ph ph-credit-card"></i> Store Registration Fee Required</h3>
+                        <p style="margin: 0 0 1.5rem 0; font-size: 0.9rem; color: #78350F; line-height: 1.5;">To open and start running a vendor shop on our platform, you must pay a one-time onboarding setup fee. You can also apply a coupon below to unlock registration discounts!</p>
+                        
+                        <div style="max-width: 450px; background: white; border: 1px solid #FDE68A; border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 0.75rem; font-size: 0.95rem; color: #1E293B;">
+                                <span>Platform Setup Fee:</span>
+                                <strong id="vPayBaseFee">₹0</strong>
+                            </div>
+                            <div id="vPayDiscountRow" style="display: flex; justify-content: space-between; margin-bottom: 0.75rem; font-size: 0.95rem; color: #16A34A; display: none;">
+                                <span>Coupon Discount:</span>
+                                <strong id="vPayDiscount">-₹0</strong>
+                            </div>
+                            <div style="height: 1px; background: #F3F4F6; margin: 0.75rem 0;"></div>
+                            <div style="display: flex; justify-content: space-between; font-size: 1.1rem; color: #0F172A; font-weight: 800;">
+                                <span>Total Amount Payable:</span>
+                                <strong id="vPayTotalAmount" style="color: #D97706;">₹0</strong>
+                            </div>
+                        </div>
+
+                        <!-- Onboarding Coupon Code Input Box -->
+                        <div style="display: flex; gap: 0.75rem; max-width: 450px; margin-bottom: 1.5rem;">
+                            <input type="text" id="vOnboardingCouponInput" placeholder="ENTER COUPON CODE" style="flex: 1; padding: 0.75rem; border: 1px solid #CBD5E1; border-radius: 8px; font-weight: 600; text-transform: uppercase;">
+                            <button type="button" onclick="applyOnboardingCoupon()" class="btn-submit" style="width: auto; background: #D97706; border: none; margin: 0; padding: 0.75rem 1.5rem; font-weight: 700; height: auto;">Apply</button>
+                        </div>
+                        <div id="vCouponFeedbackMessage" style="font-size: 0.85rem; font-weight: 600; margin-top: -1rem; margin-bottom: 1.5rem; display: none;"></div>
+                    </div>
+
+                    <!-- Onboarding Form / Customizer -->
+                    <div class="form-card" style="max-width: none;">
+                        <h2 class="section-title"><i class="ph ph-storefront"></i> Store Details Form</h2>
+                        <form id="vendorStorefrontForm">
+                            <div class="form-row">
+                                <div class="form-group" style="flex: 2;"><label>Shop Name</label><input type="text" id="vStoreName" required placeholder="e.g. Adyanta Dairy Delight"></div>
+                                <div class="form-group" style="flex: 1;"><label>Shop Category</label>
+                                    <select id="vStoreCategory" class="admin-input" required style="width: 100%;">
+                                        <option value="Fresh Vegetables & Fruits">Fresh Vegetables & Fruits</option>
+                                        <option value="Organic Farm Produce">Organic Farm Produce</option>
+                                        <option value="Dairy & Bakery">Dairy & Bakery</option>
+                                        <option value="Gourmet & Snacks">Gourmet & Snacks</option>
+                                        <option value="General Store">General Store</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group"><label>Description</label><textarea id="vStoreDesc" style="width: 100%; height: 80px; padding: 0.75rem; border-radius: 8px; border: 1px solid #CBD5E1;" placeholder="Provide a short description of what your shop offers."></textarea></div>
+                            <div class="form-row">
+                                <div class="form-group"><label>Logo URL (150x150)</label><input type="text" id="vStoreLogo" placeholder="https://..."></div>
+                                <div class="form-group"><label>Header Banner URL (1200x500)</label><input type="text" id="vStoreBanner" placeholder="https://..."></div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group"><label>Operating Timings</label><input type="text" id="vStoreTimings" placeholder="e.g. 9:00 AM - 10:00 PM"></div>
+                                <div class="form-group"><label>Contact Phone Number</label><input type="text" id="vStorePhone" placeholder="e.g. +91 9876543210" required></div>
+                            </div>
+                            <div class="form-group" id="kycDocContainer"><label>KYC Document URL / Reference (ID Card, Trade License, FSSAI)</label><input type="text" id="vStoreKyc" placeholder="Upload or enter text document reference number"></div>
+                            
+                            <button type="submit" class="btn-submit" id="vStoreSubmitBtn" style="background: #10B981; font-weight: 700;">Save Storefront Customizer</button>
+                        </form>
+                    </div>
+                </section>
+
+                <!-- Vendor: Wallet & Payout Dashboard -->
+                <section id="view-vendor-wallet" class="content-section">
+                    <div class="section-header-row">
+                        <h1 class="page-title">Wallet & Bank Payouts</h1>
+                    </div>
+
+                    <!-- Earnings Cards -->
+                    <div class="stats-grid" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+                        <div class="stat-card" style="background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid #E2E8F0; display: flex; align-items: center; gap: 1.25rem; border-left: 6px solid #10B981;">
+                            <div style="background: #E6FDF0; color: #10B981; width: 48px; height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                                <i class="ph ph-currency-circle-dollar"></i>
+                            </div>
+                            <div>
+                                <p style="font-size: 0.85rem; color: #64748B; font-weight: 600;">Net Wallet Balance</p>
+                                <h3 id="vendorWalletBal" style="font-size: 1.5rem; color: #0F172A;">₹0</h3>
+                            </div>
+                        </div>
+                        <div class="stat-card" style="background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid #E2E8F0; display: flex; align-items: center; gap: 1.25rem; border-left: 6px solid #4F46E5;">
+                            <div style="background: #EEF2FF; color: #4F46E5; width: 48px; height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                                <i class="ph ph-shopping-bag"></i>
+                            </div>
+                            <div>
+                                <p style="font-size: 0.85rem; color: #64748B; font-weight: 600;">Gross Store Sales</p>
+                                <h3 id="vendorWalletGross" style="font-size: 1.5rem; color: #0F172A;">₹0</h3>
+                            </div>
+                        </div>
+                        <div class="stat-card" style="background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid #E2E8F0; display: flex; align-items: center; gap: 1.25rem; border-left: 6px solid #EF4444;">
+                            <div style="background: #FDF2F2; color: #EF4444; width: 48px; height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                                <i class="ph ph-percent"></i>
+                            </div>
+                            <div>
+                                <p style="font-size: 0.85rem; color: #64748B; font-weight: 600;">Platform Commission (5%)</p>
+                                <h3 id="vendorWalletComm" style="font-size: 1.5rem; color: #0F172A;">₹0</h3>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem;">
+                        <div class="form-card" style="max-width: none;">
+                            <h2 style="margin-bottom: 1.5rem;"><i class="ph ph-bank"></i> Request Bank Settlement</h2>
+                            <form id="vendorPayoutRequestForm">
+                                <div class="form-row">
+                                    <div class="form-group"><label>Bank Name</label><input type="text" placeholder="State Bank of India" required id="payoutBankName"></div>
+                                    <div class="form-group"><label>Account Number</label><input type="text" placeholder="30849204921" required id="payoutAccNumber"></div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group"><label>IFSC Code</label><input type="text" placeholder="SBIN0004920" required id="payoutIfsc"></div>
+                                    <div class="form-group"><label>Withdrawal Amount (₹)</label><input type="number" id="payoutAmt" required placeholder="Maximum Wallet Balance"></div>
+                                </div>
+                                <button type="submit" class="btn-submit" style="background: #4F46E5;">Initiate Direct Wallet Payout</button>
+                            </form>
+                        </div>
+                        <div class="form-card" style="background: #F8FAFC; border: 1px dashed #CBD5E1;">
+                            <h2 style="margin-bottom: 1rem;"><i class="ph ph-info"></i> Wallet Payout Policy</h2>
+                            <p style="font-size: 0.85rem; color: #64748B; line-height: 1.6; margin-bottom: 1rem;">All store credit earnings from credit card, wallets, or COD orders are allocated instantly into your vendor wallet.</p>
+                            <p style="font-size: 0.85rem; color: #64748B; line-height: 1.6;">Flat commission rate: <strong>5% flat platform fee</strong> per sale. Settlements are deposited in 24 hours.</p>
+                        </div>
+                    </div>
+                </section>
         </main>
     </div>
 
@@ -1201,7 +1591,13 @@
                         </select></div>
                 </div>
                 <div class="form-group"><label>Minimum Purchase Amount (₹)</label><input type="number" id="couponMinAmt"
-                        value="0"></div><label>Expiry</label><input type="date" id="couponExpiry">
+                        value="0"></div>
+                <div class="form-group" id="couponShopTargetGroup"><label>Target Store / Shop</label>
+                    <select id="couponShopId" style="width:100%; padding:0.6rem; border-radius:8px; border:1px solid #CBD5E1; font-weight:600; cursor:pointer;">
+                        <option value="">Global Marketplace Coupon (All Shops)</option>
+                    </select>
+                </div>
+                <label>Expiry</label><input type="date" id="couponExpiry">
                 <div class="form-group"
                     style="display:flex; align-items:center; gap:0.5rem; margin-top:1rem; padding:0.5rem; background:#F8FAFC; border-radius:8px;">
                     <input type="checkbox" id="couponIsOneTime" style="width:18px; height:18px;"><label

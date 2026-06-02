@@ -19,11 +19,13 @@ function verifyPassword(password, storedHash) {
 
 // Basic Auth Endpoints
 router.post('/register', async (req, res) => {
-    const { full_name, phone, password, security_q1, security_a1, security_q2, security_a2 } = req.body;
+    const { full_name, phone, password, security_q1, security_a1, security_q2, security_a2, role } = req.body;
     
     if (!full_name || !phone || !password || !security_q1 || !security_a1 || !security_q2 || !security_a2) {
         return res.status(400).json({ error: "All fields including security questions are required." });
     }
+
+    const assignedRole = role === 'vendor' ? 'vendor' : 'customer';
 
     // 1. Sign up with Supabase Auth
     // Use phone-style email as a proxy for Supabase Auth
@@ -34,7 +36,8 @@ router.post('/register', async (req, res) => {
         options: {
             data: {
                 full_name,
-                phone
+                phone,
+                role: assignedRole
             }
         }
     });
@@ -50,6 +53,7 @@ router.post('/register', async (req, res) => {
         username: phone, 
         full_name, 
         phone,
+        role: assignedRole,
         security_q1, 
         security_a1: security_a1.toLowerCase(),
         security_q2, 
@@ -65,11 +69,13 @@ router.post('/register', async (req, res) => {
     res.cookie('user_id', finalUser.id, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
     res.cookie('username', phone, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
     res.cookie('full_name', finalUser.full_name, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
+    res.cookie('role', finalUser.role || assignedRole, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
     
     res.status(201).json({ 
         id: finalUser.id, 
         username: phone, 
         full_name: finalUser.full_name, 
+        role: finalUser.role || assignedRole,
         token: authData.session?.access_token || finalUser.id 
     });
 });
@@ -206,6 +212,7 @@ router.post('/login', async (req, res) => {
                 res.cookie('user_id', userProfile.id, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
                 res.cookie('username', userProfile.username, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
                 res.cookie('full_name', userProfile.full_name, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
+                res.cookie('role', userProfile.role || 'customer', { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
                 
                 return res.json({ 
                     message: "Login successful", 
@@ -213,8 +220,9 @@ router.post('/login', async (req, res) => {
                     full_name: userProfile.full_name, 
                     language: userProfile.language,
                     user_id: userProfile.id,
+                    role: userProfile.role || 'customer',
                     token: authData.session.access_token,
-                    is_admin: false
+                    is_admin: userProfile.role === 'super_admin'
                 });
             }
         }

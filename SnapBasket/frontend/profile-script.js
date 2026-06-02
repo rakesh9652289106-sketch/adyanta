@@ -1,4 +1,6 @@
-const API_BASE = import.meta.env.VITE_API_URL || 'https://adyanta-commerce.onrender.com';
+const API_BASE = (typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) 
+    ? import.meta.env.VITE_API_URL 
+    : (typeof window !== 'undefined' && window.location && window.location.port === '5173' ? 'http://localhost:3000' : (typeof window !== 'undefined' && window.location ? window.location.origin : 'https://adyanta-commerce.onrender.com'));
 
 // Global Exports for HTML Event Handlers
 window.reorder = (itemsJson) => {
@@ -98,6 +100,12 @@ async function fetchOverview() {
         document.getElementById('profileAvatarInitial').innerText = (profile.full_name || profile.username).charAt(0).toUpperCase();
         
         document.getElementById('statOrdersCount').innerText = orders.length || 0;
+        if (document.getElementById('statCoinsCount')) {
+            document.getElementById('statCoinsCount').innerText = profile.coins || 0;
+        }
+        if (document.getElementById('statCoinsWorth')) {
+            document.getElementById('statCoinsWorth').innerText = '₹' + Math.floor((profile.coins || 0) / 10);
+        }
         document.getElementById('statWishlistCount').innerText = wishlist.length || 0;
         document.getElementById('statAddressCount').innerText = addresses.length || 0;
 
@@ -193,6 +201,17 @@ async function fetchOrders() {
                             <span>₹${i.price * i.quantity}</span>
                         </div>`).join('')}
                     </div>
+
+                    <!-- Loyalty Program Coins -->
+                    ${(order.coins_earned > 0 || order.coins_used > 0) ? `
+                        <div style="display:flex; justify-content:space-between; font-size:0.85rem; padding: 0.5rem; background: var(--bg-main); border-radius: 6px; margin-bottom: 1rem; border: 1px solid var(--border);">
+                            <span style="color: var(--text-soft); font-weight: 500;">Loyalty Coins</span>
+                            <div style="display: flex; gap: 1rem;">
+                                ${order.coins_earned > 0 ? `<span style="color: #10B981; font-weight: 600;"><i class="ph ph-plus-circle"></i> +${order.coins_earned} Earned</span>` : ''}
+                                ${order.coins_used > 0 ? `<span style="color: #EF4444; font-weight: 600;"><i class="ph ph-minus-circle"></i> -${order.coins_used} Redeemed</span>` : ''}
+                            </div>
+                        </div>
+                    ` : ''}
 
                     <!-- Visual Timeline -->
                     <div class="order-timeline">

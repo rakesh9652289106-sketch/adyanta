@@ -1,4 +1,6 @@
-const API_BASE = import.meta.env.VITE_API_URL || 'https://adyanta-commerce.onrender.com';
+const API_BASE = (typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) 
+    ? import.meta.env.VITE_API_URL 
+    : (typeof window !== 'undefined' && window.location && window.location.port === '5173' ? 'http://localhost:3000' : (typeof window !== 'undefined' && window.location ? window.location.origin : 'https://adyanta-commerce.onrender.com'));
 
 // Supabase Client Initialization (Frontend)
 const SUPABASE_URL = 'https://ghbecipylczrebqcmrvm.supabase.co';
@@ -1140,6 +1142,78 @@ function setupAuth() {
     let recoveryQuestions = [];
     let currentRecoveryStep = 0; // 0: Initiate, 1: Q1, 2: Q2, 3: Reset
     let userRecoveryAnswers = [];
+    let currentLoginRole = 'user';
+
+    if (closeAuthBtn) closeAuthBtn.style.display = 'block';
+
+    // Role switcher logic
+    window.switchLoginRole = function(role) {
+        currentLoginRole = role;
+        const roleBtnUser = document.getElementById('roleBtnUser');
+        const roleBtnAdmin = document.getElementById('roleBtnAdmin');
+        const authTitle = document.getElementById('authTitle');
+        const authDesc = document.getElementById('authDesc');
+        const googleAuthBtn = document.getElementById('googleAuthBtn');
+        const toggleAuthMode = document.getElementById('toggleAuthMode');
+        const usernameInput = document.getElementById('usernameInput');
+        const fullNameInput = document.getElementById('fullNameInput');
+        const passwordInput = document.getElementById('passwordInput');
+        const authErrorMsg = document.getElementById('authErrorMsg');
+
+        // Unlink tabs by wiping input values and errors when switching
+        if (fullNameInput) fullNameInput.value = '';
+        if (usernameInput) usernameInput.value = '';
+        if (passwordInput) passwordInput.value = '';
+        if (authErrorMsg) {
+            authErrorMsg.style.display = 'none';
+            authErrorMsg.innerText = '';
+        }
+
+        if (role === 'user') {
+            if (roleBtnUser) {
+                roleBtnUser.style.background = 'var(--primary)';
+                roleBtnUser.style.color = 'white';
+                roleBtnUser.style.fontWeight = '700';
+            }
+            if (roleBtnAdmin) {
+                roleBtnAdmin.style.background = 'transparent';
+                roleBtnAdmin.style.color = '#64748B';
+                roleBtnAdmin.style.fontWeight = '600';
+            }
+            if (authTitle) authTitle.innerText = "Customer Sign In";
+            if (authDesc) authDesc.innerText = "Sign in to your ADYANTA customer account";
+            if (googleAuthBtn) googleAuthBtn.style.display = 'flex';
+            if (toggleAuthMode) toggleAuthMode.style.display = 'inline-block';
+            if (usernameInput) usernameInput.placeholder = "10-digit Mobile Number";
+        } else {
+            if (roleBtnUser) {
+                roleBtnUser.style.background = 'transparent';
+                roleBtnUser.style.color = '#64748B';
+                roleBtnUser.style.fontWeight = '600';
+            }
+            if (roleBtnAdmin) {
+                roleBtnAdmin.style.background = 'var(--primary)';
+                roleBtnAdmin.style.color = 'white';
+                roleBtnAdmin.style.fontWeight = '700';
+            }
+            if (authTitle) authTitle.innerText = "Portal Authentication";
+            if (authDesc) authDesc.innerText = "Admin or Vendor credentials required";
+            if (googleAuthBtn) googleAuthBtn.style.display = 'none';
+            if (toggleAuthMode) toggleAuthMode.style.display = 'none';
+            if (usernameInput) usernameInput.placeholder = "10-digit Mobile Number";
+        }
+    };
+
+    // Pre-select user login by default
+    window.switchLoginRole('user');
+
+    // Strict numeric restriction and 10-digit limit on Mobile Number field for both Customer and Admin/Vendor roles
+    usernameInput?.addEventListener('input', (e) => {
+        e.target.value = e.target.value.replace(/[^0-9]/g, '');
+        if (e.target.value.length > 10) {
+            e.target.value = e.target.value.slice(0, 10);
+        }
+    });
 
     // Expose to window for global access
     window.openAuthModal = function(mode = 'login') {
@@ -1186,7 +1260,9 @@ function setupAuth() {
         }
     });
 
-    closeAuthBtn?.addEventListener('click', () => authModal.classList.remove('active'));
+    closeAuthBtn?.addEventListener('click', () => {
+        authModal.classList.remove('active');
+    });
 
     toggleAuthMode?.addEventListener('click', (e) => {
         e.preventDefault();
@@ -1261,14 +1337,20 @@ function setupAuth() {
             });
             const data = await res.json();
             if (res.ok) {
-                if (data.is_admin) {
-                    Toast.show("Admin authenticated! Redirecting to panel...", "success");
-                    authModal.classList.remove('active');
-                    setTimeout(() => window.location.href = 'admin.html', 1000);
-                    return;
+                // Enforce separate login entrances
+                const userRole = data.role || 'customer';
+                if (currentLoginRole === 'user') {
+                    if (userRole === 'vendor' || userRole === 'super_admin' || data.is_admin) {
+                        showAuthError("Access Denied: Please use the Admin/Vendor Login tab.");
+                        return;
+                    }
+                } else {
+                    if (userRole === 'customer' && !data.is_admin) {
+                        showAuthError("Access Denied: Customer accounts cannot access the admin portal. Please use the Customer Login tab.");
+                        return;
+                    }
                 }
 
-                // Return data contains .token which is the user ID
                 const actualId = data.user_id || data.token || data.id;
                 if (actualId) localStorage.setItem('token', actualId);
                 
@@ -1276,6 +1358,14 @@ function setupAuth() {
                 localStorage.setItem('user_full_name', data.full_name || name);
                 localStorage.setItem('user_username', data.username || user);
                 localStorage.setItem('user_id', actualId);
+                localStorage.setItem('user_role', data.role || 'customer');
+
+                if (data.role === 'super_admin' || data.role === 'vendor' || data.is_admin) {
+                    Toast.show(`${data.role === 'super_admin' ? 'Super Admin' : 'Vendor'} authenticated! Redirecting to panel...`, "success");
+                    authModal.classList.remove('active');
+                    setTimeout(() => window.location.href = 'admin.html', 1000);
+                    return;
+                }
 
                 Toast.show(`Welcome back, ${data.full_name || data.username}!`, "success");
                 authModal.classList.remove('active');
@@ -1415,6 +1505,11 @@ function setupAuth() {
         regSecurityFields.style.display = 'none';
         recoverySection.style.display = 'none';
         passwordInput.style.display = 'block';
+        
+        const tabs = document.querySelector('.auth-role-tabs');
+        if (tabs) {
+            tabs.style.display = (currMode === 'login') ? 'flex' : 'none';
+        }
         
         // Ensure password fields are cleared when switching modes or opening to prevent admin pre-fills
         passwordInput.value = '';
@@ -1725,6 +1820,8 @@ async function setupCartInteractions() {
         useCoinsToggle.onchange = () => {
             const info = document.getElementById('coinDiscountInfo');
             if (info) info.style.display = useCoinsToggle.checked ? 'block' : 'none';
+            if (typeof updateCheckoutTotals === 'function') updateCheckoutTotals();
+            if (typeof updateCoinsCheckoutWidget === 'function') updateCoinsCheckoutWidget();
             updateCartSidebar();
         };
     }
@@ -1919,6 +2016,16 @@ async function setupCartInteractions() {
             // Show Delivery Step first
             showCheckoutStep('delivery');
             if (checkoutModal) checkoutModal.classList.add('active');
+            
+            // Load latest coins balance at checkout start
+            fetch(API_BASE + '/api/user/profile', { credentials: 'include' })
+                .then(r => r.json())
+                .then(user => {
+                    window.userCoins = user.coins || 0;
+                    if (typeof updateCoinsCheckoutWidget === 'function') updateCoinsCheckoutWidget();
+                    updateCheckoutTotals();
+                }).catch(e => console.error("Error updating coins:", e));
+
             updateCheckoutTotals();
             fetchCouponsForCheckout();
 
@@ -2035,7 +2142,8 @@ async function setupCartInteractions() {
                 paymentMethod: selectedPaymentMethod,
                 items: cart,
                 couponId: window.appliedCoupon ? window.appliedCoupon.id : null,
-                deliveryType: window.selectedDeliveryType
+                deliveryType: window.selectedDeliveryType,
+                useCoins: document.getElementById('useCoinsToggle')?.checked || false
             };
 
             try {
@@ -2069,6 +2177,30 @@ async function setupCartInteractions() {
                 }
                 if (document.getElementById('successMethod')) document.getElementById('successMethod').innerText = 'Cash on Delivery';
                 if (document.getElementById('successTotalAmount')) document.getElementById('successTotalAmount').innerText = document.getElementById('modalFinalTotal').innerText;
+
+                if (data.coinsUsed > 0) {
+                    const row = document.getElementById('successCoinsUsedRow');
+                    const txt = document.getElementById('successCoinsUsedText');
+                    if (row && txt) {
+                        row.style.display = 'flex';
+                        txt.innerText = `-${data.coinsUsed} Coins (Saved ₹${data.coinDiscount})`;
+                    }
+                } else {
+                    const row = document.getElementById('successCoinsUsedRow');
+                    if (row) row.style.display = 'none';
+                }
+
+                if (data.coinsEarned > 0) {
+                    const row = document.getElementById('successCoinsEarnedRow');
+                    const txt = document.getElementById('successCoinsEarnedText');
+                    if (row && txt) {
+                        row.style.display = 'flex';
+                        txt.innerText = `+${data.coinsEarned} Coins`;
+                    }
+                } else {
+                    const row = document.getElementById('successCoinsEarnedRow');
+                    if (row) row.style.display = 'none';
+                }
 
             } catch(e) { 
                 console.error("Order error:", e); 
@@ -2894,16 +3026,27 @@ function updateAuthUI(name) {
 
     if (userFullName && userFullName !== 'undefined' && userFullName !== 'null') {
         const displayName = decodeURIComponent(userFullName).toUpperCase();
+        
+        // Fetch and load user coins balance
+        fetch(API_BASE + '/api/user/profile', { credentials: 'include' })
+            .then(r => r.json())
+            .then(user => {
+                window.userCoins = user.coins || 0;
+                console.log("Fetched user coins balance:", window.userCoins);
+                updateCoinsCheckoutWidget();
+            })
+            .catch(err => console.error("Error loading user coins:", err));
+        
         const firstName = displayName.split(' ')[0];
         
         const html = `
             <div class="user-profile-wrapper">
-                <div class="premium-user-badge" id="userMenuTrigger" style="display: flex; align-items: center; gap: 0.8rem; background: rgba(255,255,255,0.8); padding: 6px 14px; border-radius: 30px; border: 1.5px solid var(--primary); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.08);">
-                    <div class="avatar-circle" style="width: 28px; height: 28px; background: linear-gradient(135deg, var(--primary), var(--primary-hover)); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1rem; box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);">
+                <div class="premium-user-badge" id="userMenuTrigger">
+                    <div class="avatar-circle">
                         <i class="ph ph-user"></i>
                     </div>
-                    <span style="font-family: 'Outfit', sans-serif; font-weight: 700; color: var(--primary); font-size: 0.9rem; letter-spacing: 0.5px;">HI, ${displayName}</span>
-                    <i class="ph ph-caret-down" style="font-size: 0.8rem; color: var(--primary);"></i>
+                    <span>HI, ${displayName}</span>
+                    <i class="ph ph-caret-down"></i>
                 </div>
 
                 <div class="user-dropdown" id="userDropdownMenu">
@@ -2921,12 +3064,12 @@ function updateAuthUI(name) {
         if (mobileAuthContent) {
             mobileAuthContent.innerHTML = `
                 <div class="user-profile-wrapper" style="position: relative;">
-                    <div class="premium-user-badge" id="mobileUserMenuTrigger" style="display: flex; align-items: center; gap: 0.6rem; background: rgba(255,255,255,0.8); padding: 4px 10px; border-radius: 30px; border: 1px solid var(--primary); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.08);">
-                        <div class="avatar-circle" style="width: 24px; height: 24px; background: linear-gradient(135deg, var(--primary), var(--primary-hover)); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);">
+                    <div class="premium-user-badge" id="mobileUserMenuTrigger">
+                        <div class="avatar-circle">
                             <i class="ph ph-user"></i>
                         </div>
-                        <span style="font-family: 'Outfit', sans-serif; font-weight: 700; color: var(--primary); font-size: 0.75rem; letter-spacing: 0.5px;">HI, ${firstName}</span>
-                        <i class="ph ph-caret-down" style="font-size: 0.7rem; color: var(--primary);"></i>
+                        <span>HI, ${firstName}</span>
+                        <i class="ph ph-caret-down"></i>
                     </div>
 
                     <div class="user-dropdown" id="mobileUserDropdownMenu">
@@ -2976,6 +3119,54 @@ function updateAuthUI(name) {
         }
     }
 }
+
+function updateCoinsCheckoutWidget() {
+    const card = document.getElementById('checkoutCoinsRedemptionCard');
+    const availableText = document.getElementById('checkoutCoinsAvailableText');
+    const toggle = document.getElementById('useCoinsToggle');
+    const discountValEl = document.getElementById('checkoutCoinDiscountAmountVal');
+    
+    if (!card || !availableText) return;
+    
+    if (!window.userCoins || window.userCoins === 0) {
+        card.style.display = 'none';
+        return;
+    }
+    
+    // Check settings first to verify system is active
+    fetch(API_BASE + '/api/settings')
+        .then(r => r.json())
+        .then(settings => {
+            if (settings && settings.coins_system_active === 1 && window.userCoins > 0) {
+                card.style.display = 'block';
+                const rate = settings.coin_value_per_rupee || 10;
+                const coinsWorth = Math.floor(window.userCoins / rate);
+                availableText.innerText = `Available: ${window.userCoins} Coins (Worth ₹${coinsWorth})`;
+                
+                // Calculate discount limit based on the remaining final total (after coupon discount)
+                const parsePrice = (p) => typeof p === 'string' ? parseFloat(p.replace(/[^0-9.]/g, '')) : Number(p);
+                const subtotal = cart.reduce((sum, item) => sum + (parsePrice(item.price) * item.quantity), 0);
+                let currentTotal = subtotal;
+                
+                if (window.appliedCoupon) {
+                    let discount = window.appliedCoupon.discount_value;
+                    if (window.appliedCoupon.discount_type === 'percent') {
+                        const percent = window.appliedCoupon.original_value || window.appliedCoupon.discount_value;
+                        discount = Math.round(subtotal * (percent / 100));
+                    }
+                    discount = Math.min(discount, subtotal);
+                    currentTotal -= discount;
+                }
+                
+                const actualCoinDiscount = Math.min(coinsWorth, currentTotal);
+                if (discountValEl) discountValEl.innerText = `₹${actualCoinDiscount}`;
+            } else {
+                card.style.display = 'none';
+            }
+        })
+        .catch(err => console.error("Failed to update coins widget:", err));
+}
+
 // Initialize Auth UI on load
 updateAuthUI();
 
@@ -3500,3 +3691,354 @@ function setupGoogleAuth() {
         }
     });
 }
+
+// ==========================================================================
+// ADYANTA ECOSYSTEM: MULTI-VENDOR, FEATURE FLAGS, AND AI CHATBOT SYSTEM
+// ==========================================================================
+
+document.addEventListener('DOMContentLoaded', () => {
+    // 1. Initial platform check
+    initMarketplaceEcosystem();
+    setupAIChatbot();
+});
+
+let platformFeatureFlags = {};
+let allShopsList = [];
+
+async function initMarketplaceEcosystem() {
+    console.log("🚀 Booting ADYANTA Marketplace Ecosystem...");
+    
+    // A. Fetch active Feature Flags and apply toggles
+    try {
+        const res = await fetch('/api/features');
+        if (res.ok) {
+            platformFeatureFlags = await res.json();
+            applyEcosystemFeatureFlags(platformFeatureFlags);
+        }
+    } catch(e) {
+        console.warn("Failed to load feature flags:", e.message);
+    }
+
+    // B. Fetch and Render active Vendor Shops
+    try {
+        const res = await fetch('/api/shops');
+        if (res.ok) {
+            allShopsList = await res.json();
+            renderEcosystemShops(allShopsList);
+        }
+    } catch(e) {
+        console.warn("Failed to load marketplace shops:", e.message);
+        document.getElementById('activeShopsCount').innerText = "0 stores active";
+    }
+
+    // C. Bind Storefront Exit button
+    const exitBtn = document.getElementById('exitStorefrontBtn');
+    if (exitBtn) {
+        exitBtn.addEventListener('click', exitEcosystemStorefront);
+    }
+}
+
+// Apply Super Admin switchboard feature flags
+function applyEcosystemFeatureFlags(flags) {
+    console.log("Applying platform feature flags:", flags);
+    
+    // AI Chatbot
+    if (flags.ai_chatbot === false) {
+        const bubble = document.getElementById('aiChatbotBubble');
+        const widget = document.getElementById('aiChatbotWidget');
+        if (bubble) bubble.style.display = 'none';
+        if (widget) widget.style.display = 'none';
+    } else {
+        const bubble = document.getElementById('aiChatbotBubble');
+        if (bubble) bubble.style.display = 'flex';
+    }
+
+    // Reviews & Ratings
+    if (flags.reviews_ratings === false) {
+        // Hide review sections
+        const reviewSections = document.querySelectorAll('.product-rating, .reviews-section, .rating-summary');
+        reviewSections.forEach(el => el.style.display = 'none');
+    }
+
+    // COD Payment option
+    if (flags.cod_payment === false) {
+        // We will hide COD radio button in checkout
+        const codOption = document.querySelector('input[value="cash"]')?.closest('label');
+        if (codOption) codOption.style.display = 'none';
+    }
+}
+
+// Render available shops on customer storefront
+function renderEcosystemShops(shops) {
+    const scrollContainer = document.getElementById('shopsScroll');
+    const shopsCountText = document.getElementById('activeShopsCount');
+    if (!scrollContainer) return;
+
+    if (!shops || shops.length === 0) {
+        scrollContainer.innerHTML = `
+            <div style="padding: 1.5rem; text-align: center; color: var(--text-soft); width: 100%; font-weight: 500;">
+                <i class="ph ph-storefront" style="font-size: 2.5rem; color: var(--text-muted); display: block; margin-bottom: 0.5rem;"></i>
+                No active vendor stores available at this moment.
+            </div>
+        `;
+        shopsCountText.innerText = "0 stores active";
+        return;
+    }
+
+    shopsCountText.innerText = `${shops.length} stores active`;
+
+    scrollContainer.innerHTML = shops.map(shop => `
+        <div class="shop-ecosystem-card" onclick="enterEcosystemStorefront(${shop.id})" style="flex: 0 0 300px; background: var(--card-bg); border: 1.5px solid var(--border); border-radius: var(--radius-md); padding: 1.25rem; cursor: pointer; transition: all 0.3s ease; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 0.75rem; position: relative; overflow: hidden;">
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <img src="${shop.logo || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=100'}" alt="${shop.name}" style="width: 50px; height: 50px; border-radius: 50%; border: 1px solid var(--border); object-fit: cover;">
+                <div style="flex: 1;">
+                    <h4 style="margin: 0; font-family: 'Outfit', sans-serif; font-size: 1.1rem; font-weight: 700; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;">${shop.name}</h4>
+                    <span style="font-size: 0.75rem; background: var(--primary-light); color: var(--primary); padding: 2px 8px; border-radius: 12px; font-weight: 700;">${shop.category || 'Grocery'}</span>
+                </div>
+            </div>
+            <p style="margin: 0; font-size: 0.8rem; color: var(--text-soft); line-height: 1.4; height: 38px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">${shop.description || 'Premium multi-vendor shop.'}</p>
+            <div style="border-top: 1px solid var(--border); padding-top: 0.75rem; display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; color: var(--text-soft); font-weight: 600;">
+                <span><i class="ph-fill ph-star" style="color: #F1C40F;"></i> ${shop.rating || '4.5'}</span>
+                <span><i class="ph ph-clock"></i> ${shop.delivery_time || '15-30 mins'}</span>
+            </div>
+            <div style="position: absolute; right: 12px; top: 12px; color: var(--primary); font-size: 1.2rem; opacity: 0.1; transition: opacity 0.3s;">
+                <i class="ph-bold ph-arrow-right"></i>
+            </div>
+        </div>
+    `).join('');
+
+    // Add card hover styles dynamically
+    const cards = document.querySelectorAll('.shop-ecosystem-card');
+    cards.forEach(card => {
+        card.addEventListener('mouseenter', () => {
+            card.style.transform = 'translateY(-4px)';
+            card.style.borderColor = 'var(--primary)';
+            card.querySelector('.ph-bold')?.parentElement.style.setProperty('opacity', '1');
+        });
+        card.addEventListener('mouseleave', () => {
+            card.style.transform = 'none';
+            card.style.borderColor = 'var(--border)';
+            card.querySelector('.ph-bold')?.parentElement.style.setProperty('opacity', '0.1');
+        });
+    });
+}
+
+// Customer enters a specific vendor storefront
+window.enterEcosystemStorefront = async function(shopId) {
+    console.log(`Entering Storefront Context: Shop ${shopId}`);
+    try {
+        const res = await fetch(`/api/shops/${shopId}`);
+        if (!res.ok) throw new Error("Failed to load storefront details");
+        const { shop, products } = await res.json();
+
+        // Save active shop in localStorage for checkout association
+        localStorage.setItem('active_shop_id', shopId);
+
+        // A. Toggle View Elements
+        document.getElementById('shopsBrowserSection').style.display = 'none';
+        const promoSection = document.querySelector('.promo-slider-section');
+        if (promoSection) promoSection.style.display = 'none';
+
+        // B. Populate storefront header banner
+        const banner = document.getElementById('storefrontBanner');
+        document.getElementById('storeBannerLogo').src = shop.logo || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=100';
+        document.getElementById('storeBannerName').innerText = shop.name;
+        document.getElementById('storeBannerDesc').innerText = shop.description || 'Welcome to our shop!';
+        document.getElementById('storeBannerTimings').innerText = shop.timings || '9:00 AM - 10:00 PM';
+        document.getElementById('storeBannerRating').innerText = shop.rating || '4.5';
+        document.getElementById('storeBannerDelivery').innerText = `${shop.delivery_time || '15-30 mins'} delivery`;
+        banner.style.display = 'block';
+
+        // Scroll to banner nicely
+        banner.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        // C. Render products SPECIFIC only to this shop!
+        renderStorefrontProducts(products, shop.name);
+    } catch(e) {
+        console.error("Error entering storefront:", e.message);
+        Toast.show("Storefront is temporarily unavailable.", "error");
+    }
+}
+
+// Exit custom storefront and restore default view
+window.exitEcosystemStorefront = function() {
+    console.log("Exiting Storefront Context back to General Marketplace");
+    localStorage.removeItem('active_shop_id');
+
+    // Restore UI headers
+    document.getElementById('storefrontBanner').style.display = 'none';
+    document.getElementById('shopsBrowserSection').style.display = 'block';
+    const promoSection = document.querySelector('.promo-slider-section');
+    if (promoSection) promoSection.style.display = 'block';
+
+    // Restore full default catalog products
+    if (typeof fetchProducts === 'function') {
+        fetchProducts(); // Calls the default catalog loading function in script.js
+    }
+}
+
+// Render shop specific products inside storefront
+function renderStorefrontProducts(products, storeName) {
+    // In our storefront, we inject items inside `#productsGrid` (or equivalent catalog container).
+    // Let's find the products list container in script.js (typically `#productsList` or `#trendingProducts`).
+    const productsContainer = document.getElementById('trendingProducts') || document.querySelector('.products-grid');
+    if (!productsContainer) return;
+
+    // Change title dynamically
+    const sectionTitle = productsContainer.closest('section')?.querySelector('.section-title');
+    if (sectionTitle) {
+        sectionTitle.innerHTML = `<i class="ph-bold ph-storefront" style="color: var(--primary);"></i> Shopping from: ${storeName}`;
+    }
+
+    if (!products || products.length === 0) {
+        productsContainer.innerHTML = `
+            <div style="grid-column: 1 / -1; padding: 3rem; text-align: center; color: var(--text-soft); font-weight: 600;">
+                <i class="ph ph-basket" style="font-size: 3rem; color: var(--text-muted); display: block; margin-bottom: 0.5rem;"></i>
+                This shop catalog has no active items available.
+            </div>
+        `;
+        return;
+    }
+
+    // Check if original render function exists, otherwise use a custom fallback
+    if (typeof renderProducts === 'function') {
+        renderProducts(products, productsContainer);
+    } else {
+        // Fallback product card generator matching indexRoute.js schema
+        productsContainer.innerHTML = products.map(p => `
+            <div class="product-card" style="background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem; position: relative; transition: all 0.3s ease;">
+                <div style="position: absolute; top: 10px; right: 10px; background: #EF4444; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: 700;">${p.discount || '0% OFF'}</div>
+                <img src="${p.imgurl}" alt="${p.name}" style="width: 100%; height: 120px; object-fit: contain; margin-bottom: 0.75rem;">
+                <h5 style="margin: 0 0 0.25rem 0; font-size: 0.95rem; font-weight: 700; color: var(--text-main);">${p.name}</h5>
+                <span style="font-size: 0.75rem; color: var(--text-soft); font-weight: 600;">${p.weight || '1 unit'}</span>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.75rem;">
+                    <div>
+                        <span style="font-size: 1.1rem; font-weight: 800; color: var(--primary);">₹${p.price}</span>
+                        <span style="font-size: 0.8rem; text-decoration: line-through; color: var(--text-muted); margin-left: 0.25rem;">₹${p.originalprice}</span>
+                    </div>
+                    <button class="add-to-cart-btn" onclick="addToCartEcosystem(${p.id}, '${p.name}', ${p.price}, '${p.imgurl}')" style="background: var(--primary-light); color: var(--primary); border: none; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s;"><i class="ph-bold ph-plus"></i></button>
+                </div>
+            </div>
+        `).join('');
+    }
+}
+
+// Cart adding extension supporting vendor attribution
+window.addToCartEcosystem = function(id, name, price, imgurl) {
+    if (typeof addToCart === 'function') {
+        addToCart(id, name, price, imgurl);
+    } else {
+        Toast.show(`${name} added to cart!`, "success");
+    }
+}
+
+
+// ==========================================================================
+// 4. AI CHATBOT INTERACTIVE SYSTEM
+// ==========================================================================
+
+function setupAIChatbot() {
+    const bubble = document.getElementById('aiChatbotBubble');
+    const widget = document.getElementById('aiChatbotWidget');
+    const closeBtn = document.getElementById('closeChatbotBtn');
+    const sendBtn = document.getElementById('sendChatbotMsgBtn');
+    const input = document.getElementById('chatbotInput');
+    const messages = document.getElementById('chatbotMessages');
+
+    if (!bubble || !widget) return;
+
+    // Toggle Chat visibility
+    bubble.addEventListener('click', () => {
+        const isHidden = widget.style.display === 'none' || !widget.style.display;
+        widget.style.display = isHidden ? 'flex' : 'none';
+        if (isHidden) {
+            input.focus();
+            scrollToBottom(messages);
+        }
+    });
+
+    closeBtn.addEventListener('click', () => {
+        widget.style.display = 'none';
+    });
+
+    // Send Message
+    sendBtn.addEventListener('click', handleChatbotSend);
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') handleChatbotSend();
+    });
+
+    // Handle suggested clicks
+    window.sendChatbotSuggestion = function(text) {
+        input.value = text;
+        handleChatbotSend();
+    }
+}
+
+function scrollToBottom(container) {
+    container.scrollTop = container.scrollHeight;
+}
+
+function handleChatbotSend() {
+    const input = document.getElementById('chatbotInput');
+    const messages = document.getElementById('chatbotMessages');
+    if (!input || !input.value.trim()) return;
+
+    const userText = input.value.trim();
+    input.value = '';
+
+    // Append User message
+    messages.innerHTML += `
+        <div style="align-self: flex-end; background: var(--primary); color: white; border-radius: 18px 18px 2px 18px; padding: 0.75rem 1rem; font-size: 0.85rem; max-width: 80%; line-height: 1.4; box-shadow: 0 4px 12px rgba(10, 92, 54, 0.15);">
+            ${userText}
+        </div>
+    `;
+    scrollToBottom(messages);
+
+    // Simulate typing loader
+    const loaderId = `chat-loader-${Date.now()}`;
+    messages.innerHTML += `
+        <div id="${loaderId}" style="align-self: flex-start; background: var(--card-bg); border: 1px solid var(--border); border-radius: 18px 18px 18px 2px; padding: 0.75rem 1rem; font-size: 0.85rem; max-width: 80%; display: flex; align-items: center; gap: 0.25rem;">
+            <span style="width: 6px; height: 6px; background: var(--text-muted); border-radius: 50%; display: inline-block; animation: bounce 1.4s infinite ease-in-out;"></span>
+            <span style="width: 6px; height: 6px; background: var(--text-muted); border-radius: 50%; display: inline-block; animation: bounce 1.4s infinite ease-in-out 0.2s;"></span>
+            <span style="width: 6px; height: 6px; background: var(--text-muted); border-radius: 50%; display: inline-block; animation: bounce 1.4s infinite ease-in-out 0.4s;"></span>
+        </div>
+    `;
+    scrollToBottom(messages);
+
+    // Dynamic response computation
+    setTimeout(() => {
+        const loader = document.getElementById(loaderId);
+        if (loader) loader.remove();
+
+        let botReply = "I am a helpful assistant for ADYANTA. You can ask me about available vendor shops, active coupons, or delivery times!";
+        const query = userText.toLowerCase();
+
+        if (query.includes('shop') || query.includes('store') || query.includes('browse')) {
+            if (allShopsList.length > 0) {
+                const list = allShopsList.map(s => `🌾 **${s.name}** (${s.category || 'Grocery'}) - ${s.rating}⭐`).join('<br>');
+                botReply = `Currently active stores in Nellore:<br>${list}<br><br>Click on their shop card on the homepage to explore their storefront!`;
+            } else {
+                botReply = "There are no stores active right now. Please check back later!";
+            }
+        } else if (query.includes('coupon') || query.includes('discount') || query.includes('code') || query.includes('offer')) {
+            botReply = `🎉 Active Marketplace Coupons available:<br>
+            - 🎁 **WELCOME10**: Flat 10% OFF on all grocery orders!<br>
+            - 🎁 **FIRSTSAVE100**: Flat ₹100 OFF on orders above ₹500!<br><br>
+            Copy the code and enter it during checkout to redeem instantly!`;
+        } else if (query.includes('delivery') || query.includes('speed') || query.includes('minutes') || query.includes('time')) {
+            botReply = "⚡ ADYANTA lightning-fast delivery takes between **15 to 45 minutes** depending on your distance! We source directly from nearby local shops to ensure maximum freshness.";
+        } else if (query.includes('hi') || query.includes('hello') || query.includes('hey')) {
+            botReply = "👋 Hey there! How can I help you today? Ask me about our shops, coupons, or checkout details!";
+        } else if (query.includes('payment') || query.includes('upi') || query.includes('cod') || query.includes('pay')) {
+            botReply = "💳 We support multiple secure payment gateways! You can pay using **UPI (GPay/PhonePe), Credit/Debit Cards, Net Banking, Net Wallets, or Cash on Delivery (COD)**.";
+        }
+
+        messages.innerHTML += `
+            <div style="align-self: flex-start; background: var(--card-bg); border: 1px solid var(--border); border-radius: 18px 18px 18px 2px; padding: 0.75rem 1rem; font-size: 0.85rem; max-width: 80%; line-height: 1.4; color: var(--text-main);">
+                ${botReply}
+            </div>
+        `;
+        scrollToBottom(messages);
+    }, 1000);
+}
+
