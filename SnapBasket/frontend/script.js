@@ -49,39 +49,43 @@ document.addEventListener("DOMContentLoaded", async () => {
     console.log("DOM Content Loaded - Initializing ADYANTA...");
     await initSupabase();
     try {
-        if (!supabase) throw new Error("Supabase client not initialized");
-        console.log("Fetching data from Supabase...");
+        console.log("Fetching data from Local API Server...");
         
-        // Fetch Categories
-        const { data: catData, error: catError } = await supabase.from('categories').select('*');
-        if (catError) throw catError;
-        categories = catData || [];
-        console.log(`Loaded ${categories.length} categories.`);
-
         // Fetch Products
-        const { data: prodData, error: prodError } = await supabase.from('products').select('*');
-        if (prodError) throw prodError;
-        products = prodData || [];
+        const prodRes = await fetch(API_BASE + '/api/products');
+        if (!prodRes.ok) throw new Error(`HTTP error! status: ${prodRes.status}`);
+        products = await prodRes.json();
         console.log(`Loaded ${products.length} products.`);
+
+        // Fetch Categories
+        const catRes = await fetch(API_BASE + '/api/categories');
+        if (!catRes.ok) throw new Error(`HTTP error! status: ${catRes.status}`);
+        categories = await catRes.json();
+        console.log(`Loaded ${categories.length} categories.`);
         
         // Fetch Brands
-        const { data: brandData, error: brandError } = await supabase.from('brands').select('*');
-        if (brandError) throw brandError;
-        brands = brandData || [];
+        const brandRes = await fetch(API_BASE + '/api/brands');
+        if (!brandRes.ok) throw new Error(`HTTP error! status: ${brandRes.status}`);
+        brands = await brandRes.json();
         console.log(`Loaded ${brands.length} brands.`);
 
     } catch(e) {
-        console.error("CRITICAL: Failed fetching data from Supabase", e);
-        // Fallback to legacy API if Supabase fails (optional)
+        console.error("CRITICAL: Failed fetching data from Local API Server", e);
+        // Fallback to direct Supabase query if API fails (optional)
         try {
-            const prodRes = await fetch(API_BASE + '/api/products');
-            products = await prodRes.json();
-            const catRes = await fetch(API_BASE + '/api/categories');
-            categories = await catRes.json();
-            const brandRes = await fetch(API_BASE + '/api/brands');
-            brands = await brandRes.json();
-        } catch(apiErr) {
-            console.error("Legacy API also failed", apiErr);
+            if (supabase) {
+                console.log("Attempting direct Supabase fallback...");
+                const { data: catData, error: catError } = await supabase.from('categories').select('*');
+                if (!catError && catData) categories = catData;
+                
+                const { data: prodData, error: prodError } = await supabase.from('products').select('*');
+                if (!prodError && prodData) products = prodData;
+                
+                const { data: brandData, error: brandError } = await supabase.from('brands').select('*');
+                if (!brandError && brandData) brands = brandData;
+            }
+        } catch(sbErr) {
+            console.error("Supabase fallback also failed", sbErr);
         }
     }
 
