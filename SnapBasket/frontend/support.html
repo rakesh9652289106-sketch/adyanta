@@ -244,7 +244,9 @@
     </footer>
 
     <script type="module">
-        const API_BASE = 'https://adyanta-commerce.onrender.com';
+        const API_BASE = window.location.port === '5173' || window.location.port === '3000' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+            ? 'http://localhost:3000'
+            : 'https://adyanta-commerce.onrender.com';
         async function loadSupportPage() {
             try {
                 const res = await fetch(API_BASE + '/api/settings');

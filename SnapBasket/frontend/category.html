@@ -211,7 +211,9 @@
 
     <script type="module" src="toast.js"></script>
     <script type="module">
-        const API_BASE = 'https://adyanta-commerce.onrender.com';
+        const API_BASE = window.location.port === '5173' || window.location.port === '3000' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+            ? 'http://localhost:3000'
+            : 'https://adyanta-commerce.onrender.com';
         // State
         let allProducts = [];
         let categoriesList = [];
@@ -523,7 +525,9 @@
                             <i class="${isWish ? 'ph-fill' : 'ph'} ph-heart ripple-effect" style="font-size: 1.5rem; color: #EF4444;"></i>
                         </button>
                         ${p.discount && p.discount !== '0% OFF' ? `<span class="discount-badge">${p.discount}</span>` : ''}
-                        <img src="${imgurl}" alt="${p.name}" class="product-img" onerror="this.src='https://placehold.co/300?text=Product'">
+                        <div class="product-img-container">
+                            <img src="${imgurl}" alt="${p.name}" class="product-img" onerror="this.src='https://images.unsplash.com/photo-1542838132-92c53300491e?w=300&text=Product'">
+                        </div>
                         <div class="product-info">
                             ${p.variants && p.variants.length > 0 ? `
                                 <select class="variant-select-inline" onchange="updateVariantPrice(this, '${p.id}', '${safeName}')">

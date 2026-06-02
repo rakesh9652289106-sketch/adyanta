@@ -2441,7 +2441,9 @@ function populateProducts(containerId, items) {
             <div class="product-card" style="${!isAvailable ? 'opacity: 0.6; filter: grayscale(1);' : ''}">
                 <i class="${isWishlisted ? 'ph-fill' : 'ph'} ph-heart" style="position: absolute; top: 1rem; right: 1rem; font-size: 1.5rem; color: #EF4444; z-index: 2; cursor: pointer;" onclick="toggleWishlist(event, '${prod.id}')"></i>
                 ${prod.discount ? `<span class="discount-badge">${prod.discount}</span>` : ''}
-                <img src="${imgurl}" alt="${prod.name}" class="product-img" onerror="this.src='https://images.unsplash.com/photo-1542838132-92c53300491e?w=300&text=Product'">
+                <div class="product-img-container">
+                    <img src="${imgurl}" alt="${prod.name}" class="product-img" onerror="this.src='https://images.unsplash.com/photo-1542838132-92c53300491e?w=300&text=Product'">
+                </div>
                 <div class="product-info">
                     ${prod.variants && prod.variants.length > 0 ? `
                         <select class="variant-select-inline" onchange="updateVariantPrice(this, '${prod.id}', '${safeName}')">

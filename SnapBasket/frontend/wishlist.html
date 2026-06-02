@@ -53,7 +53,9 @@
 
     <script type="module" src="toast.js"></script>
     <script type="module">
-        const API_BASE = 'https://adyanta-commerce.onrender.com';
+        const API_BASE = window.location.port === '5173' || window.location.port === '3000' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+            ? 'http://localhost:3000'
+            : 'https://adyanta-commerce.onrender.com';
         document.addEventListener("DOMContentLoaded", async () => {
 
             const wishlistJSON = localStorage.getItem('wishlist');
@@ -221,7 +223,9 @@
                             <div class="product-card" data-product-id="${prod.id}">
                                 <i class="ph-fill ph-heart" style="position: absolute; top: 1rem; right: 1rem; font-size: 1.5rem; color: #EF4444; z-index: 2; cursor: pointer;" onclick="removeFromWishlist(event, '${prod.id}')"></i>
                                 ${prod.discount ? '<span class="discount-badge">' + prod.discount + '</span>' : ''}
-                                <img src="${imgurl}" alt="${prod.name}" class="product-img" onerror="this.src='https://via.placeholder.com/200/F8FAFC/94A3B8?text=Product'">
+                                <div class="product-img-container">
+                                    <img src="${imgurl}" alt="${prod.name}" class="product-img" onerror="this.src='https://images.unsplash.com/photo-1542838132-92c53300491e?w=300&text=Product'">
+                                </div>
                                 <div class="product-info">
                                     ${prod.variants && prod.variants.length > 0 ? `
                                         <select class="variant-select-inline" onchange="updateVariantPrice(this, '${prod.id}')">

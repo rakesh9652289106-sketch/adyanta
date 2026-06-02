@@ -292,7 +292,9 @@ async function fetchWishlist() {
             return `
             <div class="product-card" style="position: relative;">
                 <i class="ph-fill ph-heart" style="position: absolute; top: 1rem; right: 1rem; font-size: 1.5rem; color: #EF4444; z-index: 2; cursor: pointer;" onclick="removeFromWishlist('${p.id}')"></i>
-                <img src="${imgUrl}" alt="${p.name}" class="product-img" onerror="this.src='https://images.unsplash.com/photo-1542838132-92c53300491e?w=300&text=Product'">
+                <div class="product-img-container">
+                    <img src="${imgUrl}" alt="${p.name}" class="product-img" onerror="this.src='https://images.unsplash.com/photo-1542838132-92c53300491e?w=300&text=Product'">
+                </div>
                 <div class="product-info">
                     <h4 class="product-title">${p.name}</h4>
                     <span class="product-weight">${p.weight}</span>
