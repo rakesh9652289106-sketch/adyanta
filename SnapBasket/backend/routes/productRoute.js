@@ -1,68 +1,89 @@
 const express = require('express');
 const router = express.Router();
-const { supabase } = require('../supabaseClient');
+const { db } = require('../db');
 
-router.get('/coupons/active', async (req, res) => {
+// Get active coupons
+router.get('/coupons/active', (req, res) => {
     const today = new Date().toISOString().split('T')[0];
-    const { data, error } = await supabase.from('coupons').select('*').gte('expiry_date', today);
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data || []);
+    db.all("SELECT * FROM coupons WHERE expiry_date >= ?", [today], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows || []);
+    });
 });
 
-// Get all products (Supabase)
-router.get('/', async (req, res) => {
+// Get all products (with search & category filters)
+router.get('/', (req, res) => {
     const { search, category } = req.query;
     
-    let query = supabase.from('products').select('*');
+    let sql = "SELECT * FROM products WHERE 1=1";
+    let params = [];
 
     if (search) {
-        query = query.or(`name.ilike.%${search}%,description.ilike.%${search}%`);
+        sql += " AND (name LIKE ? OR description LIKE ?)";
+        params.push(`%${search}%`, `%${search}%`);
     }
 
     if (category && category !== 'All') {
-        query = query.eq('category', category);
+        sql += " AND category = ?";
+        params.push(category);
     }
 
-    const { data, error } = await query.order('id', { ascending: false });
+    sql += " ORDER BY id DESC";
 
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data || []);
+    db.all(sql, params, (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows || []);
+    });
 });
 
 // Get Reviews for a specific product
-router.get('/:id/reviews', async (req, res) => {
+router.get('/:id/reviews', (req, res) => {
     const { id } = req.params;
-    const { data, error } = await supabase.from('reviews').select('*').eq('product_id', id).order('created_at', { ascending: false });
-    
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data || []);
+    db.all("SELECT * FROM reviews WHERE product_id = ? ORDER BY created_at DESC", [id], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows || []);
+    });
 });
 
 // Get specific product by ID
-router.get('/:id', async (req, res) => {
+router.get('/:id', (req, res) => {
     const { id } = req.params;
     if (isNaN(id)) return res.status(400).json({ error: "Invalid product ID" });
     
-    const { data, error } = await supabase.from('products').select('*').eq('id', id).single();
-    
-    if (error) return res.status(500).json({ error: error.message });
-    if (!data) return res.status(404).json({ error: "Product not found" });
-    res.json(data);
+    db.get("SELECT * FROM products WHERE id = ?", [id], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row) return res.status(404).json({ error: "Product not found" });
+        res.json(row);
+    });
 });
 
 // Get products by Category
-router.get('/category/:categoryName', async (req, res) => {
+router.get('/category/:categoryName', (req, res) => {
     const { categoryName } = req.params;
-    let query = supabase.from('products').select('*');
+    const { shop_id } = req.query;
+    let sql = "SELECT * FROM products";
+    let params = [];
+    let conditions = [];
     
     if (categoryName !== 'All') {
-        query = query.eq('category', categoryName);
+        conditions.push("category = ?");
+        params.push(categoryName);
+    }
+    if (shop_id) {
+        conditions.push("shop_id = ?");
+        params.push(shop_id);
     }
     
-    const { data, error } = await query.order('id', { ascending: false });
+    if (conditions.length > 0) {
+        sql += " WHERE " + conditions.join(" AND ");
+    }
     
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data || []);
+    sql += " ORDER BY id DESC";
+    
+    db.all(sql, params, (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows || []);
+    });
 });
 
 module.exports = router;

@@ -1,17 +1,23 @@
 const express = require('express');
 const router = express.Router();
-const { supabase } = require('../supabaseClient');
+const { db } = require('../db');
+
+// Promise Helpers for SQLite
+const queryGet = (sql, params = []) => new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => err ? reject(err) : resolve(row));
+});
+const queryAll = (sql, params = []) => new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => err ? reject(err) : resolve(rows));
+});
+const queryRun = (sql, params = []) => new Promise((resolve, reject) => {
+    db.run(sql, params, function(err) { err ? reject(err) : resolve(this); });
+});
 
 router.get('/coupons', async (req, res) => {
     try {
         const today = new Date().toISOString().split('T')[0];
-        const { data, error } = await supabase
-            .from('coupons')
-            .select('*')
-            .gte('expiry_date', `${today}T00:00:00.000Z`);
-        
-        if (error) throw error;
-        res.json(data || []);
+        const rows = await queryAll("SELECT * FROM coupons WHERE expiry_date >= ?", [today]);
+        res.json(rows || []);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -24,13 +30,8 @@ router.post('/coupons/validate', async (req, res) => {
     try {
         if (!code) return res.status(400).json({ error: "Coupon code required" });
 
-        const { data: coupon, error } = await supabase
-            .from('coupons')
-            .select('*')
-            .ilike('code', code)
-            .single();
-
-        if (error || !coupon) {
+        const coupon = await queryGet("SELECT * FROM coupons WHERE code LIKE ? LIMIT 1", [code]);
+        if (!coupon) {
             return res.status(404).json({ error: "Invalid coupon code." });
         }
 
@@ -44,14 +45,8 @@ router.post('/coupons/validate', async (req, res) => {
         }
 
         if (coupon.is_one_time && userId) {
-            const { data: usage, error: usageError } = await supabase
-                .from('coupon_usage')
-                .select('id')
-                .eq('user_id', userId)
-                .eq('coupon_id', coupon.id)
-                .limit(1);
-
-            if (!usageError && usage && usage.length > 0) {
+            const usage = await queryGet("SELECT id FROM coupon_usage WHERE user_id = ? AND coupon_id = ? LIMIT 1", [userId, coupon.id]);
+            if (usage) {
                 return res.status(400).json({ error: "Already used." });
             }
         }
@@ -68,59 +63,110 @@ router.post('/coupons/validate', async (req, res) => {
             discount_type: coupon.discount_type,
             original_value: coupon.discount_value
         });
-
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
 router.get('/categories', async (req, res) => {
-    const { data, error } = await supabase.from('categories').select('*').order('name');
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data || []);
+    try {
+        const rows = await queryAll("SELECT * FROM categories ORDER BY name ASC");
+        res.json(rows || []);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 router.get('/brands', async (req, res) => {
-    const { data, error } = await supabase.from('brands').select('*').order('name');
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data || []);
+    try {
+        const rows = await queryAll("SELECT * FROM brands ORDER BY name ASC");
+        res.json(rows || []);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 router.get('/banners', async (req, res) => {
-    const { data, error } = await supabase.from('banners').select('*');
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data || []);
+    try {
+        const rows = await queryAll("SELECT * FROM banners");
+        res.json(rows || []);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 router.get('/promo-banners', async (req, res) => {
-    const { data, error } = await supabase.from('promo_banners').select('*').order('displayOrder').limit(6);
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data || []);
+    try {
+        const rows = await queryAll("SELECT * FROM promo_banners ORDER BY displayOrder ASC LIMIT 6");
+        res.json(rows || []);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 router.get('/special-offers', async (req, res) => {
-    const { data, error } = await supabase.from('special_offers').select('*');
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data || []);
+    try {
+        const { shop_id } = req.query;
+        let rows;
+        if (shop_id) {
+            rows = await queryAll("SELECT * FROM special_offers WHERE shop_id = ? ORDER BY id ASC", [shop_id]);
+            if (rows.length === 0) {
+                // Auto-seed default offers for this vendor shop so they are always visible
+                await queryRun(
+                    "INSERT INTO special_offers (title, description, colorClass, target_category, shop_id) VALUES (?, ?, ?, ?, ?)",
+                    ['Special Promo', 'Great deals on selected items', 'bg-orange', 'All', shop_id]
+                );
+                await queryRun(
+                    "INSERT INTO special_offers (title, description, colorClass, target_category, shop_id) VALUES (?, ?, ?, ?, ?)",
+                    ['Exclusive Offer', 'Limited time discount', 'bg-purple', 'All', shop_id]
+                );
+                rows = await queryAll("SELECT * FROM special_offers WHERE shop_id = ? ORDER BY id ASC", [shop_id]);
+            }
+        } else {
+            rows = await queryAll("SELECT * FROM special_offers WHERE shop_id IS NULL OR shop_id = 0 ORDER BY id ASC");
+        }
+        res.json(rows || []);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.put('/admin/special-offers/:id', async (req, res) => {
+    const { title, description, target_category } = req.body;
+    try {
+        await queryRun(
+            "UPDATE special_offers SET title = ?, description = ?, target_category = ? WHERE id = ?",
+            [title, description, target_category, req.params.id]
+        );
+        res.json({ message: "Offer updated successfully" });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 router.get('/settings', async (req, res) => {
-    const { data, error } = await supabase.from('settings').select('*').limit(1).single();
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data);
+    try {
+        const row = await queryGet("SELECT * FROM settings LIMIT 1");
+        res.json(row || {});
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 router.post('/support/messages', async (req, res) => {
     const userId = req.cookies.user_id || null;
-    const { name, email, subject, message } = req.body;
+    const { name, email, subject, message, shop_id } = req.body;
     if (!name || !email || !message) return res.status(400).json({ error: "Missing fields" });
 
-    const insertData = { name, email, subject: subject || 'No Subject', message, status: 'unread' };
-    if (userId) insertData.user_id = userId;
-
-    const { data, error } = await supabase.from('support_messages').insert([insertData]).select().single();
-    if (error) return res.status(500).json({ error: error.message });
-    res.status(201).json({ message: "Message sent!", messageId: data.id });
+    try {
+        const result = await queryRun(
+            "INSERT INTO support_messages (name, email, subject, message, status, user_id, shop_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [name, email, subject || 'No Subject', message, 'unread', userId, shop_id || null]
+        );
+        res.status(201).json({ message: "Message sent!", messageId: result.lastID });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 router.post('/reviews', async (req, res) => {
@@ -128,18 +174,27 @@ router.post('/reviews', async (req, res) => {
     if (!username) return res.status(401).json({ error: "Login required" });
 
     const { product_id, rating, comment } = req.body;
-    const { data, error } = await supabase.from('reviews').insert([{ product_id, username, rating, comment }]).select().single();
-
-    if (error) return res.status(500).json({ error: error.message });
-    res.status(201).json({ message: "Review submitted!", reviewId: data.id });
+    try {
+        const result = await queryRun(
+            "INSERT INTO reviews (product_id, username, rating, comment) VALUES (?, ?, ?, ?)",
+            [product_id, username, rating, comment]
+        );
+        res.status(201).json({ message: "Review submitted!", reviewId: result.lastID });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 router.get('/user-info', async (req, res) => {
     const userId = req.cookies.user_id;
     if (!userId) return res.status(401).json({ error: "Not logged in" });
-    const { data, error } = await supabase.from('users').select('id, full_name').eq('id', userId).single();
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data);
+    try {
+        const row = await queryGet("SELECT id, full_name FROM users WHERE id = ?", [userId]);
+        if (!row) return res.status(404).json({ error: "User not found" });
+        res.json(row);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 router.post('/orders', async (req, res) => {
@@ -150,23 +205,23 @@ router.post('/orders', async (req, res) => {
     let subtotal = items?.reduce((sum, item) => sum + (parsePrice(item.price) * (item.quantity || 1)), 0) || 0;
     let finalTotal = subtotal;
 
-    if (couponId) {
-        const { data: coupon } = await supabase.from('coupons').select('*').eq('id', couponId).single();
-        if (coupon) {
-            const discount = coupon.discount_type === 'percent' ? (subtotal * coupon.discount_value) / 100 : coupon.discount_value;
-            finalTotal = Math.max(0, subtotal - discount);
-        }
-    }
-
-    let coinsUsed = 0;
-    let coinsEarned = 0;
-    let coinDiscount = 0;
-
     try {
-        const { data: settings } = await supabase.from('settings').select('*').limit(1).single();
+        if (couponId) {
+            const coupon = await queryGet("SELECT * FROM coupons WHERE id = ?", [couponId]);
+            if (coupon) {
+                const discount = coupon.discount_type === 'percent' ? (subtotal * coupon.discount_value) / 100 : coupon.discount_value;
+                finalTotal = Math.max(0, subtotal - discount);
+            }
+        }
+
+        let coinsUsed = 0;
+        let coinsEarned = 0;
+        let coinDiscount = 0;
+
+        const settings = await queryGet("SELECT * FROM settings LIMIT 1");
         if (settings && settings.coins_system_active === 1) {
             if (useCoins && userId) {
-                const { data: user } = await supabase.from('users').select('coins').eq('id', userId).single();
+                const user = await queryGet("SELECT coins FROM users WHERE id = ?", [userId]);
                 if (user && user.coins > 0) {
                     const coinValue = settings.coin_value_per_rupee || 10;
                     coinsUsed = user.coins;
@@ -185,88 +240,124 @@ router.post('/orders', async (req, res) => {
             const rewardAmount = settings.coin_reward_amount || 30;
             coinsEarned = Math.floor(finalTotal / rewardRate) * rewardAmount;
         }
-    } catch (err) {
-        console.error("Loyalty calculation failed:", err.message);
-    }
 
-    const insertData = {
-        total: Math.round(finalTotal),
-        items, payment_method: paymentMethod, address,
-        discount_amount: Math.round(subtotal - finalTotal),
-        coupon_id: couponId,
-        delivery_type: deliveryType || 'Home Delivery',
-        user_id: userId,
-        coins_used: coinsUsed,
-        coins_earned: coinsEarned
-    };
+        // Determine shop_id from items (using shop_id of the first item, default to 1)
+        let shopId = 1;
+        if (items && items.length > 0 && items[0].id) {
+            const product = await queryGet("SELECT shop_id FROM products WHERE id = ?", [items[0].id]);
+            if (product && product.shop_id) {
+                shopId = product.shop_id;
+            }
+        }
 
-    const { data, error } = await supabase.from('orders').insert([insertData]).select().single();
-    if (error) return res.status(500).json({ error: error.message });
+        const itemsJsonStr = JSON.stringify(items);
+        const result = await queryRun(
+            `INSERT INTO orders (user_id, total, items, payment_method, address, status, discount_amount, coupon_id, delivery_type, coins_used, coins_earned, shop_id) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                userId, 
+                Math.round(finalTotal), 
+                itemsJsonStr, 
+                paymentMethod, 
+                address, 
+                'pending', 
+                Math.round(subtotal - finalTotal), 
+                couponId, 
+                deliveryType || 'Home Delivery', 
+                coinsUsed, 
+                coinsEarned,
+                shopId
+            ]
+        );
 
-    if (couponId && userId) {
-        await supabase.from('coupon_usage').insert([{ user_id: userId, coupon_id: couponId }]);
-    }
+        const orderId = result.lastID;
 
-    // Update user's coin balance
-    if (userId && (coinsUsed > 0 || coinsEarned > 0)) {
-        try {
-            const { data: user } = await supabase.from('users').select('coins').eq('id', userId).single();
+        if (couponId && userId) {
+            await queryRun("INSERT INTO coupon_usage (user_id, coupon_id) VALUES (?, ?)", [userId, couponId]);
+        }
+
+        // Update user's coin balance
+        if (userId && (coinsUsed > 0 || coinsEarned > 0)) {
+            const user = await queryGet("SELECT coins FROM users WHERE id = ?", [userId]);
             const currentCoins = user?.coins || 0;
             const newCoins = Math.max(0, currentCoins - coinsUsed + coinsEarned);
-            await supabase.from('users').update({ coins: newCoins }).eq('id', userId);
-        } catch (uErr) {
-            console.error("Failed to update user coins balance:", uErr.message);
+            await queryRun("UPDATE users SET coins = ? WHERE id = ?", [newCoins, userId]);
         }
-    }
 
-    res.status(201).json({ 
-        message: "Order placed!", 
-        orderId: data.id,
-        coinsUsed,
-        coinsEarned,
-        coinDiscount
-    });
+        res.status(201).json({ 
+            message: "Order placed!", 
+            orderId: orderId,
+            coinsUsed,
+            coinsEarned,
+            coinDiscount
+        });
+
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 router.post('/orders/cancel', async (req, res) => {
-    const { error } = await supabase.from('orders').update({ status: 'cancelled', payment_status: 'cancelled' }).eq('id', req.body.orderId);
-    if (error) return res.status(500).json({ error: error.message });
-    res.json({ message: "Order cancelled" });
+    const { orderId } = req.body;
+    try {
+        await queryRun("UPDATE orders SET status = 'cancelled', payment_status = 'cancelled' WHERE id = ?", [orderId]);
+        res.json({ message: "Order cancelled" });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 router.get('/reviews/recent', async (req, res) => {
-    const { data, error } = await supabase.from('reviews').select('*, products(name)').order('created_at', { ascending: false }).limit(6);
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data || []);
+    try {
+        const sql = `
+            SELECT r.*, p.name as product_name 
+            FROM reviews r 
+            LEFT JOIN products p ON r.product_id = p.id 
+            ORDER BY r.created_at DESC 
+            LIMIT 6
+        `;
+        const rows = await queryAll(sql);
+        const formatted = rows.map(r => ({
+            ...r,
+            products: { name: r.product_name }
+        }));
+        res.json(formatted || []);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 router.get('/notifications/history', async (req, res) => {
-    const { data, error } = await supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(20);
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data || []);
+    try {
+        const rows = await queryAll("SELECT * FROM notifications ORDER BY created_at DESC LIMIT 20");
+        res.json(rows || []);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
-
-// ==========================================================================
-// CUSTOMER MARKETPLACE ECOSYSTEM ENDPOINTS
-// ==========================================================================
 
 // 1. Browse active marketplace shops
 router.get('/shops', async (req, res) => {
+    const { search, category } = req.query;
     try {
-        const { search, category } = req.query;
-        let query = supabase.from('shops').select('*').eq('status', 'active');
-        
+        let sql = "SELECT * FROM shops WHERE status = 'active' AND (is_active_store IS NULL OR is_active_store != 0)";
+        let params = [];
+
         if (category && category !== 'All') {
-            query = query.ilike('category', `%${category}%`);
+            sql += " AND category LIKE ?";
+            params.push(`%${category}%`);
         }
-        
-        const { data: shops, error } = await query.order('rating', { ascending: false });
-        if (error) throw error;
+
+        sql += " ORDER BY rating DESC";
+        const shops = await queryAll(sql, params);
 
         let filtered = shops || [];
         if (search) {
             const s = search.toLowerCase();
-            filtered = filtered.filter(sh => sh.name.toLowerCase().includes(s) || sh.description.toLowerCase().includes(s));
+            filtered = filtered.filter(sh => 
+                (sh.name || '').toLowerCase().includes(s) || 
+                (sh.description || '').toLowerCase().includes(s)
+            );
         }
 
         res.json(filtered);
@@ -277,35 +368,87 @@ router.get('/shops', async (req, res) => {
 
 // 2. Fetch specific shop details and its specific products
 router.get('/shops/:id', async (req, res) => {
+    const { id } = req.params;
     try {
-        const { data: shop, error: shopErr } = await supabase.from('shops').select('*').eq('id', req.params.id).single();
-        if (shopErr || !shop) return res.status(404).json({ error: "Shop not found." });
+        const shop = await queryGet("SELECT * FROM shops WHERE id = ?", [id]);
+        if (!shop) return res.status(404).json({ error: "Shop not found." });
 
-        const { data: products, error: prodErr } = await supabase
-            .from('products')
-            .select('*')
-            .eq('shop_id', shop.id)
-            .eq('is_available', 1);
-
+        const products = await queryAll("SELECT * FROM products WHERE shop_id = ? AND is_available = 1", [id]);
         res.json({ shop, products: products || [] });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
 
-// 3. Fetch active platform feature flags (for live frontend on/off check)
+// 3. Fetch active platform feature flags
 router.get('/features', async (req, res) => {
     try {
-        const { data, error } = await supabase.from('feature_flags').select('name, is_active');
-        if (error) throw error;
-        
-        // Convert to a clean key-value map for quick lookup
+        const flags = await queryAll("SELECT name, is_active FROM feature_flags");
         const flagsMap = {};
-        data?.forEach(flag => {
-            flagsMap[flag.name] = flag.is_active;
+        (flags || []).forEach(f => {
+            flagsMap[f.name] = f.is_active === 1;
         });
-        
         res.json(flagsMap);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Store Chat Support Endpoints (Customer)
+router.post('/support/store-chat/send', async (req, res) => {
+    try {
+        const { shop_id, message, session_id, user_name } = req.body;
+        if (!shop_id || !message) {
+            return res.status(400).json({ error: "Missing shop_id or message." });
+        }
+
+        const userId = req.cookies.user_id ? parseInt(req.cookies.user_id, 10) : null;
+        
+        let finalUserName = user_name || 'Guest User';
+        if (userId) {
+            const user = await queryGet("SELECT full_name FROM users WHERE id = ?", [userId]);
+            if (user) finalUserName = user.full_name;
+        }
+
+        const result = await queryRun(
+            `INSERT INTO store_chat_messages (shop_id, user_id, session_id, user_name, sender, message) 
+             VALUES (?, ?, ?, ?, 'user', ?)`,
+            [shop_id, userId, session_id || null, finalUserName, message]
+        );
+
+        res.status(201).json({ id: result.lastID, success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.get('/support/store-chat/history', async (req, res) => {
+    try {
+        const { shop_id, session_id } = req.query;
+        if (!shop_id) {
+            return res.status(400).json({ error: "Missing shop_id." });
+        }
+
+        const userId = req.cookies.user_id ? parseInt(req.cookies.user_id, 10) : null;
+
+        let messages;
+        if (userId) {
+            messages = await queryAll(
+                `SELECT * FROM store_chat_messages 
+                 WHERE shop_id = ? AND (user_id = ? OR (user_id IS NULL AND session_id = ?))
+                 ORDER BY created_at ASC`,
+                [shop_id, userId, session_id || '']
+            );
+        } else {
+            messages = await queryAll(
+                `SELECT * FROM store_chat_messages 
+                 WHERE shop_id = ? AND session_id = ? AND user_id IS NULL
+                 ORDER BY created_at ASC`,
+                [shop_id, session_id || '']
+            );
+        }
+
+        res.json(messages || []);
     } catch (e) {
         res.status(500).json({ error: e.message });
     }

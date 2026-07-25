@@ -14,6 +14,7 @@ export default defineConfig(({ mode }) => {
           profile: resolve(__dirname, 'profile.html'),
           support: resolve(__dirname, 'support.html'),
           wishlist: resolve(__dirname, 'wishlist.html'),
+          stores: resolve(__dirname, 'stores.html'),
         }
       }
     },

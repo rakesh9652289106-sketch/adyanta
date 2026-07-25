@@ -247,7 +247,9 @@
         const API_BASE = window.location.port === '5173' || window.location.port === '3000' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
             ? 'http://localhost:3000'
             : 'https://adyanta-commerce.onrender.com';
+        
         async function loadSupportPage() {
+            // First load global defaults
             try {
                 const res = await fetch(API_BASE + '/api/settings');
                 const data = await res.json();
@@ -260,6 +262,29 @@
             } catch(e) {
                 console.error("Failed to load support data", e);
             }
+
+            // If shop_id context is present, override details dynamically
+            const urlParams = new URLSearchParams(window.location.search);
+            const shopId = urlParams.get('shop_id') || localStorage.getItem('active_shop_id');
+            if (shopId) {
+                try {
+                    const shopRes = await fetch(API_BASE + `/api/shops/${shopId}`);
+                    if (shopRes.ok) {
+                        const { shop } = await shopRes.json();
+                        if (shop) {
+                            const heroText = document.querySelector('.support-hero-overlay h1');
+                            if (heroText) heroText.innerText = `${shop.name} Support`;
+                            const heroDesc = document.querySelector('.support-hero-overlay p');
+                            if (heroDesc) heroDesc.innerText = `Send us a message directly, and the shop vendor will reply shortly.`;
+                            
+                            if (shop.logo) document.getElementById('shopHeroImage').src = shop.logo;
+                            if (shop.contact_phone) document.getElementById('pPhone').innerText = shop.contact_phone;
+                        }
+                    }
+                } catch(e) {
+                    console.error("Failed to load storefront support header details", e);
+                }
+            }
         }
 
         const contactForm = document.getElementById('contactForm');
@@ -271,11 +296,15 @@
             formStatus.innerText = 'Sending...';
             formStatus.style.display = 'block';
 
+            const urlParams = new URLSearchParams(window.location.search);
+            const shopId = urlParams.get('shop_id') || localStorage.getItem('active_shop_id') || null;
+
             const payload = {
                 name: document.getElementById('cName').value,
                 email: document.getElementById('cEmail').value,
                 subject: document.getElementById('cSubject').value,
-                message: document.getElementById('cMessage').value
+                message: document.getElementById('cMessage').value,
+                shop_id: shopId ? parseInt(shopId, 10) : null
             };
 
             try {
@@ -308,7 +337,7 @@
             <i class="ph-fill ph-house"></i>
             <span>Home</span>
         </a>
-        <a href="category.html?name=All" class="nav-item">
+        <a href="stores.html?category=All" class="nav-item">
             <i class="ph ph-squares-four"></i>
             <span>Categories</span>
         </a>

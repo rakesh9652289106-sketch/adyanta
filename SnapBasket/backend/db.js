@@ -1,5 +1,7 @@
+const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
-const db = new sqlite3.Database('./database.sqlite');
+const dbPath = path.join(__dirname, 'database.sqlite');
+const db = new sqlite3.Database(dbPath);
 const crypto = require('crypto');
 
 // Password Hashing Helpers (Duplicate for DB init)
@@ -25,6 +27,7 @@ function initDb() {
             sms_permissions INTEGER DEFAULT 0,
             flash_sale_alerts INTEGER DEFAULT 1,
             status TEXT DEFAULT 'active',
+            role TEXT DEFAULT 'customer',
             security_q1 TEXT,
             security_a1 TEXT,
             security_q2 TEXT,
@@ -32,9 +35,9 @@ function initDb() {
             gender TEXT,
             dob TEXT,
             alternate_phone TEXT,
+            coins INTEGER DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )`);
-
 
         // Migration: Add new columns if they don't exist for existing users
         const userMigrations = [
@@ -47,6 +50,7 @@ function initDb() {
             "ALTER TABLE users ADD COLUMN sms_permissions INTEGER DEFAULT 0",
             "ALTER TABLE users ADD COLUMN flash_sale_alerts INTEGER DEFAULT 1",
             "ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'",
+            "ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'customer'",
             "ALTER TABLE users ADD COLUMN security_q1 TEXT",
             "ALTER TABLE users ADD COLUMN security_a1 TEXT",
             "ALTER TABLE users ADD COLUMN security_q2 TEXT",
@@ -54,6 +58,7 @@ function initDb() {
             "ALTER TABLE users ADD COLUMN gender TEXT",
             "ALTER TABLE users ADD COLUMN dob TEXT",
             "ALTER TABLE users ADD COLUMN alternate_phone TEXT",
+            "ALTER TABLE users ADD COLUMN coins INTEGER DEFAULT 0",
             "ALTER TABLE users ADD COLUMN created_at DATETIME"
         ];
         userMigrations.forEach(query => db.run(query, (err) => { 
@@ -61,7 +66,6 @@ function initDb() {
                 db.run("UPDATE users SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL");
             }
         }));
-
 
         // Create Admin Users Table
         db.run(`CREATE TABLE IF NOT EXISTS admin_users (
@@ -75,6 +79,47 @@ function initDb() {
             security_a2 TEXT
         )`);
 
+        // Create Shops Table
+        db.run(`CREATE TABLE IF NOT EXISTS shops (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            vendor_id INTEGER,
+            name TEXT NOT NULL,
+            logo TEXT,
+            banner TEXT,
+            description TEXT,
+            timings TEXT DEFAULT '9:00 AM - 10:00 PM',
+            category TEXT,
+            contact_phone TEXT,
+            rating NUMERIC DEFAULT 4.5,
+            delivery_time TEXT DEFAULT '15-30 mins',
+            status TEXT DEFAULT 'pending', -- pending, active, suspended
+            kyc_document TEXT,
+            commission_rate INTEGER DEFAULT 5,
+            subscription_expires DATETIME,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            registered_shop TEXT,
+            is_active_store INTEGER DEFAULT 1,
+            show_special_offers INTEGER DEFAULT 1
+        )`);
+
+        // Create Vendor Wallets Table
+        db.run(`CREATE TABLE IF NOT EXISTS vendor_wallets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            shop_id INTEGER UNIQUE,
+            balance INTEGER DEFAULT 0,
+            revenue INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )`);
+
+        // Create Feature Flags Table
+        db.run(`CREATE TABLE IF NOT EXISTS feature_flags (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            label TEXT NOT NULL,
+            is_active INTEGER DEFAULT 1,
+            category TEXT DEFAULT 'general'
+        )`);
+
         // Drop existing to re-seed cleanly
         db.run('DROP TABLE IF EXISTS categories');
         db.run('DROP TABLE IF EXISTS products');
@@ -83,6 +128,53 @@ function initDb() {
         db.run('DROP TABLE IF EXISTS special_offers');
         db.run('DROP TABLE IF EXISTS brands');
         db.run('DROP TABLE IF EXISTS reviews');
+        db.run('DROP TABLE IF EXISTS shops');
+        db.run('DROP TABLE IF EXISTS vendor_wallets');
+        db.run('DROP TABLE IF EXISTS feature_flags');
+        db.run('DROP TABLE IF EXISTS promo_banners');
+
+        // Re-create dropped tables
+        db.run(`CREATE TABLE IF NOT EXISTS shops (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            vendor_id INTEGER,
+            name TEXT NOT NULL,
+            logo TEXT,
+            banner TEXT,
+            description TEXT,
+            timings TEXT DEFAULT '9:00 AM - 10:00 PM',
+            category TEXT,
+            contact_phone TEXT,
+            rating NUMERIC DEFAULT 4.5,
+            delivery_time TEXT DEFAULT '15-30 mins',
+            status TEXT DEFAULT 'pending',
+            kyc_document TEXT,
+            commission_rate INTEGER DEFAULT 5,
+            subscription_expires DATETIME,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            registered_shop TEXT,
+            is_active_store INTEGER DEFAULT 1,
+            show_special_offers INTEGER DEFAULT 1
+        )`);
+
+        db.run("ALTER TABLE shops ADD COLUMN registered_shop TEXT", (err) => {});
+        db.run("ALTER TABLE shops ADD COLUMN is_active_store INTEGER DEFAULT 1", (err) => {});
+        db.run("ALTER TABLE shops ADD COLUMN show_special_offers INTEGER DEFAULT 1", (err) => {});
+
+        db.run(`CREATE TABLE IF NOT EXISTS vendor_wallets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            shop_id INTEGER UNIQUE,
+            balance INTEGER DEFAULT 0,
+            revenue INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )`);
+
+        db.run(`CREATE TABLE IF NOT EXISTS feature_flags (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            label TEXT NOT NULL,
+            is_active INTEGER DEFAULT 1,
+            category TEXT DEFAULT 'general'
+        )`);
 
         // Settings Table (Standardized Flat Schema)
         db.run(`CREATE TABLE IF NOT EXISTS settings (
@@ -96,24 +188,39 @@ function initDb() {
             pay_cash_active INTEGER DEFAULT 1,
             pay_upi_active INTEGER DEFAULT 1,
             allowed_pincodes TEXT,
-            pincode_restriction_active INTEGER DEFAULT 1
+            pincode_restriction_active INTEGER DEFAULT 1,
+            banner_speed INTEGER DEFAULT 3000,
+            coins_system_active INTEGER DEFAULT 1,
+            coin_reward_rate INTEGER DEFAULT 1000,
+            coin_reward_amount INTEGER DEFAULT 30,
+            coin_value_per_rupee INTEGER DEFAULT 10,
+            vendor_fee_amount INTEGER DEFAULT 0,
+            vendor_fee_coupon TEXT,
+            vendor_fee_discount INTEGER DEFAULT 0,
+            razorpay_key_id TEXT,
+            razorpay_secret TEXT
         )`);
 
         // Migrations: Add marquee_text if it doesn't exist
         db.run("ALTER TABLE settings ADD COLUMN marquee_text TEXT", (err) => {});
-        // Migration: Add shop_image if it doesn't exist (for existing databases)
         db.run("ALTER TABLE settings ADD COLUMN shop_image TEXT", (err) => {});
-        db.run("ALTER TABLE orders ADD COLUMN payment_status TEXT DEFAULT 'pending'", (err) => {});
         db.run("ALTER TABLE settings ADD COLUMN allowed_pincodes TEXT", (err) => {});
         db.run("ALTER TABLE settings ADD COLUMN pincode_restriction_active INTEGER DEFAULT 1", (err) => {});
         db.run("ALTER TABLE settings ADD COLUMN banner_speed INTEGER DEFAULT 3000", (err) => {});
-        db.run("ALTER TABLE products ADD COLUMN variants TEXT", (err) => {});
-        db.run("ALTER TABLE notifications ADD COLUMN is_important INTEGER DEFAULT 0", (err) => {});
+        db.run("ALTER TABLE settings ADD COLUMN coins_system_active INTEGER DEFAULT 1", (err) => {});
+        db.run("ALTER TABLE settings ADD COLUMN coin_reward_rate INTEGER DEFAULT 1000", (err) => {});
+        db.run("ALTER TABLE settings ADD COLUMN coin_reward_amount INTEGER DEFAULT 30", (err) => {});
+        db.run("ALTER TABLE settings ADD COLUMN coin_value_per_rupee INTEGER DEFAULT 10", (err) => {});
+        db.run("ALTER TABLE settings ADD COLUMN vendor_fee_amount INTEGER DEFAULT 0", (err) => {});
+        db.run("ALTER TABLE settings ADD COLUMN vendor_fee_coupon TEXT", (err) => {});
+        db.run("ALTER TABLE settings ADD COLUMN vendor_fee_discount INTEGER DEFAULT 0", (err) => {});
+        db.run("ALTER TABLE settings ADD COLUMN razorpay_key_id TEXT", (err) => {});
+        db.run("ALTER TABLE settings ADD COLUMN razorpay_secret TEXT", (err) => {});
 
         // Seed default setting if empty
         db.get("SELECT COUNT(*) as count FROM settings", (err, row) => {
             if (row && row.count === 0) {
-                db.run("INSERT INTO settings (shop_email, shop_phone, shop_address, shop_image, marquee_text, allowed_pincodes, pincode_restriction_active) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                db.run("INSERT INTO settings (shop_email, shop_phone, shop_address, shop_image, marquee_text, allowed_pincodes, pincode_restriction_active, coins_system_active, coin_reward_rate, coin_reward_amount, coin_value_per_rupee) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     [
                         'support@adyanta.com', 
                         '+91 98765 43210', 
@@ -121,22 +228,26 @@ function initDb() {
                         'https://images.unsplash.com/photo-1542838132-92c53300491e?w=1200',
                         '⚡ FREE Delivery on orders above ₹500 | 🍎 Fresh Groceries delivered in 15-45 minutes! | 🎁 Use code WELCOME10 for 10% OFF!',
                         '524004,524003,524002,524001',
-                        1
+                        1,
+                        1,
+                        1000,
+                        30,
+                        10
                     ]
                 );
-            } else {
-                // Ensure existing settings get the default pincodes if empty initially
-                db.run("UPDATE settings SET allowed_pincodes = '524004,524003,524002,524001', pincode_restriction_active = 1 WHERE allowed_pincodes IS NULL", (err) => {});
             }
         });
 
-        // Seed Default User if empty
+        // Seed Default User if empty (Role set to vendor to test shop features)
         db.get("SELECT COUNT(*) as count FROM users", (err, row) => {
             if (row && row.count === 0) {
                 console.log("Seeding default user...");
-                db.run("INSERT INTO users (username, password, full_name, email, phone, status) VALUES (?, ?, ?, ?, ?, ?)",
-                    ['rakesh', hashPassword('rakesh123'), 'Rakesh Kumar', 'rakesh@example.com', '9876543210', 'active']
+                db.run("INSERT INTO users (username, password, full_name, email, phone, status, role, coins) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    ['rakesh', hashPassword('rakesh123'), 'Rakesh Kumar', 'rakesh@example.com', '9876543210', 'active', 'vendor', 150]
                 );
+            } else {
+                // Ensure Rakesh has 'vendor' role for testing
+                db.run("UPDATE users SET role = 'vendor' WHERE username = 'rakesh'");
             }
         });
 
@@ -150,7 +261,258 @@ function initDb() {
             }
         });
 
-        // 2. For Users
+        // Seed default Feature Flags
+        db.get("SELECT COUNT(*) as count FROM feature_flags", (err, row) => {
+            if (row && row.count === 0) {
+                const flags = [
+                    { name: 'ai_chatbot', label: 'AI Chatbot Support Assistant', is_active: 1, category: 'customer' },
+                    { name: 'reviews_ratings', label: 'Customer Reviews & Ratings', is_active: 1, category: 'customer' },
+                    { name: 'cod_payment', label: 'Cash on Delivery (COD)', is_active: 1, category: 'payment' },
+                    { name: 'wallet_system', label: 'Vendor Payout Wallet', is_active: 1, category: 'vendor' },
+                    { name: 'vendor_onboarding', label: 'New Vendor Registration', is_active: 1, category: 'vendor' },
+                    { name: 'card_payment', label: 'Credit/Debit Card Gateway', is_active: 1, category: 'payment' }
+                ];
+                const insertFlag = db.prepare("INSERT INTO feature_flags (name, label, is_active, category) VALUES (?, ?, ?, ?)");
+                flags.forEach(f => insertFlag.run(f.name, f.label, f.is_active, f.category));
+                insertFlag.finalize();
+            }
+        });
+
+        // Seed default Shops for vendor Rakesh (id: 1)
+        db.get("SELECT COUNT(*) as count FROM shops", (err, row) => {
+            if (row && row.count === 0) {
+                const defaultShops = [
+                    {
+                        id: 1,
+                        name: 'Adyanta Organic Farm Store',
+                        logo: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=150&h=150&fit=crop',
+                        banner: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=1200',
+                        description: 'Farm fresh organic vegetables, crispy greens, and seasonal delicious local fruits direct to your doorstep.',
+                        timings: '8:00 AM - 9:00 PM',
+                        category: 'Fresh Produce Shop',
+                        contact_phone: '+91 98765 43210',
+                        rating: 4.9,
+                        delivery_time: '15-30 mins',
+                        status: 'active',
+                        commission_rate: 5,
+                        registered_shop: 'Fresh Produce Shop'
+                    },
+                    {
+                        id: 2,
+                        name: 'Adyanta Frozen Foods',
+                        logo: 'https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=150&h=150&fit=crop',
+                        banner: 'https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=1200',
+                        description: 'Premium frozen meals, french fries, frozen vegetables, and high quality dairy ice creams.',
+                        timings: '9:00 AM - 10:00 PM',
+                        category: 'Frozen Shop',
+                        contact_phone: '+91 98765 43210',
+                        rating: 4.7,
+                        delivery_time: '20-40 mins',
+                        status: 'active',
+                        commission_rate: 5,
+                        registered_shop: 'Frozen Shop'
+                    },
+                    {
+                        id: 3,
+                        name: 'Adyanta Juice & Nectars',
+                        logo: 'https://images.unsplash.com/photo-1613478223719-2ab802602423?w=150&h=150&fit=crop',
+                        banner: 'https://images.unsplash.com/photo-1613478223719-2ab802602423?w=1200',
+                        description: 'Pure cold-pressed juices, tender coconut water, milkshakes, and organic fruit nectars.',
+                        timings: '9:00 AM - 9:00 PM',
+                        category: 'Juice Shop',
+                        contact_phone: '+91 98765 43210',
+                        rating: 4.8,
+                        delivery_time: '10-25 mins',
+                        status: 'active',
+                        commission_rate: 5,
+                        registered_shop: 'Juice Shop'
+                    },
+                    {
+                        id: 4,
+                        name: 'Adyanta Gold Jewelers',
+                        logo: 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=150&h=150&fit=crop',
+                        banner: 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=1200',
+                        description: 'Exquisite 22K gold chains, wedding rings, luxury bangles, and certified diamond studs.',
+                        timings: '10:00 AM - 8:00 PM',
+                        category: 'Gold Shop',
+                        contact_phone: '+91 98765 43210',
+                        rating: 4.9,
+                        delivery_time: '30-60 mins',
+                        status: 'active',
+                        commission_rate: 3,
+                        registered_shop: 'Gold Shop'
+                    },
+                    {
+                        id: 5,
+                        name: 'Adyanta Dressing & Apparel',
+                        logo: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=150&h=150&fit=crop',
+                        banner: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=1200',
+                        description: 'Premium casual t-shirts, premium denim jeans, silk sarees, and high quality jackets.',
+                        timings: '10:00 AM - 9:30 PM',
+                        category: 'Dressing Shop',
+                        contact_phone: '+91 98765 43210',
+                        rating: 4.6,
+                        delivery_time: '25-45 mins',
+                        status: 'active',
+                        commission_rate: 5,
+                        registered_shop: 'Dressing Shop'
+                    },
+                    {
+                        id: 6,
+                        name: 'Adyanta Daily Supermarket',
+                        logo: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=150&h=150&fit=crop',
+                        banner: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=1200',
+                        description: 'Your daily go-to grocery store for premium dals, pulses, snacks, milk, and detergents.',
+                        timings: '7:00 AM - 10:00 PM',
+                        category: 'General Store',
+                        contact_phone: '+91 98765 43210',
+                        rating: 4.8,
+                        delivery_time: '15-30 mins',
+                        status: 'active',
+                        commission_rate: 5,
+                        registered_shop: 'General Store'
+                    },
+                    {
+                        id: 7,
+                        name: 'Adyanta Pharmacy & Wellness',
+                        logo: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=150&h=150&fit=crop',
+                        banner: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=1200',
+                        description: 'Over-the-counter wellness tablets, vitamins, dettol antiseptics, and band-aids.',
+                        timings: '8:00 AM - 11:00 PM',
+                        category: 'Pharmacy / Health Shop',
+                        contact_phone: '+91 98765 43210',
+                        rating: 4.7,
+                        delivery_time: '10-20 mins',
+                        status: 'active',
+                        commission_rate: 4,
+                        registered_shop: 'Pharmacy / Health Shop'
+                    },
+                    {
+                        id: 8,
+                        name: 'Green Valley Fresh Market',
+                        logo: 'https://images.unsplash.com/photo-1610832958506-aa56368176cf?w=150&h=150&fit=crop',
+                        banner: 'https://images.unsplash.com/photo-1610832958506-aa56368176cf?w=1200',
+                        description: 'Premium fresh fruits, exotic local greens, and organic garden produce.',
+                        timings: '7:30 AM - 8:30 PM',
+                        category: 'Fresh Produce Shop',
+                        contact_phone: '+91 99999 88888',
+                        rating: 4.8,
+                        delivery_time: '10-25 mins',
+                        status: 'active',
+                        commission_rate: 5,
+                        registered_shop: 'Fresh Produce Shop'
+                    },
+                    {
+                        id: 9,
+                        name: 'Polar Ice Foods & Desserts',
+                        logo: 'https://images.unsplash.com/photo-1551782450-a2132b4ba21d?w=150&h=150&fit=crop',
+                        banner: 'https://images.unsplash.com/photo-1551782450-a2132b4ba21d?w=1200',
+                        description: 'Chilled delights, frozen pre-cut veggies, ice cream party tubs, and snack bites.',
+                        timings: '10:00 AM - 11:00 PM',
+                        category: 'Frozen Shop',
+                        contact_phone: '+91 99999 88888',
+                        rating: 4.6,
+                        delivery_time: '15-35 mins',
+                        status: 'active',
+                        commission_rate: 5,
+                        registered_shop: 'Frozen Shop'
+                    },
+                    {
+                        id: 10,
+                        name: 'Citrus Squeeze Juice Bar',
+                        logo: 'https://images.unsplash.com/photo-1546173159-315724a31696?w=150&h=150&fit=crop',
+                        banner: 'https://images.unsplash.com/photo-1546173159-315724a31696?w=1200',
+                        description: 'Freshly squeezed citrus mocktails, natural health shots, and cold pressed seasonal juices.',
+                        timings: '8:00 AM - 9:00 PM',
+                        category: 'Juice Shop',
+                        contact_phone: '+91 99999 88888',
+                        rating: 4.7,
+                        delivery_time: '12-30 mins',
+                        status: 'active',
+                        commission_rate: 5,
+                        registered_shop: 'Juice Shop'
+                    },
+                    {
+                        id: 11,
+                        name: 'Golden Heritage Fine Jewelry',
+                        logo: 'https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=150&h=150&fit=crop',
+                        banner: 'https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=1200',
+                        description: 'Crafted heritage jewelry, royal designer gold necklaces, and certified solitaire diamond rings.',
+                        timings: '11:00 AM - 8:30 PM',
+                        category: 'Gold Shop',
+                        contact_phone: '+91 99999 88888',
+                        rating: 4.9,
+                        delivery_time: '35-65 mins',
+                        status: 'active',
+                        commission_rate: 4,
+                        registered_shop: 'Gold Shop'
+                    },
+                    {
+                        id: 12,
+                        name: 'Vogue Threads & Dressing Room',
+                        logo: 'https://images.unsplash.com/photo-1576995853123-5a10305d93c0?w=150&h=150&fit=crop',
+                        banner: 'https://images.unsplash.com/photo-1576995853123-5a10305d93c0?w=1200',
+                        description: 'Chic designer t-shirts, modern denim jackets, and traditional wedding collection sarees.',
+                        timings: '10:00 AM - 10:00 PM',
+                        category: 'Dressing Shop',
+                        contact_phone: '+91 99999 88888',
+                        rating: 4.7,
+                        delivery_time: '20-40 mins',
+                        status: 'active',
+                        commission_rate: 5,
+                        registered_shop: 'Dressing Shop'
+                    },
+                    {
+                        id: 13,
+                        name: 'QuickMart Express Grocery',
+                        logo: 'https://images.unsplash.com/photo-1589131649983-4ec35f63d309?w=150&h=150&fit=crop',
+                        banner: 'https://images.unsplash.com/photo-1589131649983-4ec35f63d309?w=1200',
+                        description: 'Instant delivery grocery store for pantry supplies, snacking packs, fresh milk, and daily essentials.',
+                        timings: '6:00 AM - 11:00 PM',
+                        category: 'General Store',
+                        contact_phone: '+91 99999 88888',
+                        rating: 4.8,
+                        delivery_time: '10-20 mins',
+                        status: 'active',
+                        commission_rate: 5,
+                        registered_shop: 'General Store'
+                    },
+                    {
+                        id: 14,
+                        name: 'Apex Healthcare & Pharmacy',
+                        logo: 'https://images.unsplash.com/photo-1616679911721-eff6eec18fcd?w=150&h=150&fit=crop',
+                        banner: 'https://images.unsplash.com/photo-1616679911721-eff6eec18fcd?w=1200',
+                        description: 'Registered community drugstore offering prescription supplements, band-aids, antiseptics, and wellness needs.',
+                        timings: '7:00 AM - 11:30 PM',
+                        category: 'Pharmacy / Health Shop',
+                        contact_phone: '+91 99999 88888',
+                        rating: 4.8,
+                        delivery_time: '10-15 mins',
+                        status: 'active',
+                        commission_rate: 4,
+                        registered_shop: 'Pharmacy / Health Shop'
+                    }
+                ];
+
+                const insertShop = db.prepare(`INSERT INTO shops (id, vendor_id, name, logo, banner, description, timings, category, contact_phone, rating, delivery_time, status, commission_rate, registered_shop)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+                defaultShops.forEach(s => {
+                    insertShop.run(s.id, 1, s.name, s.logo, s.banner, s.description, s.timings, s.category, s.contact_phone, s.rating, s.delivery_time, s.status, s.commission_rate, s.registered_shop);
+                });
+                insertShop.finalize();
+            }
+        });
+
+        // Seed default wallets for Shops 1 to 14
+        db.get("SELECT COUNT(*) as count FROM vendor_wallets", (err, row) => {
+            if (row && row.count === 0) {
+                for (let i = 1; i <= 14; i++) {
+                    db.run("INSERT INTO vendor_wallets (shop_id, balance, revenue) VALUES (?, ?, ?)", [i, 1000 * i, 3000 * i]);
+                }
+            }
+        });
+
+        // 2. For Users password migration
         db.all("SELECT id, password FROM users", (err, rows) => {
             if (rows) {
                 rows.forEach(user => {
@@ -186,7 +548,9 @@ function initDb() {
             is_available INTEGER DEFAULT 1,
             is_trending INTEGER DEFAULT 0,
             is_daily_essential INTEGER DEFAULT 1,
-            description TEXT
+            description TEXT,
+            shop_id INTEGER DEFAULT 1,
+            variants TEXT
         )`);
 
 
@@ -197,6 +561,8 @@ function initDb() {
         db.run("ALTER TABLE products ADD COLUMN is_trending INTEGER DEFAULT 0", (err) => {});
         db.run("ALTER TABLE products ADD COLUMN is_daily_essential INTEGER DEFAULT 1", (err) => {});
         db.run("ALTER TABLE products ADD COLUMN description TEXT", (err) => {});
+        db.run("ALTER TABLE products ADD COLUMN shop_id INTEGER DEFAULT 1", (err) => {});
+        db.run("ALTER TABLE products ADD COLUMN variants TEXT", (err) => {});
 
 
         // Create Notifications Table
@@ -227,10 +593,16 @@ function initDb() {
         // Create Promo Banners Table (Simple sliding photos)
         db.run(`CREATE TABLE IF NOT EXISTS promo_banners (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            shop_id INTEGER,
             imageUrl TEXT,
             linkUrl TEXT DEFAULT '#',
             displayOrder INTEGER DEFAULT 0
         )`);
+
+        db.run("ALTER TABLE promo_banners ADD COLUMN shop_id INTEGER", (err) => {});
+        db.run("ALTER TABLE promo_banners ADD COLUMN imageUrl TEXT", (err) => {});
+        db.run("ALTER TABLE promo_banners ADD COLUMN linkUrl TEXT", (err) => {});
+        db.run("ALTER TABLE promo_banners ADD COLUMN displayOrder INTEGER DEFAULT 0", (err) => {});
 
         // Create Special Offers Table
         db.run(`CREATE TABLE IF NOT EXISTS special_offers (
@@ -240,6 +612,7 @@ function initDb() {
             colorClass TEXT,
             target_category TEXT
         )`);
+        db.run("ALTER TABLE special_offers ADD COLUMN shop_id INTEGER DEFAULT NULL", (err) => {});
 
         // Create Orders Table
         db.run(`CREATE TABLE IF NOT EXISTS orders (
@@ -250,6 +623,7 @@ function initDb() {
             payment_method TEXT,
             address TEXT,
             status TEXT DEFAULT 'pending',
+            shop_id INTEGER,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )`);
 
@@ -258,6 +632,7 @@ function initDb() {
         db.run("ALTER TABLE orders ADD COLUMN payment_status TEXT DEFAULT 'pending'", (err) => {});
         db.run("ALTER TABLE orders ADD COLUMN discount_amount INTEGER DEFAULT 0", (err) => {});
         db.run("ALTER TABLE orders ADD COLUMN delivery_type TEXT DEFAULT 'Home Delivery'", (err) => {});
+        db.run("ALTER TABLE orders ADD COLUMN shop_id INTEGER", (err) => {});
         db.run("ALTER TABLE users ADD COLUMN created_at DATETIME", (err) => {
             if (!err) db.run("UPDATE users SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL");
         });
@@ -282,6 +657,20 @@ function initDb() {
         db.run("ALTER TABLE support_messages ADD COLUMN user_id INTEGER", (err) => {});
         db.run("ALTER TABLE support_messages ADD COLUMN reply TEXT", (err) => {});
         db.run("ALTER TABLE support_messages ADD COLUMN replied_at DATETIME", (err) => {});
+        db.run("ALTER TABLE support_messages ADD COLUMN shop_id INTEGER", (err) => {});
+
+        // Create Store Customer Support Chat Messages Table
+        db.run(`CREATE TABLE IF NOT EXISTS store_chat_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            shop_id INTEGER NOT NULL,
+            user_id INTEGER,
+            session_id TEXT,
+            user_name TEXT,
+            sender TEXT NOT NULL,
+            message TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            is_read INTEGER DEFAULT 0
+        )`);
 
         // Create Reviews Table
         db.run(`CREATE TABLE IF NOT EXISTS reviews (
@@ -313,12 +702,14 @@ function initDb() {
             discount_value INTEGER,
             discount_type TEXT,
             min_amount INTEGER DEFAULT 0,
-            expiry_date DATETIME
+            expiry_date DATETIME,
+            shop_id INTEGER
         )`);
 
         // Migration: Add min_amount and is_one_time to coupons if they don't exist
         db.run("ALTER TABLE coupons ADD COLUMN min_amount INTEGER DEFAULT 0", (err) => {});
         db.run("ALTER TABLE coupons ADD COLUMN is_one_time INTEGER DEFAULT 0", (err) => {});
+        db.run("ALTER TABLE coupons ADD COLUMN shop_id INTEGER", (err) => {});
 
         // Create Coupon Usage Table
         db.run(`CREATE TABLE IF NOT EXISTS coupon_usage (
@@ -345,7 +736,6 @@ function initDb() {
         // Force seed data by skipping the IF check for products and categories since we drop them
         console.log("Seeding Database...");
 
-        
         const banner_url = 'file:///C:/Users/RAKESH%20KUMAR/.gemini/antigravity/brain/92924b03-a69a-4135-88ca-1fc6a0c096e1/promo_banner_1775136840249.png';
 
         const categories = [
@@ -356,44 +746,117 @@ function initDb() {
             { name: "Dry Fruits", iconUrl: "ph-plant" },
             { name: "Household", iconUrl: "ph-house-line" },
             { name: "Drinks", iconUrl: "ph-brandy" },
-            { name: "Vegetables", iconUrl: "ph-leaf" }
+            { name: "Vegetables", iconUrl: "ph-leaf" },
+            { name: "Frozen Foods", iconUrl: "ph-snowflake" },
+            { name: "Desserts", iconUrl: "ph-cookie" },
+            { name: "Gold Jewelry", iconUrl: "ph-crown" },
+            { name: "Diamond Jewelry", iconUrl: "ph-crown" },
+            { name: "Mens Wear", iconUrl: "ph-t-shirt" },
+            { name: "Womens Wear", iconUrl: "ph-t-shirt" },
+            { name: "Healthcare", iconUrl: "ph-first-aid" }
         ];
 
         const products = [
-            { name: "Premium Toor Dal", category: "Dals & Pulses", weight: "1 kg", price: 180, originalPrice: 220, rating: "4.8", reviews: "120", imgUrl: "https://images.unsplash.com/photo-1589131649983-4ec35f63d309?w=300&h=300&fit=crop", discount: "18% OFF", is_trending: 1 },
-            { name: "Fresh Red Apples", category: "Fresh Fruits", weight: "1 kg", price: 150, originalPrice: 180, rating: "4.9", reviews: "340", imgUrl: "https://images.unsplash.com/photo-1610832958506-aa56368176cf?w=300&h=300&fit=crop", discount: "16% OFF", is_trending: 1 },
-            { name: "Organic Honey", category: "Household", weight: "500 g", price: 199, originalPrice: 250, rating: "4.7", reviews: "89", imgUrl: "https://images.unsplash.com/photo-1587049352847-4d4b1437145b?w=300&h=300&fit=crop", discount: "20% OFF", is_trending: 1 },
-            { name: "Aashirvaad Salt", category: "Dals & Pulses", weight: "1 kg", price: 25, originalPrice: 28, rating: "4.5", reviews: "210", imgUrl: "https://images.unsplash.com/photo-1622484211148-525c34cb2e65?w=300&h=300&fit=crop", discount: "10% OFF", is_trending: 1 },
-            { name: "Cashews (Kaju)", category: "Dry Fruits", weight: "250 g", price: 290, originalPrice: 350, rating: "4.6", reviews: "156", imgUrl: "https://images.unsplash.com/photo-1599587428807-6ad0c7ec44da?w=300&h=300&fit=crop", discount: "17% OFF", is_trending: 1 },
-            { name: "Coca Cola Family Pack", category: "Drinks", weight: "2 L", price: 90, originalPrice: 95, rating: "4.2", reviews: "500", imgUrl: "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=300&h=300&fit=crop", discount: "5% OFF" },
-            { name: "Surf Excel Detergent", category: "Household", weight: "1 kg", price: 125, originalPrice: 140, rating: "4.8", reviews: "450", imgUrl: "https://images.unsplash.com/photo-1584820927498-cafe2c174360?w=300&h=300&fit=crop", discount: "10% OFF", is_trending: 1 },
-            { name: "Lay's Classic", category: "Snacks", weight: "50 g", price: 20, originalPrice: 20, rating: "4.4", reviews: "100", imgUrl: "https://images.unsplash.com/photo-1621939514649-280e2ee25f60?w=300&h=300&fit=crop", discount: "0% OFF" },
-            { name: "Amul Taaza Milk", category: "Dairy & Bakery", weight: "1 L", price: 68, originalPrice: 70, rating: "4.9", reviews: "1200", imgUrl: "https://images.unsplash.com/photo-1550583724-b2692b85b150?w=300&h=300&fit=crop", discount: "2% OFF" },
-            { name: "Britannia Good Day", category: "Snacks", weight: "200 g", price: 30, originalPrice: 35, rating: "4.6", reviews: "890", imgUrl: "https://images.unsplash.com/photo-1558961363-fa8fdf82db35?w=300&h=300&fit=crop", discount: "14% OFF", is_trending: 1 },
-            { name: "Tata Tea Gold", category: "Drinks", weight: "500 g", price: 290, originalPrice: 330, rating: "4.7", reviews: "600", imgUrl: "https://images.unsplash.com/photo-1594910243552-8700ab43e74a?w=300&h=300&fit=crop", discount: "12% OFF", is_trending: 1 },
-            { name: "Fresh Onions", category: "Vegetables", weight: "1 kg", price: 40, originalPrice: 60, rating: "4.1", reviews: "300", imgUrl: "https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?w=300&h=300&fit=crop", discount: "33% OFF" },
-            { name: "Fresh Red Tomato", category: "Vegetables", weight: "1 kg", price: 50, originalPrice: 70, rating: "4.9", reviews: "850", imgUrl: "https://images.unsplash.com/photo-1590665416245-129683944414?w=300&h=300&fit=crop", discount: "28% OFF", is_trending: 1 },
-            { name: "Green Chillies", category: "Vegetables", weight: "250 g", price: 20, originalPrice: 30, rating: "4.6", reviews: "120", imgUrl: "https://images.unsplash.com/photo-1588252210219-c9c31b21bc56?w=300&h=300&fit=crop", discount: "33% OFF" },
-            { name: "Ginger (Adrak)", category: "Vegetables", weight: "250 g", price: 45, originalPrice: 60, rating: "4.8", reviews: "95", imgUrl: "https://images.unsplash.com/photo-1599940824399-b87987cb96a5?w=300&h=300&fit=crop", discount: "25% OFF" },
-            { name: "Garlic (Lehsun)", category: "Vegetables", weight: "250 g", price: 60, originalPrice: 80, rating: "4.7", reviews: "110", imgUrl: "https://images.unsplash.com/photo-1583947215259-38e31be8751f?w=300&h=300&fit=crop", discount: "25% OFF" },
-            { name: "Fresh Cauliflower", category: "Vegetables", weight: "1 pc", price: 40, originalPrice: 60, rating: "4.5", reviews: "200", imgUrl: "https://images.unsplash.com/photo-1568584711075-3d021a7c3ca3?w=300&h=300&fit=crop", discount: "33% OFF" },
-            { name: "Maggi 2-Minute Noodles", category: "Snacks", weight: "140 g", price: 28, originalPrice: 30, rating: "4.8", reviews: "4500", imgUrl: "https://images.unsplash.com/photo-1612927601601-6638404737ce?w=300&h=300&fit=crop", discount: "6% OFF", is_trending: 1 },
-            { name: "Farm Fresh Eggs", category: "Dairy & Bakery", weight: "6 pcs", price: 55, originalPrice: 60, rating: "4.6", reviews: "215", imgUrl: "https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?w=300&h=300&fit=crop", discount: "8% OFF" },
-            { name: "Aashirvaad Atta", category: "Dals & Pulses", weight: "5 kg", price: 210, originalPrice: 240, rating: "4.7", reviews: "890", imgUrl: "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=300&h=300&fit=crop", discount: "12% OFF" },
-            { name: "Haldiram's Bhujia", category: "Snacks", weight: "400 g", price: 95, originalPrice: 105, rating: "4.8", reviews: "750", imgUrl: "https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?w=300&h=300&fit=crop", discount: "9% OFF", is_trending: 1 },
-            { name: "Pampers Baby Wipes", category: "Household", weight: "72 pcs", price: 140, originalPrice: 180, rating: "4.9", reviews: "1020", imgUrl: "https://images.unsplash.com/photo-1584622781564-1d9876a13d00?w=300&h=300&fit=crop", discount: "22% OFF", is_trending: 1 },
+            // Shop 1: Fresh Produce Shop
+            { name: "Fresh Red Apples", category: "Fresh Fruits", weight: "1 kg", price: 155, originalPrice: 180, rating: "4.9", reviews: "340", imgUrl: "https://images.unsplash.com/photo-1610832958506-aa56368176cf?w=300&h=300&fit=crop", discount: "14% OFF", is_trending: 1, shop_id: 1 },
+            { name: "Fresh Onions", category: "Vegetables", weight: "1 kg", price: 38, originalPrice: 55, rating: "4.1", reviews: "300", imgUrl: "https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?w=300&h=300&fit=crop", discount: "30% OFF", shop_id: 1 },
+            { name: "Fresh Red Tomato", category: "Vegetables", weight: "1 kg", price: 48, originalPrice: 70, rating: "4.9", reviews: "850", imgUrl: "https://images.unsplash.com/photo-1590665416245-129683944414?w=300&h=300&fit=crop", discount: "31% OFF", is_trending: 1, shop_id: 1 },
+            { name: "Green Chillies", category: "Vegetables", weight: "250 g", price: 18, originalPrice: 28, rating: "4.6", reviews: "120", imgUrl: "https://images.unsplash.com/photo-1588252210219-c9c31b21bc56?w=300&h=300&fit=crop", discount: "35% OFF", shop_id: 1 },
+            { name: "Ginger (Adrak)", category: "Vegetables", weight: "250 g", price: 42, originalPrice: 60, rating: "4.8", reviews: "95", imgUrl: "https://images.unsplash.com/photo-1599940824399-b87987cb96a5?w=300&h=300&fit=crop", discount: "30% OFF", shop_id: 1 },
+            { name: "Garlic (Lehsun)", category: "Vegetables", weight: "250 g", price: 65, originalPrice: 85, rating: "4.7", reviews: "110", imgUrl: "https://images.unsplash.com/photo-1583947215259-38e31be8751f?w=300&h=300&fit=crop", discount: "23% OFF", shop_id: 1 },
+            { name: "Fresh Cauliflower", category: "Vegetables", weight: "1 pc", price: 35, originalPrice: 50, rating: "4.5", reviews: "200", imgUrl: "https://images.unsplash.com/photo-1568584711075-3d021a7c3ca3?w=300&h=300&fit=crop", discount: "30% OFF", shop_id: 1 },
 
-            { name: "Dhara Mustard Oil", category: "Household", weight: "1 L", price: 135, originalPrice: 150, rating: "4.5", reviews: "320", imgUrl: "https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=300&h=300&fit=crop", discount: "10% OFF", is_trending: 0 }
+            // Shop 2: Frozen Shop
+            { name: "McCain French Fries", category: "Frozen Foods", weight: "750 g", price: 125, originalPrice: 145, rating: "4.5", reviews: "180", imgUrl: "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=300&h=300&fit=crop", discount: "13% OFF", is_trending: 1, shop_id: 2 },
+            { name: "Frozen Sweet Corn", category: "Frozen Foods", weight: "500 g", price: 89, originalPrice: 105, rating: "4.6", reviews: "120", imgUrl: "https://images.unsplash.com/photo-1551782450-a2132b4ba21d?w=300&h=300&fit=crop", discount: "15% OFF", shop_id: 2 },
+            { name: "Frozen Green Peas", category: "Frozen Foods", weight: "1 kg", price: 165, originalPrice: 195, rating: "4.7", reviews: "230", imgUrl: "https://images.unsplash.com/photo-1592417817098-8f3d6eb19675?w=300&h=300&fit=crop", discount: "15% OFF", shop_id: 2 },
+            { name: "Vadilal Vanilla Ice Cream", category: "Desserts", weight: "1 L", price: 175, originalPrice: 199, rating: "4.8", reviews: "500", imgUrl: "https://images.unsplash.com/photo-1567206563064-6f6093f2d457?w=300&h=300&fit=crop", discount: "12% OFF", shop_id: 2 },
+
+            // Shop 3: Juice Shop
+            { name: "Real Fruit Power Orange", category: "Drinks", weight: "1 L", price: 115, originalPrice: 130, rating: "4.4", reviews: "900", imgUrl: "https://images.unsplash.com/photo-1613478223719-2ab802602423?w=300&h=300&fit=crop", discount: "11% OFF", is_trending: 1, shop_id: 3 },
+            { name: "Fresh Mango Shake", category: "Drinks", weight: "300 ml", price: 65, originalPrice: 80, rating: "4.8", reviews: "340", imgUrl: "https://images.unsplash.com/photo-1546173159-315724a31696?w=300&h=300&fit=crop", discount: "18% OFF", shop_id: 3 },
+            { name: "Tender Coconut Water", category: "Drinks", weight: "1 pc", price: 45, originalPrice: 55, rating: "4.9", reviews: "1200", imgUrl: "https://images.unsplash.com/photo-1525385133336-254847240f92?w=300&h=300&fit=crop", discount: "18% OFF", shop_id: 3 },
+            { name: "Pomegranate (Anar) Juice", category: "Drinks", weight: "250 ml", price: 85, originalPrice: 100, rating: "4.6", reviews: "150", imgUrl: "https://images.unsplash.com/photo-1563227812-0ea4c22e6cc8?w=300&h=300&fit=crop", discount: "15% OFF", shop_id: 3 },
+
+            // Shop 4: Gold Shop
+            { name: "22K Gold Chain", category: "Gold Jewelry", weight: "8 g", price: 54500, originalPrice: 59500, rating: "4.9", reviews: "45", imgUrl: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=300&h=300&fit=crop", discount: "8% OFF", is_trending: 1, shop_id: 4 },
+            { name: "18K Diamond Engagement Ring", category: "Diamond Jewelry", weight: "4 g", price: 42500, originalPrice: 48500, rating: "4.8", reviews: "20", imgUrl: "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=300&h=300&fit=crop", discount: "12% OFF", shop_id: 4 },
+            { name: "Gold Floral Bangles", category: "Gold Jewelry", weight: "16 g", price: 109000, originalPrice: 116000, rating: "4.7", reviews: "12", imgUrl: "https://images.unsplash.com/photo-1617038260897-41a1f14a8ca0?w=300&h=300&fit=crop", discount: "6% OFF", shop_id: 4 },
+            { name: "Diamond Stud Earrings", category: "Diamond Jewelry", weight: "2 g", price: 29500, originalPrice: 32500, rating: "4.9", reviews: "38", imgUrl: "https://images.unsplash.com/photo-1635767790028-3e9a53664081?w=300&h=300&fit=crop", discount: "9% OFF", shop_id: 4 },
+
+            // Shop 5: Dressing Shop
+            { name: "Casual Cotton T-Shirt", category: "Mens Wear", weight: "1 pc", price: 450, originalPrice: 699, rating: "4.5", reviews: "290", imgUrl: "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=300&h=300&fit=crop", discount: "35% OFF", is_trending: 1, shop_id: 5 },
+            { name: "Classic Slim-Fit Jeans", category: "Mens Wear", weight: "1 pc", price: 1199, originalPrice: 1799, rating: "4.6", reviews: "520", imgUrl: "https://images.unsplash.com/photo-1542272604-787c3835535d?w=300&h=300&fit=crop", discount: "33% OFF", shop_id: 5 },
+            { name: "Pure Silk Banarasi Saree", category: "Womens Wear", weight: "1 pc", price: 3550, originalPrice: 4999, rating: "4.9", reviews: "115", imgUrl: "https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=300&h=300&fit=crop", discount: "29% OFF", is_trending: 1, shop_id: 5 },
+            { name: "Stylish Denim Jacket", category: "Womens Wear", weight: "1 pc", price: 1690, originalPrice: 2399, rating: "4.7", reviews: "88", imgUrl: "https://images.unsplash.com/photo-1576995853123-5a10305d93c0?w=300&h=300&fit=crop", discount: "29% OFF", shop_id: 5 },
+
+            // Shop 6: General Store
+            { name: "Aashirvaad Atta", category: "Dals & Pulses", weight: "5 kg", price: 215, originalPrice: 245, rating: "4.7", reviews: "890", imgUrl: "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=300&h=300&fit=crop", discount: "12% OFF", shop_id: 6 },
+            { name: "Premium Toor Dal", category: "Dals & Pulses", weight: "1 kg", price: 185, originalPrice: 225, rating: "4.8", reviews: "120", imgUrl: "https://images.unsplash.com/photo-1589131649983-4ec35f63d309?w=300&h=300&fit=crop", discount: "17% OFF", is_trending: 1, shop_id: 6 },
+            { name: "Cashews (Kaju)", category: "Dry Fruits", weight: "250 g", price: 295, originalPrice: 355, rating: "4.6", reviews: "156", imgUrl: "https://images.unsplash.com/photo-1599587428807-6ad0c7ec44da?w=300&h=300&fit=crop", discount: "16% OFF", is_trending: 1, shop_id: 6 },
+            { name: "Surf Excel Detergent", category: "Household", weight: "1 kg", price: 129, originalPrice: 145, rating: "4.8", reviews: "450", imgUrl: "https://images.unsplash.com/photo-1584820927498-cafe2c174360?w=300&h=300&fit=crop", discount: "11% OFF", is_trending: 1, shop_id: 6 },
+            { name: "Haldiram's Bhujia", category: "Snacks", weight: "400 g", price: 98, originalPrice: 110, rating: "4.8", reviews: "750", imgUrl: "https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?w=300&h=300&fit=crop", discount: "10% OFF", is_trending: 1, shop_id: 6 },
+            { name: "Amul Taaza Milk", category: "Dairy & Bakery", weight: "1 L", price: 69, originalPrice: 72, rating: "4.9", reviews: "1200", imgUrl: "https://images.unsplash.com/photo-1550583724-b2692b85b150?w=300&h=300&fit=crop", discount: "4% OFF", shop_id: 6 },
+
+            // Shop 7: Pharmacy / Health Shop
+            { name: "Dolo 650 Tablets", category: "Healthcare", weight: "15 tabs", price: 29, originalPrice: 35, rating: "4.8", reviews: "2050", imgUrl: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=300&h=300&fit=crop", discount: "17% OFF", is_trending: 1, shop_id: 7 },
+            { name: "Vitamin C Chewable", category: "Healthcare", weight: "30 tabs", price: 119, originalPrice: 149, rating: "4.9", reviews: "890", imgUrl: "https://images.unsplash.com/photo-1616679911721-eff6eec18fcd?w=300&h=300&fit=crop", discount: "20% OFF", shop_id: 7 },
+            { name: "Dettol Liquid Antiseptic", category: "Healthcare", weight: "250 ml", price: 92, originalPrice: 99, rating: "4.7", reviews: "1500", imgUrl: "https://images.unsplash.com/photo-1584017911766-d451b3d0e843?w=300&h=300&fit=crop", discount: "7% OFF", shop_id: 7 },
+            { name: "Hansaplast Band-Aid Pack", category: "Healthcare", weight: "20 pcs", price: 42, originalPrice: 48, rating: "4.6", reviews: "600", imgUrl: "https://images.unsplash.com/photo-1603398938378-e54eab446dde?w=300&h=300&fit=crop", discount: "12% OFF", shop_id: 7 },
+
+            // Shop 8: Green Valley Fresh Market (Fresh Produce Shop)
+            { name: "Premium Fuji Apples", category: "Fresh Fruits", weight: "1 kg", price: 175, originalPrice: 200, rating: "4.8", reviews: "220", imgUrl: "https://images.unsplash.com/photo-1610832958506-aa56368176cf?w=300&h=300&fit=crop", discount: "12% OFF", is_trending: 1, shop_id: 8 },
+            { name: "Organic Sweet Onions", category: "Vegetables", weight: "1 kg", price: 45, originalPrice: 60, rating: "4.5", reviews: "180", imgUrl: "https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?w=300&h=300&fit=crop", discount: "25% OFF", shop_id: 8 },
+            { name: "Roma Tomatoes", category: "Vegetables", weight: "1 kg", price: 55, originalPrice: 75, rating: "4.7", reviews: "450", imgUrl: "https://images.unsplash.com/photo-1590665416245-129683944414?w=300&h=300&fit=crop", discount: "26% OFF", is_trending: 1, shop_id: 8 },
+            { name: "Spicy Green Chillies", category: "Vegetables", weight: "250 g", price: 22, originalPrice: 30, rating: "4.6", reviews: "90", imgUrl: "https://images.unsplash.com/photo-1588252210219-c9c31b21bc56?w=300&h=300&fit=crop", discount: "26% OFF", shop_id: 8 },
+
+            // Shop 9: Polar Ice Foods & Desserts (Frozen Shop)
+            { name: "Polar Crispy French Fries", category: "Frozen Foods", weight: "750 g", price: 135, originalPrice: 160, rating: "4.6", reviews: "140", imgUrl: "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=300&h=300&fit=crop", discount: "15% OFF", is_trending: 1, shop_id: 9 },
+            { name: "Polar Sweet Kernel Corn", category: "Frozen Foods", weight: "500 g", price: 95, originalPrice: 115, rating: "4.7", reviews: "110", imgUrl: "https://images.unsplash.com/photo-1551782450-a2132b4ba21d?w=300&h=300&fit=crop", discount: "17% OFF", shop_id: 9 },
+            { name: "Polar Frozen Green Peas", category: "Frozen Foods", weight: "1 kg", price: 155, originalPrice: 185, rating: "4.5", reviews: "190", imgUrl: "https://images.unsplash.com/photo-1592417817098-8f3d6eb19675?w=300&h=300&fit=crop", discount: "16% OFF", shop_id: 9 },
+            { name: "Polar Premium Vanilla Tub", category: "Desserts", weight: "1 L", price: 185, originalPrice: 210, rating: "4.8", reviews: "410", imgUrl: "https://images.unsplash.com/photo-1567206563064-6f6093f2d457?w=300&h=300&fit=crop", discount: "11% OFF", shop_id: 9 },
+
+            // Shop 10: Citrus Squeeze Juice Bar (Juice Shop)
+            { name: "Citrus Orange Fruit Drink", category: "Drinks", weight: "1 L", price: 120, originalPrice: 140, rating: "4.5", reviews: "810", imgUrl: "https://images.unsplash.com/photo-1613478223719-2ab802602423?w=300&h=300&fit=crop", discount: "14% OFF", is_trending: 1, shop_id: 10 },
+            { name: "Citrus Mango Alphonso Nectar", category: "Drinks", weight: "300 ml", price: 70, originalPrice: 85, rating: "4.7", reviews: "300", imgUrl: "https://images.unsplash.com/photo-1546173159-315724a31696?w=300&h=300&fit=crop", discount: "17% OFF", shop_id: 10 },
+            { name: "Fresh Tender Coconut Pack", category: "Drinks", weight: "1 pc", price: 50, originalPrice: 60, rating: "4.8", reviews: "1050", imgUrl: "https://images.unsplash.com/photo-1525385133336-254847240f92?w=300&h=300&fit=crop", discount: "16% OFF", shop_id: 10 },
+            { name: "Cold Pressed Anar Juice", category: "Drinks", weight: "250 ml", price: 95, originalPrice: 110, rating: "4.6", reviews: "130", imgUrl: "https://images.unsplash.com/photo-1563227812-0ea4c22e6cc8?w=300&h=300&fit=crop", discount: "13% OFF", shop_id: 10 },
+
+            // Shop 11: Golden Heritage Fine Jewelry (Gold Shop)
+            { name: "Heritage 22K Gold Chain", category: "Gold Jewelry", weight: "8 g", price: 53800, originalPrice: 58500, rating: "4.9", reviews: "35", imgUrl: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=300&h=300&fit=crop", discount: "8% OFF", is_trending: 1, shop_id: 11 },
+            { name: "Heritage Diamond Solitaire Ring", category: "Diamond Jewelry", weight: "4 g", price: 44000, originalPrice: 49500, rating: "4.8", reviews: "18", imgUrl: "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=300&h=300&fit=crop", discount: "11% OFF", shop_id: 11 },
+            { name: "Heritage Royal Gold Bangles", category: "Gold Jewelry", weight: "16 g", price: 107500, originalPrice: 115000, rating: "4.7", reviews: "10", imgUrl: "https://images.unsplash.com/photo-1617038260897-41a1f14a8ca0?w=300&h=300&fit=crop", discount: "6% OFF", shop_id: 11 },
+            { name: "Heritage Diamond Studs", category: "Diamond Jewelry", weight: "2 g", price: 28800, originalPrice: 31800, rating: "4.9", reviews: "32", imgUrl: "https://images.unsplash.com/photo-1635767790028-3e9a53664081?w=300&h=300&fit=crop", discount: "9% OFF", shop_id: 11 },
+
+            // Shop 12: Vogue Threads & Dressing Room (Dressing Shop)
+            { name: "Vogue Premium Crewneck Tee", category: "Mens Wear", weight: "1 pc", price: 499, originalPrice: 799, rating: "4.6", reviews: "250", imgUrl: "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=300&h=300&fit=crop", discount: "37% OFF", is_trending: 1, shop_id: 12 },
+            { name: "Vogue Regular Fit Denim Jeans", category: "Mens Wear", weight: "1 pc", price: 1299, originalPrice: 1999, rating: "4.5", reviews: "480", imgUrl: "https://images.unsplash.com/photo-1542272604-787c3835535d?w=300&h=300&fit=crop", discount: "35% OFF", shop_id: 12 },
+            { name: "Vogue Banarasi Georgette Saree", category: "Womens Wear", weight: "1 pc", price: 3750, originalPrice: 5499, rating: "4.9", reviews: "95", imgUrl: "https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=300&h=300&fit=crop", discount: "31% OFF", is_trending: 1, shop_id: 12 },
+            { name: "Vogue Classic Biker Jacket", category: "Womens Wear", weight: "1 pc", price: 1790, originalPrice: 2499, rating: "4.7", reviews: "75", imgUrl: "https://images.unsplash.com/photo-1576995853123-5a10305d93c0?w=300&h=300&fit=crop", discount: "28% OFF", shop_id: 12 },
+
+            // Shop 13: QuickMart Express Grocery (General Store)
+            { name: "QuickMart Premium Atta", category: "Dals & Pulses", weight: "5 kg", price: 225, originalPrice: 260, rating: "4.7", reviews: "780", imgUrl: "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=300&h=300&fit=crop", discount: "13% OFF", shop_id: 13 },
+            { name: "QuickMart Toor Dal Superior", category: "Dals & Pulses", weight: "1 kg", price: 195, originalPrice: 235, rating: "4.8", reviews: "105", imgUrl: "https://images.unsplash.com/photo-1589131649983-4ec35f63d309?w=300&h=300&fit=crop", discount: "17% OFF", is_trending: 1, shop_id: 13 },
+            { name: "QuickMart Salted Cashews", category: "Dry Fruits", weight: "250 g", price: 310, originalPrice: 375, rating: "4.6", reviews: "125", imgUrl: "https://images.unsplash.com/photo-1599587428807-6ad0c7ec44da?w=300&h=300&fit=crop", discount: "17% OFF", is_trending: 1, shop_id: 13 },
+            { name: "QuickMart Detergent Powder", category: "Household", weight: "1 kg", price: 135, originalPrice: 155, rating: "4.8", reviews: "390", imgUrl: "https://images.unsplash.com/photo-1584820927498-cafe2c174360?w=300&h=300&fit=crop", discount: "12% OFF", is_trending: 1, shop_id: 13 },
+            { name: "QuickMart Crispy Aloo Bhujia", category: "Snacks", weight: "400 g", price: 105, originalPrice: 120, rating: "4.7", reviews: "650", imgUrl: "https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?w=300&h=300&fit=crop", discount: "12% OFF", is_trending: 1, shop_id: 13 },
+            { name: "QuickMart Fresh Pasteurised Milk", category: "Dairy & Bakery", weight: "1 L", price: 71, originalPrice: 75, rating: "4.9", reviews: "1100", imgUrl: "https://images.unsplash.com/photo-1550583724-b2692b85b150?w=300&h=300&fit=crop", discount: "5% OFF", shop_id: 13 },
+
+            // Shop 14: Apex Healthcare & Pharmacy (Pharmacy / Health Shop)
+            { name: "Apex Paracetamol Tablets", category: "Healthcare", weight: "15 tabs", price: 32, originalPrice: 40, rating: "4.7", reviews: "1850", imgUrl: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=300&h=300&fit=crop", discount: "20% OFF", is_trending: 1, shop_id: 14 },
+            { name: "Apex Vitamin C Chewables", category: "Healthcare", weight: "30 tabs", price: 125, originalPrice: 155, rating: "4.8", reviews: "790", imgUrl: "https://images.unsplash.com/photo-1616679911721-eff6eec18fcd?w=300&h=300&fit=crop", discount: "19% OFF", shop_id: 14 },
+            { name: "Apex Antiseptic Disinfectant Liquid", category: "Healthcare", weight: "250 ml", price: 95, originalPrice: 105, rating: "4.6", reviews: "1350", imgUrl: "https://images.unsplash.com/photo-1584017911766-d451b3d0e843?w=300&h=300&fit=crop", discount: "9% OFF", shop_id: 14 },
+            { name: "Apex Waterproof Band-Aid Pack", category: "Healthcare", weight: "20 pcs", price: 45, originalPrice: 50, rating: "4.7", reviews: "520", imgUrl: "https://images.unsplash.com/photo-1603398938378-e54eab446dde?w=300&h=300&fit=crop", discount: "10% OFF", shop_id: 14 }
         ];
-        
+
         const brands = ["Amul Food", "Tata Sampann", "Nestle", "Britannia", "Aashirvaad", "Maggi"];
 
         const insertCat = db.prepare('INSERT INTO categories (name, iconUrl) VALUES (?, ?)');
         categories.forEach(c => insertCat.run(c.name, c.iconUrl));
         insertCat.finalize();
 
-        const insertProd = db.prepare('INSERT INTO products (name, category, weight, price, originalPrice, rating, reviews, imgUrl, discount, is_available, is_trending, is_daily_essential, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-        products.forEach(p => insertProd.run(p.name, p.category, p.weight, p.price, p.originalPrice, p.rating, p.reviews, p.imgUrl, p.discount, 1, p.is_trending || 0, p.is_daily_essential ?? 1, p.description || `High quality ${p.name} for your daily needs.`));
+        const insertProd = db.prepare('INSERT INTO products (name, category, weight, price, originalPrice, rating, reviews, imgUrl, discount, is_available, is_trending, is_daily_essential, description, shop_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        products.forEach(p => insertProd.run(p.name, p.category, p.weight, p.price, p.originalPrice, p.rating, p.reviews, p.imgUrl, p.discount, 1, p.is_trending || 0, p.is_daily_essential ?? 1, p.description || `High quality ${p.name} for your daily needs.`, p.shop_id));
         insertProd.finalize();
 
 
@@ -423,13 +886,13 @@ function initDb() {
         insertOffer.finalize();
 
         // Seed Default Coupons
-        db.run("INSERT OR IGNORE INTO coupons (code, discount_value, discount_type, expiry_date) VALUES (?, ?, ?, ?)",
+        db.run("INSERT OR IGNORE INTO coupons (code, discount_value, discount_type, expiry_date, shop_id) VALUES (?, ?, ?, ?, 1)",
             ['WELCOME10', 10, 'percent', '2026-12-31']
         );
-        db.run("INSERT OR IGNORE INTO coupons (code, discount_value, discount_type, expiry_date) VALUES (?, ?, ?, ?)",
+        db.run("INSERT OR IGNORE INTO coupons (code, discount_value, discount_type, expiry_date, shop_id) VALUES (?, ?, ?, ?, 1)",
             ['FIRSTSAVE100', 100, 'fixed', '2026-12-31']
         );
-        db.run("INSERT OR IGNORE INTO coupons (code, discount_value, discount_type, expiry_date) VALUES (?, ?, ?, ?)",
+        db.run("INSERT OR IGNORE INTO coupons (code, discount_value, discount_type, expiry_date, shop_id) VALUES (?, ?, ?, ?, 1)",
             ['ADYANTA10', 10, 'percent', '2026-12-31']
         );
 
@@ -447,10 +910,10 @@ function initDb() {
         const now = new Date().toISOString().replace('T', ' ').split('.')[0];
         const yesterday = new Date(Date.now() - 86400000).toISOString().replace('T', ' ').split('.')[0];
 
-        db.run("INSERT INTO orders (user_id, total, items, payment_method, address, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        db.run("INSERT INTO orders (user_id, total, items, payment_method, address, status, shop_id, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?)",
             [1, 450, '[{"id":1,"name":"Premium Toor Dal","price":180,"quantity":2},{"id":6,"name":"Coca Cola Family Pack","price":90,"quantity":1}]', 'Cash', '123 Grocery Avenue, Mumbai', 'pending', now]
         );
-        db.run("INSERT INTO orders (user_id, total, items, payment_method, address, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        db.run("INSERT INTO orders (user_id, total, items, payment_method, address, status, shop_id, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?)",
             [1, 150, '[{"id":2,"name":"Fresh Red Apples","price":150,"quantity":1}]', 'Card', '456 Fruit Lane, Mumbai', 'delivered', yesterday]
         );
         db.run("INSERT INTO support_messages (name, email, subject, message, status, created_at) VALUES (?, ?, ?, ?, ?, ?)",

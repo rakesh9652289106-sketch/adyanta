@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>All Stores - ADYANTA</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="cart-styles.css">
+    <!-- Phosphor Icons (All Weights) -->
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/fill/style.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/bold/style.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/light/style.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/thin/style.css">
+    <link rel="icon" type="image/png" href="assets/favicon.png">
+    <script type="module" src="theme-manager.js"></script>
+    <script type="module" src="translations.js"></script>
+    <style>
+        :root {
+            --primary: #06341D;
+            --primary-light: #e6ede9;
+            --accent: #F1C40F;
+            --text-main: #1E293B;
+            --text-soft: #64748B;
+            --card-bg: #ffffff;
+            --border: #E2E8F0;
+            --radius-md: 12px;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+        
+        .stores-catalog {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem 1.5rem;
+        }
+
+        .stores-header {
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        .stores-header h1 {
+            font-family: 'Outfit', sans-serif;
+            color: var(--primary);
+            font-size: 2.5rem;
+            font-weight: 800;
+            margin-bottom: 0.5rem;
+        }
+
+        .stores-header p {
+            color: var(--text-soft);
+            font-size: 1.1rem;
+            max-width: 600px;
+            margin: 0 auto 1.5rem auto;
+        }
+
+        .search-filter-bar {
+            display: flex;
+            gap: 1rem;
+            max-width: 600px;
+            margin: 0 auto 2rem auto;
+        }
+
+        .search-input-wrapper {
+            position: relative;
+            flex: 1;
+        }
+
+        .search-input-wrapper i {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-soft);
+            font-size: 1.2rem;
+        }
+
+        .search-input-wrapper input {
+            width: 100%;
+            padding: 12px 12px 12px 42px;
+            border: 1.5px solid var(--border);
+            border-radius: 30px;
+            font-size: 0.95rem;
+            font-family: 'Inter', sans-serif;
+            outline: none;
+            transition: all 0.3s;
+        }
+
+        .search-input-wrapper input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(6, 52, 29, 0.1);
+        }
+
+        .stores-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-top: 1.5rem;
+        }
+
+        .store-card {
+            background: var(--card-bg);
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 1.5rem;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            position: relative;
+            overflow: hidden;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .store-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--primary);
+            box-shadow: var(--shadow-md);
+        }
+
+        .store-card-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .store-logo {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: 1px solid var(--border);
+            object-fit: cover;
+        }
+
+        .store-title-area {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .store-name {
+            margin: 0 0 0.25rem 0;
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--text-main);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .store-category {
+            font-size: 0.75rem;
+            background: var(--primary-light);
+            color: var(--primary);
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+        }
+
+        .store-desc {
+            margin: 0;
+            font-size: 0.85rem;
+            color: var(--text-soft);
+            line-height: 1.5;
+            height: 57px;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .store-meta {
+            border-top: 1px solid var(--border);
+            padding-top: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.8rem;
+            color: var(--text-soft);
+            font-weight: 600;
+        }
+
+        .store-rating i {
+            color: var(--accent);
+        }
+
+        .store-arrow {
+            position: absolute;
+            right: 15px;
+            bottom: 15px;
+            background: var(--primary);
+            color: white;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+            opacity: 0;
+            transform: scale(0.8);
+            transition: all 0.3s;
+        }
+
+        .store-card:hover .store-arrow {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .filter-tabs {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 2rem;
+        }
+
+        .filter-tab-btn {
+            padding: 8px 18px;
+            border: 1.5px solid var(--border);
+            background: var(--card-bg);
+            color: var(--text-soft);
+            border-radius: 30px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .filter-tab-btn:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        .filter-tab-btn.active {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <!-- Top Notification Bar -->
+    <div class="top-notification" id="staticPromoBanner" style="background: #06341D; color: white; padding: 0.5rem; text-align: center; font-weight: 600; font-size: 0.85rem; letter-spacing: 0.5px;">
+        <marquee behavior="scroll" direction="left" scrollamount="6">⚡ Browse and purchase directly from our partner vendor shops! | 🍎 Fast Delivery & Store Customer Support</marquee>
+    </div>
+
+    <!-- Header Navbar -->
+    <header class="navbar">
+        <div class="nav-container">
+            <div style="display:flex; align-items:center; gap: 1.2rem;">
+                <button class="nav-menu-btn" id="navMenuBtn" style="background:none; border:none; color:var(--text-main); font-size:1.75rem; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0.25rem;">
+                    <i class="ph ph-list"></i>
+                </button>
+                <a href="/" class="brand-logo" style="font-family: 'Outfit', sans-serif; font-weight: 800; color: var(--primary);">
+                    <i class="ph ph-basket"></i> ADYANTA
+                </a>
+            </div>
+            <div class="nav-actions" style="display: flex; align-items: center; gap: 1rem;">
+                <button class="theme-toggle-btn" title="Toggle Dark Mode" style="background:none; border:none; color:var(--text-main); font-size:1.4rem; cursor:pointer;">
+                    <i class="ph ph-moon"></i>
+                </button>
+                <a href="/" class="nav-link"><i class="ph ph-arrow-left"></i> <span>Back to Home</span></a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <section class="stores-catalog">
+            <div class="stores-header">
+                <h1>Partner Stores</h1>
+                <p>Order fresh products directly from local multi-vendor stores with manual customer service options.</p>
+                
+                <!-- Search bar -->
+                <div class="search-filter-bar">
+                    <div class="search-input-wrapper">
+                        <i class="ph ph-magnifying-glass"></i>
+                        <input type="text" id="storeSearchInput" placeholder="Search stores by name, category or description...">
+                    </div>
+                </div>
+
+                <!-- Category Tabs -->
+                <div class="filter-tabs" id="categoryFilterTabs">
+                    <button class="filter-tab-btn active" data-category="All"><i class="ph ph-storefront"></i> All Stores</button>
+                    <button class="filter-tab-btn" data-category="Frozen Shop"><i class="ph ph-snowflake"></i> Frozen Shop</button>
+                    <button class="filter-tab-btn" data-category="Juice Shop"><i class="ph ph-drop"></i> Juice Shop</button>
+                    <button class="filter-tab-btn" data-category="Gold Shop"><i class="ph ph-crown"></i> Gold Shop</button>
+                    <button class="filter-tab-btn" data-category="Dressing Shop"><i class="ph ph-t-shirt"></i> Dressing Shop</button>
+                    <button class="filter-tab-btn" data-category="General Store"><i class="ph ph-shopping-bag"></i> General Store</button>
+                    <button class="filter-tab-btn" data-category="Fresh Produce Shop"><i class="ph ph-leaf"></i> Fresh Produce Shop</button>
+                    <button class="filter-tab-btn" data-category="Pharmacy / Health Shop"><i class="ph ph-first-aid"></i> Pharmacy / Health Shop</button>
+                </div>
+            </div>
+
+            <!-- Stores Grid -->
+            <div class="stores-grid" id="allStoresGrid">
+                <!-- Rendered dynamically -->
+                <div style="grid-column: 1 / -1; text-align: center; padding: 3rem; color: var(--text-soft);">
+                    <i class="ph ph-circle-notch ph-spin" style="font-size: 2rem; color: var(--primary);"></i>
+                    <p style="margin-top: 1rem;">Loading marketplace stores...</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+        <div class="footer-container">
+            <div class="footer-col">
+                <a href="/" class="brand-logo footer-logo" style="color: white;">
+                    <i class="ph ph-basket"></i> ADYANTA
+                </a>
+                <p>Connecting you directly to your neighborhood vendor stores.</p>
+            </div>
+        </div>
+        <div class="copy-right">
+            <p>&copy; 2026 ADYANTA. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- Sidebar Menu Drawer -->
+    <div class="nav-overlay" id="navOverlay"></div>
+    <aside class="nav-sidebar" id="navSidebar">
+        <div class="nav-sidebar-header">
+            <div class="user-profile-brief">
+                <div class="user-avatar-circle"> <i class="ph ph-user"></i> </div>
+                <div class="user-info-text">
+                    <h4 id="sidebarUsername">Guest User</h4>
+                    <p>Welcome to ADYANTA</p>
+                </div>
+            </div>
+            <button class="close-nav" id="closeNavBtn"><i class="ph ph-x"></i></button>
+        </div>
+        
+        <div class="nav-sidebar-content">
+            <div class="nav-section">
+                <h5>My Account</h5>
+                <a href="profile.html" class="nav-item"><i class="ph ph-package"></i> <span>My Orders</span></a>
+                <a href="wishlist.html" class="nav-item"><i class="ph ph-heart"></i> <span>My Wishlist</span></a>
+                <a href="profile.html" class="nav-item"><i class="ph ph-user-circle"></i> <span>Edit Profile</span></a>
+            </div>
+            
+            <div class="nav-divider"></div>
+            
+            <div class="nav-section">
+                <h5>Settings & Privacy</h5>
+                <a href="#" class="nav-item" id="nav-language"><i class="ph ph-translate"></i> <span>Language</span></a>
+                <a href="notifications.html" class="nav-item"><i class="ph ph-bell-ringing"></i> <span>Notifications</span></a>
+            </div>
+
+            <div class="nav-divider"></div>
+            
+            <div class="nav-section">
+                <h5>Others</h5>
+                <a href="admin.html" id="sidebarAdminLink" class="nav-item" style="color: var(--primary); font-weight: 700; display: none;"><i class="ph ph-shield-check"></i> <span>Admin Panel</span></a>
+                <a href="support.html" class="nav-item"><i class="ph ph-info"></i> <span>Help & Support</span></a>
+                <a href="#" class="nav-item" id="sidebarLogout" style="display: none;"><i class="ph ph-sign-out"></i> <span>Logout</span></a>
+            </div>
+        </div>
+    </aside>
+
+    <!-- AI Customer Support Chatbot Floating UI -->
+    <div id="aiChatbotWidget" class="ai-chatbot-widget">
+        <div class="ai-chatbot-header">
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <div class="ai-chatbot-avatar">
+                    <i class="ph-fill ph-robot" style="color: white;"></i>
+                    <span class="online-badge"></span>
+                </div>
+                <div class="ai-chatbot-header-info">
+                    <h4>ADYANTA Support Bot</h4>
+                    <span>Active Marketplace Assistant</span>
+                </div>
+            </div>
+            <button id="closeChatbotBtn" style="background: none; border: none; color: white; font-size: 1.4rem; cursor: pointer; opacity: 0.85; transition: opacity 0.2s;">
+                <i class="ph ph-x"></i>
+            </button>
+        </div>
+        <div id="chatbotMessages" class="ai-chatbot-messages">
+            <div class="ai-bubble-bot">
+                👋 Hello! Welcome to the ADYANTA Multi-Vendor Marketplace. I am your AI assistant! How can I help you today? You can ask me to:
+                <div style="margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                    <button class="chat-suggest-btn" onclick="sendChatbotSuggestion('🔍 Show active shops in Nellore')">
+                        <i class="ph ph-storefront"></i> Show active shops in Nellore
+                    </button>
+                    <button class="chat-suggest-btn" onclick="sendChatbotSuggestion('🎁 Give me active coupons')">
+                        <i class="ph ph-ticket"></i> Give me active coupons
+                    </button>
+                    <button class="chat-suggest-btn" onclick="sendChatbotSuggestion('⚡ What is the fastest delivery store?')">
+                        <i class="ph ph-lightning"></i> What is the fastest delivery store?
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="ai-chatbot-input-bar">
+            <input type="text" id="chatbotInput" placeholder="Ask anything about stores & products..." />
+            <button id="sendChatbotMsgBtn" class="ai-chatbot-send-btn">
+                <i class="ph-fill ph-paper-plane-tilt" style="font-size: 1.1rem; color: white;"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- AI Chatbot Trigger Circle -->
+    <div id="aiChatbotBubble" class="ai-chatbot-bubble-trigger">
+        <i class="ph-fill ph-robot" id="chatBubbleIcon" style="color: white;"></i>
+    </div>
+
+    <script type="module" src="toast.js"></script>
+    <script type="module" src="stores-script.js"></script>
+</body>
+</html>

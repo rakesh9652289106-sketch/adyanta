@@ -24,8 +24,8 @@
 
     // 2. Global Setup Function
     window.setupThemeToggle = function() {
-        // Inject Support Button if missing
-        if (!document.getElementById('supportSymbol')) {
+        // Inject Support Button if missing and chatbot is not on page
+        if (!document.getElementById('supportSymbol') && !document.getElementById('aiChatbotBubble')) {
             const supportHTML = `
                 <a href="support.html" class="support-fixed-container" id="supportSymbol">
                     <div class="support-symbol">

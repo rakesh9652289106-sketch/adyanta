@@ -1,6 +1,6 @@
 const API_BASE = (typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) 
     ? import.meta.env.VITE_API_URL 
-    : (typeof window !== 'undefined' && window.location && window.location.port === '5173' ? 'http://localhost:3000' : (typeof window !== 'undefined' && window.location ? window.location.origin : 'https://adyanta-commerce.onrender.com'));
+    : (typeof window !== 'undefined' && window.location && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:3000' : (typeof window !== 'undefined' && window.location ? window.location.origin : 'https://adyanta-commerce.onrender.com'));
 
 // Supabase Client Initialization (Frontend)
 const SUPABASE_URL = 'https://ghbecipylczrebqcmrvm.supabase.co';
@@ -44,6 +44,20 @@ let brands = [];
 let cart = JSON.parse(localStorage.getItem('cart')) || [];
 let wishlist = JSON.parse(localStorage.getItem('wishlist')) || [];
 let activeFilter = { type: null, value: null };
+let currentShopProducts = [];
+let currentShopName = '';
+
+// Helper to update all support page links with active storefront ID
+function updateSupportLinks(shopId) {
+    const links = document.querySelectorAll('a[href^="support.html"], a[href*="support.html"]');
+    links.forEach(link => {
+        if (shopId) {
+            link.href = `support.html?shop_id=${shopId}`;
+        } else {
+            link.href = 'support.html';
+        }
+    });
+}
 
 document.addEventListener("DOMContentLoaded", async () => {
     console.log("DOM Content Loaded - Initializing ADYANTA...");
@@ -100,10 +114,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     populateProducts("productGrid", dailyEssentials);
     
 
-    // Populate Trending: Use is_trending flag, fallback to top 5 if none
+    // Populate Trending: Use is_trending flag, fallback to top 12 if none to ensure overflow & auto-scroll
     const trendingProducts = products.filter(p => p.is_trending === 1);
     console.log(`Populating trending list with ${trendingProducts.length} items...`);
-    populateProducts("trendingList", trendingProducts.length ? trendingProducts : products.slice(0, 5));
+    populateProducts("trendingList", trendingProducts.length ? trendingProducts : products.slice(0, 12));
     
     // Populate Brands using the harmonized grid format
     console.log("Populating brands grid...");
@@ -144,6 +158,16 @@ document.addEventListener("DOMContentLoaded", async () => {
         applyFilter('brand', brandFilter);
     }
 
+    // Automatically restore storefront context on reload
+    const activeShopId = localStorage.getItem('active_shop_id');
+    if (activeShopId) {
+        console.log(`Restoring active storefront: ${activeShopId}`);
+        updateSupportLinks(activeShopId);
+        await enterEcosystemStorefront(activeShopId);
+    } else {
+        toggleStorefrontSections(false);
+    }
+
     console.log("ADYANTA Initialization Complete.");
 
     // Sticky Header Logic - Show full header on scroll up
@@ -163,17 +187,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                             console.log("Sticky Header: OFF (Top)");
                             mainHeader.classList.remove('sticky');
                         }
-                    } else if (Math.abs(scrollDelta) > 5) {
-                        if (scrollDelta > 0) {
-                            if (!mainHeader.classList.contains('sticky')) {
-                                console.log("Sticky Header: ON (Scroll Down)");
-                                mainHeader.classList.add('sticky');
-                            }
-                        } else {
-                            if (mainHeader.classList.contains('sticky')) {
-                                console.log("Sticky Header: OFF (Scroll Up)");
-                                mainHeader.classList.remove('sticky');
-                            }
+                    } else {
+                        if (!mainHeader.classList.contains('sticky')) {
+                            console.log("Sticky Header: ON");
+                            mainHeader.classList.add('sticky');
                         }
                     }
                     
@@ -317,6 +334,50 @@ function setupCarousels() {
             observer.observe(wrapper);
         }
     });
+
+    // Start auto-scroll for trending list carousel
+    startTrendingAutoScroll();
+}
+
+function startTrendingAutoScroll() {
+    const trendingList = document.getElementById('trendingList');
+    if (!trendingList) return;
+
+    let autoScrollInterval = null;
+
+    const start = () => {
+        if (autoScrollInterval) clearInterval(autoScrollInterval);
+        autoScrollInterval = setInterval(() => {
+            if (!trendingList.classList.contains('trending-scroll')) return;
+
+            const card = trendingList.querySelector('.product-card');
+            if (!card) return;
+
+            const gap = parseFloat(window.getComputedStyle(trendingList).gap) || 20;
+            const scrollStep = card.offsetWidth + gap;
+            const maxScroll = trendingList.scrollWidth - trendingList.clientWidth;
+
+            if (Math.ceil(trendingList.scrollLeft) >= maxScroll - 5) {
+                trendingList.scrollTo({ left: 0, behavior: 'smooth' });
+            } else {
+                trendingList.scrollBy({ left: scrollStep, behavior: 'smooth' });
+            }
+        }, 3000);
+    };
+
+    const stop = () => {
+        if (autoScrollInterval) {
+            clearInterval(autoScrollInterval);
+            autoScrollInterval = null;
+        }
+    };
+
+    trendingList.addEventListener('mouseenter', stop);
+    trendingList.addEventListener('mouseleave', start);
+    trendingList.addEventListener('touchstart', stop);
+    trendingList.addEventListener('touchend', start);
+
+    start();
 }
 
 function updateWishlistBadge() {
@@ -574,11 +635,21 @@ function setupNavMenu() {
 
         const name = getCookie('full_name');
         const username = getCookie('username');
+        const role = getCookie('role');
         const displayName = name && name !== 'undefined' ? decodeURIComponent(name) : (username ? decodeURIComponent(username) : null);
         
         if (displayName) {
             if (sidebarUsername) sidebarUsername.innerText = displayName;
             if (sidebarLogout) sidebarLogout.style.display = 'flex';
+        }
+
+        const adminLink = document.getElementById('sidebarAdminLink');
+        if (adminLink) {
+            if (role === 'vendor' || (role === 'super_admin' && username === '9490229108')) {
+                adminLink.style.display = 'flex';
+            } else {
+                adminLink.style.display = 'none';
+            }
         }
     };
 
@@ -1221,9 +1292,15 @@ function setupAuth() {
 
     // Expose to window for global access
     window.openAuthModal = function(mode = 'login') {
-        currMode = mode;
-        updateModalState();
-        if (authModal) authModal.classList.add('active');
+        let redirectUrl = 'login.html';
+        if (mode === 'register') {
+            redirectUrl += '?mode=register_customer';
+        } else if (mode === 'vendor') {
+            redirectUrl += '?mode=register_vendor';
+        } else {
+            redirectUrl += `?mode=${mode}`;
+        }
+        window.location.href = redirectUrl;
     };
 
     // Prevent duplicate security question selection
@@ -1258,9 +1335,8 @@ function setupAuth() {
         
         if (action === 'Sign Up' || action === 'Sign In' || action === 'Log In') {
             e.preventDefault();
-            currMode = (action === 'Sign Up') ? 'register' : 'login';
-            updateModalState();
-            authModal.classList.add('active');
+            const mode = (action === 'Sign Up') ? 'register' : 'login';
+            window.openAuthModal(mode);
         }
     });
 
@@ -1365,9 +1441,21 @@ function setupAuth() {
                 localStorage.setItem('user_role', data.role || 'customer');
 
                 if (data.role === 'super_admin' || data.role === 'vendor' || data.is_admin) {
-                    Toast.show(`${data.role === 'super_admin' ? 'Super Admin' : 'Vendor'} authenticated! Redirecting to panel...`, "success");
-                    authModal.classList.remove('active');
-                    setTimeout(() => window.location.href = 'admin.html', 1000);
+                    if (data.role === 'super_admin' || data.is_admin) {
+                        if (data.username === '9490229108') {
+                            localStorage.setItem('admin_portal_role', 'super_admin');
+                            Toast.show("Super Admin authenticated! Redirecting to panel...", "success");
+                            authModal.classList.remove('active');
+                            setTimeout(() => window.location.href = 'admin.html', 1000);
+                        } else {
+                            showAuthError("Access Denied: Only Suresh is authorized as Super Admin.");
+                        }
+                    } else if (data.role === 'vendor') {
+                        localStorage.setItem('admin_portal_role', 'vendor');
+                        Toast.show("Vendor authenticated! Redirecting to panel...", "success");
+                        authModal.classList.remove('active');
+                        setTimeout(() => window.location.href = 'admin.html', 1000);
+                    }
                     return;
                 }
 
@@ -1723,6 +1811,30 @@ function setupSearchFunctionality() {
 
     searchInput.addEventListener('input', (e) => {
         const query = e.target.value.toLowerCase().trim();
+        const activeShopId = localStorage.getItem('active_shop_id');
+        
+        if (activeShopId) {
+            if (historyDropdown) historyDropdown.style.display = 'none';
+            if (query === "") {
+                renderStorefrontProducts(currentShopProducts, currentShopName);
+                return;
+            }
+            const filteredProducts = currentShopProducts.filter(product => {
+                const name = (product.name || '').toLowerCase();
+                const discount = (product.discount || '').toLowerCase();
+                const weight = (product.weight || '').toLowerCase();
+                const category = (product.category || '').toLowerCase();
+                const description = (product.description || '').toLowerCase();
+                return name.includes(query) || 
+                       discount.includes(query) ||
+                       weight.includes(query) ||
+                       category.includes(query) ||
+                       description.includes(query);
+            });
+            renderStorefrontProducts(filteredProducts, currentShopName);
+            return;
+        }
+
         const grid = document.getElementById("productGrid");
         
         if (query === "") {
@@ -2128,7 +2240,7 @@ async function setupCartInteractions() {
             if (!selectedPaymentMethod) return;
 
             if (selectedPaymentMethod !== 'cash') {
-                Toast.show("Online payment is currently unavailable. Please select Cash on Delivery.", "warning");
+                openMockPayment(selectedPaymentMethod);
                 return;
             }
 
@@ -2282,29 +2394,43 @@ async function fetchBanners() {
     } catch(err) { console.error(err); }
 }
 
-async function fetchSpecialOffers() {
+async function fetchSpecialOffers(shopId = null) {
+    const section = document.querySelector('.special-offers');
+    if (!shopId) {
+        if (section) section.style.display = 'none';
+        return;
+    }
     try {
-        const res = await fetch(API_BASE + '/api/special-offers');
+        const url = `${API_BASE}/api/special-offers?shop_id=${shopId}`;
+        const res = await fetch(url);
         const offers = await res.json();
         const grid = document.getElementById('specialOffersGrid');
-        if (grid && offers.length > 0) {
+        
+        if (grid) {
             grid.innerHTML = '';
-            offers.forEach((o, index) => {
-                const card = document.createElement('div');
-                const defaultColor = index % 2 === 0 ? 'bg-orange' : 'bg-purple';
-                const colorClass = o.colorClass || defaultColor;
-                card.className = `offer-card ${colorClass}`;
-                card.style.cursor = 'pointer';
-                card.onclick = () => navigateToBannerCategory(o.target_category || 'All');
-                card.innerHTML = `
-                    <div class="offer-content">
-                        <h4>${o.title}</h4>
-                        ${o.description ? `<p>${o.description}</p>` : ''}
-                        <span class="btn btn-sm">Shop Now</span>
-                    </div>
-                `;
-                grid.appendChild(card);
-            });
+            if (offers.length > 0) {
+                offers.forEach((o, index) => {
+                    const card = document.createElement('div');
+                    const defaultColor = index % 2 === 0 ? 'bg-orange' : 'bg-purple';
+                    const colorClass = o.colorClass || defaultColor;
+                    card.className = `offer-card ${colorClass}`;
+                    card.style.cursor = 'pointer';
+                    card.onclick = () => {
+                        window.location.href = `category.html?name=${encodeURIComponent(o.target_category || 'All')}&shop_id=${shopId}`;
+                    };
+                    card.innerHTML = `
+                        <div class="offer-content">
+                            <h4>${o.title}</h4>
+                            ${o.description ? `<p>${o.description}</p>` : ''}
+                            <span class="btn btn-sm">Shop Now</span>
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                });
+                if (section) section.style.display = 'block';
+            } else {
+                if (section) section.style.display = 'none';
+            }
         }
     } catch(err) { console.error(err); }
 }
@@ -2313,13 +2439,27 @@ function populateCategories() {
     const grid = document.getElementById('categoryScroll');
     if (!grid) return;
     grid.innerHTML = '';
-    categories.forEach(cat => {
+
+    const activeShopId = localStorage.getItem('active_shop_id');
+    let catsToShow = categories;
+    if (activeShopId && currentShopProducts && currentShopProducts.length > 0) {
+        const storeProductCategories = [...new Set(currentShopProducts.map(p => p.category || p.Category).filter(Boolean))];
+        catsToShow = categories.filter(cat => storeProductCategories.some(name => name.toLowerCase() === cat.name.toLowerCase()));
+    }
+
+    catsToShow.forEach(cat => {
         // Icon mapping fallback for premium feel
         let iconClass = cat.iconUrl || 'ph-package';
-        if (cat.name === 'Dairy & Bread' || cat.name === 'Dairy & Bakery') iconClass = 'ph-moped'; // Representative icon
-        if (cat.name === 'Fresh Vegetables' || cat.name === 'Vegetables') iconClass = 'ph-leaf';
-        if (cat.name === 'Fruits') iconClass = 'ph-orange';
-        
+        if (cat.name === 'Dairy & Bread' || cat.name === 'Dairy & Bakery') iconClass = 'ph-drop';
+        if (cat.name === 'Fresh Vegetables' || cat.name === 'Vegetables' || cat.name === 'Fresh Produce Shop') iconClass = 'ph-leaf';
+        if (cat.name === 'Fruits' || cat.name === 'Fresh Fruits') iconClass = 'ph-apple-logo';
+        if (cat.name === 'Frozen Foods' || cat.name === 'Frozen Shop') iconClass = 'ph-snowflake';
+        if (cat.name === 'Drinks' || cat.name === 'Juice Shop') iconClass = 'ph-drop';
+        if (cat.name === 'Gold Jewelry' || cat.name === 'Diamond Jewelry' || cat.name === 'Gold Shop') iconClass = 'ph-crown';
+        if (cat.name === 'Mens Wear' || cat.name === 'Womens Wear' || cat.name === 'Dressing Shop') iconClass = 'ph-t-shirt';
+        if (cat.name === 'General Store' || cat.name === 'Snacks' || cat.name === 'Dals & Pulses' || cat.name === 'Dry Fruits' || cat.name === 'Household') iconClass = 'ph-shopping-bag';
+        if (cat.name === 'Healthcare' || cat.name === 'Pharmacy / Health Shop') iconClass = 'ph-first-aid';
+
         const html = `
             <div class="category-link" style="cursor: pointer;" onclick="window.filterByCategory('${cat.name}')">
                 <div class="category-card ${activeFilter.type === 'category' && activeFilter.value === cat.name ? 'active' : ''}">
@@ -2330,6 +2470,49 @@ function populateCategories() {
         `;
         grid.innerHTML += html;
     });
+
+    // Sync mobile chips if they exist
+    const container = document.getElementById('categoryChips');
+    const stickyContainer = document.getElementById('stickyCategoriesBar');
+    if (container) {
+        let html = `
+            <div class="category-chip active" onclick="filterByChip('All', this)">
+                <i class="ph ph-squares-four"></i>
+                <span>All</span>
+            </div>
+        `;
+        let stickyHtml = `
+            <div class="sticky-cat-chip active" onclick="filterByChip('All', this)">
+                <span>All</span>
+            </div>
+        `;
+        catsToShow.forEach(cat => {
+            let iconClass = cat.iconUrl || 'ph-squares-four';
+            if (cat.name === 'Dairy & Bread' || cat.name === 'Dairy & Bakery') iconClass = 'ph-drop';
+            if (cat.name === 'Fresh Vegetables' || cat.name === 'Vegetables' || cat.name === 'Fresh Produce Shop') iconClass = 'ph-leaf';
+            if (cat.name === 'Fruits' || cat.name === 'Fresh Fruits') iconClass = 'ph-apple-logo';
+            if (cat.name === 'Frozen Foods' || cat.name === 'Frozen Shop') iconClass = 'ph-snowflake';
+            if (cat.name === 'Drinks' || cat.name === 'Juice Shop') iconClass = 'ph-drop';
+            if (cat.name === 'Gold Jewelry' || cat.name === 'Diamond Jewelry' || cat.name === 'Gold Shop') iconClass = 'ph-crown';
+            if (cat.name === 'Mens Wear' || cat.name === 'Womens Wear' || cat.name === 'Dressing Shop') iconClass = 'ph-t-shirt';
+            if (cat.name === 'General Store' || cat.name === 'Snacks' || cat.name === 'Dals & Pulses' || cat.name === 'Dry Fruits' || cat.name === 'Household') iconClass = 'ph-shopping-bag';
+            if (cat.name === 'Healthcare' || cat.name === 'Pharmacy / Health Shop') iconClass = 'ph-first-aid';
+
+            html += `
+                <div class="category-chip" onclick="filterByChip('${cat.name}', this)">
+                    <i class="ph ${iconClass}"></i>
+                    <span>${cat.name}</span>
+                </div>
+            `;
+            stickyHtml += `
+                <div class="sticky-cat-chip" onclick="filterByChip('${cat.name}', this)">
+                    <span>${cat.name}</span>
+                </div>
+            `;
+        });
+        container.innerHTML = html;
+        if (stickyContainer) stickyContainer.innerHTML = stickyHtml;
+    }
     
     // Re-run arrow check since content changed
     setupCarousels();
@@ -2340,6 +2523,11 @@ function populateCategories() {
  * Toggle visibility of homepage-only sections to focus on results
  */
 function toggleHomeSections(show) {
+    const activeShopId = localStorage.getItem('active_shop_id');
+    if (activeShopId) {
+        toggleStorefrontSections(true);
+        return;
+    }
     const isSearching = document.getElementById('mainSearchInput')?.value.trim() !== '';
     
     const sections = [
@@ -2383,11 +2571,66 @@ function toggleHomeSections(show) {
     }
 }
 
+function mapCategoryToShopCategory(name) {
+    if (!name) return 'All';
+    const lower = name.toLowerCase().trim();
+    if (lower.includes('vegetable') || lower.includes('fruit') || lower.includes('produce') || lower.includes('leaf') || lower.includes('apple')) {
+        return 'Fresh Produce Shop';
+    }
+    if (lower.includes('drink') || lower.includes('juice') || lower.includes('beer') || lower.includes('soda')) {
+        return 'Juice Shop';
+    }
+    if (lower.includes('frozen') || lower.includes('snowflake')) {
+        return 'Frozen Shop';
+    }
+    if (lower.includes('jewelry') || lower.includes('gold') || lower.includes('diamond') || lower.includes('crown')) {
+        return 'Gold Shop';
+    }
+    if (lower.includes('wear') || lower.includes('dress') || lower.includes('apparel') || lower.includes('cloth') || lower.includes('t-shirt')) {
+        return 'Dressing Shop';
+    }
+    if (lower.includes('health') || lower.includes('pharmacy') || lower.includes('medical') || lower.includes('first-aid')) {
+        return 'Pharmacy / Health Shop';
+    }
+    // Default fallback for grocery/general categories
+    return 'General Store';
+}
+
 window.filterByCategory = function(catName) {
-    if (!catName || catName === 'All') {
-        window.location.href = 'category.html?name=All';
+    const activeShopId = localStorage.getItem('active_shop_id');
+    if (activeShopId) {
+        console.log(`Filtering shop products by category: ${catName}`);
+        
+        // Sync active class on category cards
+        document.querySelectorAll('#categoryScroll .category-card').forEach(c => {
+            const cardText = c.querySelector('.category-name')?.innerText.trim();
+            if (cardText === catName || (catName === 'All' && cardText === 'All')) {
+                c.classList.add('active');
+            } else {
+                c.classList.remove('active');
+            }
+        });
+        
+        // Sync active class on chips
+        document.querySelectorAll('.category-chip, .sticky-cat-chip').forEach(c => {
+            const chipText = c.innerText.trim();
+            if (chipText === catName || (catName === 'All' && chipText === 'All')) {
+                c.classList.add('active');
+            } else {
+                c.classList.remove('active');
+            }
+        });
+
+        // Filter products and render them under storefront products list
+        const filteredProds = (!catName || catName === 'All') ? currentShopProducts : currentShopProducts.filter(p => (p.category || '').toLowerCase() === catName.toLowerCase());
+        renderStorefrontProducts(filteredProds, currentShopName);
     } else {
-        window.location.href = `category.html?name=${encodeURIComponent(catName)}`;
+        if (!catName || catName === 'All') {
+            window.location.href = 'stores.html?category=All';
+        } else {
+            const mappedCat = mapCategoryToShopCategory(catName);
+            window.location.href = `stores.html?category=${encodeURIComponent(mappedCat)}`;
+        }
     }
 };
 
@@ -2883,9 +3126,10 @@ window.clearBrandFilter = function() {
 
 window.navigateToBannerCategory = function(categoryName) {
     if (!categoryName || categoryName === 'All') {
-        window.location.href = 'category.html?name=All';
+        window.location.href = 'stores.html?category=All';
     } else {
-        window.location.href = `category.html?name=${encodeURIComponent(categoryName)}`;
+        const mappedCat = mapCategoryToShopCategory(categoryName);
+        window.location.href = `stores.html?category=${encodeURIComponent(mappedCat)}`;
     }
 }
 
@@ -3312,17 +3556,47 @@ function populateCategoryChips() {
 }
 
 window.filterByChip = function(name, el) {
-    document.querySelectorAll('.category-chip, .sticky-cat-chip').forEach(c => c.classList.remove('active'));
-    
-    // Find all chips with the same name across all containers and mark them active
-    document.querySelectorAll('.category-chip, .sticky-cat-chip').forEach(c => {
-        if (c.innerText.trim() === name || (name === 'All' && c.innerText.trim() === 'All')) {
-            c.classList.add('active');
+    const activeShopId = localStorage.getItem('active_shop_id');
+    if (activeShopId) {
+        console.log(`Filtering shop products by chip: ${name}`);
+        
+        // Sync active class on chips
+        document.querySelectorAll('.category-chip, .sticky-cat-chip').forEach(c => {
+            const chipText = c.innerText.trim();
+            if (chipText === name || (name === 'All' && chipText === 'All')) {
+                c.classList.add('active');
+            } else {
+                c.classList.remove('active');
+            }
+        });
+
+        // Sync active class on category cards
+        document.querySelectorAll('#categoryScroll .category-card').forEach(c => {
+            const cardText = c.querySelector('.category-name')?.innerText.trim();
+            if (cardText === name || (name === 'All' && cardText === 'All')) {
+                c.classList.add('active');
+            } else {
+                c.classList.remove('active');
+            }
+        });
+
+        // Filter products and render them under storefront products list
+        const filteredProds = (name === 'All') ? currentShopProducts : currentShopProducts.filter(p => (p.category || '').toLowerCase() === name.toLowerCase());
+        renderStorefrontProducts(filteredProds, currentShopName);
+    } else {
+        document.querySelectorAll('.category-chip, .sticky-cat-chip').forEach(c => c.classList.remove('active'));
+        document.querySelectorAll('.category-chip, .sticky-cat-chip').forEach(c => {
+            if (c.innerText.trim() === name || (name === 'All' && c.innerText.trim() === 'All')) {
+                c.classList.add('active');
+            }
+        });
+        if (!name || name === 'All') {
+            window.location.href = 'stores.html?category=All';
+        } else {
+            const mappedCat = mapCategoryToShopCategory(name);
+            window.location.href = `stores.html?category=${encodeURIComponent(mappedCat)}`;
         }
-    });
-    
-    // Use the name directly from the database or "All"
-    window.location.href = `category.html?name=${encodeURIComponent(name)}`;
+    }
 };
 
 function syncBottomBadges() {
@@ -3774,6 +4048,27 @@ function applyEcosystemFeatureFlags(flags) {
     }
 }
 
+function getShopCategoryIcon(category) {
+    switch(category) {
+        case 'Frozen Shop':
+            return '<i class="ph ph-snowflake" style="vertical-align: middle; margin-right: 4px;"></i>';
+        case 'Juice Shop':
+            return '<i class="ph ph-drop" style="vertical-align: middle; margin-right: 4px;"></i>';
+        case 'Gold Shop':
+            return '<i class="ph ph-crown" style="vertical-align: middle; margin-right: 4px;"></i>';
+        case 'Dressing Shop':
+            return '<i class="ph ph-t-shirt" style="vertical-align: middle; margin-right: 4px;"></i>';
+        case 'General Store':
+            return '<i class="ph ph-shopping-bag" style="vertical-align: middle; margin-right: 4px;"></i>';
+        case 'Fresh Produce Shop':
+            return '<i class="ph ph-leaf" style="vertical-align: middle; margin-right: 4px;"></i>';
+        case 'Pharmacy / Health Shop':
+            return '<i class="ph ph-first-aid" style="vertical-align: middle; margin-right: 4px;"></i>';
+        default:
+            return '<i class="ph ph-storefront" style="vertical-align: middle; margin-right: 4px;"></i>';
+    }
+}
+
 // Render available shops on customer storefront
 function renderEcosystemShops(shops) {
     const scrollContainer = document.getElementById('shopsScroll');
@@ -3799,7 +4094,10 @@ function renderEcosystemShops(shops) {
                 <img src="${shop.logo || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=100'}" alt="${shop.name}" style="width: 50px; height: 50px; border-radius: 50%; border: 1px solid var(--border); object-fit: cover;">
                 <div style="flex: 1;">
                     <h4 style="margin: 0; font-family: 'Outfit', sans-serif; font-size: 1.1rem; font-weight: 700; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;">${shop.name}</h4>
-                    <span style="font-size: 0.75rem; background: var(--primary-light); color: var(--primary); padding: 2px 8px; border-radius: 12px; font-weight: 700;">${shop.category || 'Grocery'}</span>
+                    <span style="font-size: 0.75rem; background: var(--primary-light); color: var(--primary); padding: 2px 8px; border-radius: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 2px;">
+                        ${getShopCategoryIcon(shop.category)}
+                        <span>${shop.category || 'Grocery'}</span>
+                    </span>
                 </div>
             </div>
             <p style="margin: 0; font-size: 0.8rem; color: var(--text-soft); line-height: 1.4; height: 38px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">${shop.description || 'Premium multi-vendor shop.'}</p>
@@ -3830,20 +4128,121 @@ function renderEcosystemShops(shops) {
 }
 
 // Customer enters a specific vendor storefront
+// Toggle visibility of general marketplace sections to clean up UI in storefront
+function toggleStorefrontSections(isInStorefront) {
+    const displayVal = isInStorefront ? 'none' : 'block';
+    
+    const generalMarketplaceSections = [
+        '.promo-slider-section',
+        '.banner-section',
+        '#morningFreshBannerSection',
+        '.product-listing',
+        '.brands-section',
+        '.testimonials-section',
+        '.web-platform-section',
+        '#shopsBrowserSection',
+        '#categoryResultsSection',
+        '#brandResultsSection'
+    ];
+    
+    generalMarketplaceSections.forEach(selector => {
+        document.querySelectorAll(selector).forEach(el => {
+            if (el.id === 'brandResultsSection' || el.id === 'categoryResultsSection') {
+                el.style.display = 'none';
+            } else {
+                el.style.display = displayVal;
+            }
+        });
+    });
+
+    const trendingList = document.getElementById('trendingList');
+    const leftArrow = document.getElementById('trendingLeftArrow');
+    const rightArrow = document.getElementById('trendingRightArrow');
+    const viewAllLink = trendingList?.closest('section')?.querySelector('.view-all');
+
+    const activeShopId = localStorage.getItem('active_shop_id');
+
+    if (isInStorefront) {
+        document.getElementById('shopsBrowserSection').style.display = 'none';
+        document.getElementById('storefrontBanner').style.display = 'block';
+        const catSec = document.querySelector('.category-section');
+        if (catSec) catSec.style.display = 'block';
+        const trendSec = document.querySelector('.trending-section');
+        if (trendSec) trendSec.style.display = 'block';
+
+        // Keep trending list as horizontal scroll carousel layout inside storefront too
+        if (trendingList) {
+            trendingList.classList.add('trending-scroll', 'carousel-content');
+            trendingList.classList.remove('product-grid');
+        }
+        if (leftArrow) leftArrow.style.display = '';
+        if (rightArrow) rightArrow.style.display = '';
+        if (viewAllLink) viewAllLink.style.display = 'none'; // Keep view all link hidden in storefront mode
+        fetchSpecialOffers(activeShopId);
+    } else {
+        document.getElementById('shopsBrowserSection').style.display = 'block';
+        document.getElementById('storefrontBanner').style.display = 'none';
+        const catSec = document.querySelector('.category-section');
+        if (catSec) catSec.style.display = 'none';
+        
+        // Reset section headers/titles
+        const productListing = document.querySelector('.product-listing');
+        if (productListing) {
+            const sectionHeader = productListing.querySelector('.section-header');
+            if (sectionHeader) sectionHeader.style.display = 'flex';
+        }
+        const trendingListContainer = document.getElementById('trendingList')?.closest('section');
+        if (trendingListContainer) {
+            const sectionTitle = trendingListContainer.querySelector('.section-title');
+            if (sectionTitle) sectionTitle.innerHTML = `<span data-i18n="section_trending_title">Trending Near You</span>`;
+        }
+
+        // Restore trending list to horizontal scroll carousel layout
+        if (trendingList) {
+            trendingList.classList.add('trending-scroll', 'carousel-content');
+            trendingList.classList.remove('product-grid');
+        }
+        if (leftArrow) leftArrow.style.display = '';
+        if (rightArrow) rightArrow.style.display = '';
+        if (viewAllLink) viewAllLink.style.display = '';
+        fetchSpecialOffers(null);
+    }
+}
+
+// Customer enters a specific vendor storefront
 window.enterEcosystemStorefront = async function(shopId) {
     console.log(`Entering Storefront Context: Shop ${shopId}`);
+    
+    // Save state and switch UI modes immediately to avoid lags
+    localStorage.setItem('active_shop_id', shopId);
+    supportMode = 'store';
+    activeSupportShopId = shopId;
+    updateSupportLinks(shopId);
+    if (typeof toggleSupportMode === 'function') {
+        toggleSupportMode('store', shopId, '');
+    }
+
     try {
         const res = await fetch(`/api/shops/${shopId}`);
         if (!res.ok) throw new Error("Failed to load storefront details");
-        const { shop, products } = await res.json();
+        const { shop, products: shopProds } = await res.json();
 
-        // Save active shop in localStorage for checkout association
-        localStorage.setItem('active_shop_id', shopId);
+        currentShopProducts = shopProds;
+        currentShopName = shop.name;
 
         // A. Toggle View Elements
-        document.getElementById('shopsBrowserSection').style.display = 'none';
-        const promoSection = document.querySelector('.promo-slider-section');
-        if (promoSection) promoSection.style.display = 'none';
+        toggleStorefrontSections(true);
+
+        // Update customer support mode with real shop details
+        if (typeof toggleSupportMode === 'function') {
+            toggleSupportMode('store', shopId, shop.name);
+        }
+
+        // Override special offers visibility based on shop settings
+        const specialOffersEl = document.querySelector('.special-offers');
+        if (specialOffersEl) {
+            specialOffersEl.style.display = (shop.show_special_offers !== 0) ? 'block' : 'none';
+        }
 
         // B. Populate storefront header banner
         const banner = document.getElementById('storefrontBanner');
@@ -3858,8 +4257,11 @@ window.enterEcosystemStorefront = async function(shopId) {
         // Scroll to banner nicely
         banner.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-        // C. Render products SPECIFIC only to this shop!
-        renderStorefrontProducts(products, shop.name);
+        // C. Populate shop-specific categories list
+        populateCategories();
+
+        // D. Render products SPECIFIC only to this shop!
+        renderStorefrontProducts(shopProds, shop.name);
     } catch(e) {
         console.error("Error entering storefront:", e.message);
         Toast.show("Storefront is temporarily unavailable.", "error");
@@ -3870,24 +4272,29 @@ window.enterEcosystemStorefront = async function(shopId) {
 window.exitEcosystemStorefront = function() {
     console.log("Exiting Storefront Context back to General Marketplace");
     localStorage.removeItem('active_shop_id');
+    currentShopProducts = [];
+    currentShopName = '';
+    updateSupportLinks(null);
 
-    // Restore UI headers
-    document.getElementById('storefrontBanner').style.display = 'none';
-    document.getElementById('shopsBrowserSection').style.display = 'block';
-    const promoSection = document.querySelector('.promo-slider-section');
-    if (promoSection) promoSection.style.display = 'block';
+    // Restore UI headers & toggle sections
+    toggleStorefrontSections(false);
 
-    // Restore full default catalog products
-    if (typeof fetchProducts === 'function') {
-        fetchProducts(); // Calls the default catalog loading function in script.js
+    // Switch customer support chat back to AI Assistant mode
+    if (typeof toggleSupportMode === 'function') {
+        toggleSupportMode('ai', null, null);
     }
+
+    // Restore full default categories list
+    populateCategories();
+
+    // Restore full default trending products in marketplace view
+    const trendingProducts = products.filter(p => p.is_trending === 1);
+    populateProducts("trendingList", trendingProducts.length ? trendingProducts : products.slice(0, 12));
 }
 
-// Render shop specific products inside storefront
-function renderStorefrontProducts(products, storeName) {
-    // In our storefront, we inject items inside `#productsGrid` (or equivalent catalog container).
-    // Let's find the products list container in script.js (typically `#productsList` or `#trendingProducts`).
-    const productsContainer = document.getElementById('trendingProducts') || document.querySelector('.products-grid');
+// Render shop specific products inside storefront using premium grid view
+function renderStorefrontProducts(productsList, storeName) {
+    const productsContainer = document.getElementById('trendingList') || document.getElementById('trendingProducts') || document.querySelector('.products-grid');
     if (!productsContainer) return;
 
     // Change title dynamically
@@ -3896,9 +4303,9 @@ function renderStorefrontProducts(products, storeName) {
         sectionTitle.innerHTML = `<i class="ph-bold ph-storefront" style="color: var(--primary);"></i> Shopping from: ${storeName}`;
     }
 
-    if (!products || products.length === 0) {
+    if (!productsList || productsList.length === 0) {
         productsContainer.innerHTML = `
-            <div style="grid-column: 1 / -1; padding: 3rem; text-align: center; color: var(--text-soft); font-weight: 600;">
+            <div style="grid-column: 1 / -1; padding: 3rem; text-align: center; color: var(--text-soft); font-weight: 600; width: 100%;">
                 <i class="ph ph-basket" style="font-size: 3rem; color: var(--text-muted); display: block; margin-bottom: 0.5rem;"></i>
                 This shop catalog has no active items available.
             </div>
@@ -3906,27 +4313,9 @@ function renderStorefrontProducts(products, storeName) {
         return;
     }
 
-    // Check if original render function exists, otherwise use a custom fallback
-    if (typeof renderProducts === 'function') {
-        renderProducts(products, productsContainer);
-    } else {
-        // Fallback product card generator matching indexRoute.js schema
-        productsContainer.innerHTML = products.map(p => `
-            <div class="product-card" style="background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem; position: relative; transition: all 0.3s ease;">
-                <div style="position: absolute; top: 10px; right: 10px; background: #EF4444; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: 700;">${p.discount || '0% OFF'}</div>
-                <img src="${p.imgurl}" alt="${p.name}" style="width: 100%; height: 120px; object-fit: contain; margin-bottom: 0.75rem;">
-                <h5 style="margin: 0 0 0.25rem 0; font-size: 0.95rem; font-weight: 700; color: var(--text-main);">${p.name}</h5>
-                <span style="font-size: 0.75rem; color: var(--text-soft); font-weight: 600;">${p.weight || '1 unit'}</span>
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.75rem;">
-                    <div>
-                        <span style="font-size: 1.1rem; font-weight: 800; color: var(--primary);">₹${p.price}</span>
-                        <span style="font-size: 0.8rem; text-decoration: line-through; color: var(--text-muted); margin-left: 0.25rem;">₹${p.originalprice}</span>
-                    </div>
-                    <button class="add-to-cart-btn" onclick="addToCartEcosystem(${p.id}, '${p.name}', ${p.price}, '${p.imgurl}')" style="background: var(--primary-light); color: var(--primary); border: none; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s;"><i class="ph-bold ph-plus"></i></button>
-                </div>
-            </div>
-        `).join('');
-    }
+    // Call the official premium grid generator function
+    const containerId = productsContainer.id || 'trendingList';
+    populateProducts(containerId, productsList);
 }
 
 // Cart adding extension supporting vendor attribution
@@ -3943,6 +4332,165 @@ window.addToCartEcosystem = function(id, name, price, imgurl) {
 // 4. AI CHATBOT INTERACTIVE SYSTEM
 // ==========================================================================
 
+let supportMode = localStorage.getItem('active_shop_id') ? 'store' : 'ai';
+let activeSupportShopId = localStorage.getItem('active_shop_id') ? parseInt(localStorage.getItem('active_shop_id'), 10) : null;
+let aiChatbotBackupHtml = '';
+let storeChatPollInterval = null;
+let lastMessageCount = 0;
+let historyFetched = false;
+
+function getChatSessionId() {
+    let sessId = localStorage.getItem('store_chat_session_id');
+    if (!sessId) {
+        sessId = 'session_' + Math.random().toString(36).substring(2, 15) + '_' + Date.now();
+        localStorage.setItem('store_chat_session_id', sessId);
+    }
+    return sessId;
+}
+
+function getChatUserName() {
+    return getCookie('full_name') || localStorage.getItem('user_full_name') || 'Guest User';
+}
+
+window.toggleSupportMode = function(mode, shopId, shopName) {
+    const alreadyInStoreMode = (supportMode === 'store' && activeSupportShopId === shopId);
+    supportMode = mode;
+    activeSupportShopId = shopId;
+    
+    const bubbleIcon = document.getElementById('chatBubbleIcon');
+    const headerIcon = document.querySelector('#aiChatbotWidget i.ph-robot, #aiChatbotWidget i.ph-chat-circle-dots');
+    const headerTitle = document.querySelector('#aiChatbotWidget h4');
+    const headerStatus = document.querySelector('#aiChatbotWidget span');
+    const input = document.getElementById('chatbotInput');
+    const messages = document.getElementById('chatbotMessages');
+    
+    if (mode === 'store') {
+        if (messages && !aiChatbotBackupHtml) {
+            aiChatbotBackupHtml = messages.innerHTML;
+        }
+        if (bubbleIcon) {
+            bubbleIcon.className = 'ph ph-chat-circle-dots';
+            bubbleIcon.style.color = 'white';
+        }
+        if (headerIcon) {
+            headerIcon.className = 'ph ph-chat-circle-dots';
+            headerIcon.style.color = 'white';
+        }
+        if (headerTitle) {
+            headerTitle.innerText = `${shopName || 'Shop'} Support`;
+        }
+        if (headerStatus) {
+            headerStatus.innerHTML = `<span style="width: 6px; height: 6px; background: #22C55E; border-radius: 50%; display: inline-block;"></span> Manual Store Support`;
+            headerStatus.style.color = 'white';
+        }
+        if (input) {
+            input.placeholder = `Message ${shopName || 'Shop'} Vendor...`;
+        }
+        
+        if (!alreadyInStoreMode || !historyFetched) {
+            lastMessageCount = 0;
+            fetchStoreChatHistory();
+            historyFetched = true;
+            
+            const widget = document.getElementById('aiChatbotWidget');
+            if (widget && widget.classList.contains('active')) {
+                startStoreChatPolling();
+            }
+        }
+    } else {
+        stopStoreChatPolling();
+        historyFetched = false;
+        if (bubbleIcon) {
+            bubbleIcon.className = 'ph-fill ph-robot';
+        }
+        if (headerIcon) {
+            headerIcon.className = 'ph-fill ph-robot';
+        }
+        if (headerTitle) {
+            headerTitle.innerText = 'ADYANTA Support Bot';
+        }
+        if (headerStatus) {
+            headerStatus.innerHTML = `<span style="width: 6px; height: 6px; background: #22C55E; border-radius: 50%; display: inline-block;"></span> Active Marketplace Assistant`;
+        }
+        if (input) {
+            input.placeholder = "Ask anything about stores & products...";
+        }
+        if (messages && aiChatbotBackupHtml) {
+            messages.innerHTML = aiChatbotBackupHtml;
+            aiChatbotBackupHtml = '';
+        }
+    }
+}
+
+function startStoreChatPolling() {
+    stopStoreChatPolling();
+    if (supportMode !== 'store' || !activeSupportShopId) return;
+    
+    fetchStoreChatHistory();
+    storeChatPollInterval = setInterval(() => {
+        const widget = document.getElementById('aiChatbotWidget');
+        if (widget && widget.classList.contains('active')) {
+            fetchStoreChatHistory(true);
+        }
+    }, 3000);
+}
+
+function stopStoreChatPolling() {
+    if (storeChatPollInterval) {
+        clearInterval(storeChatPollInterval);
+        storeChatPollInterval = null;
+    }
+}
+
+async function fetchStoreChatHistory(silent = false) {
+    if (!activeSupportShopId) return;
+    try {
+        const sessId = getChatSessionId();
+        const res = await fetch(`/api/support/store-chat/history?shop_id=${activeSupportShopId}&session_id=${sessId}`);
+        if (!res.ok) return;
+        const chatMsgs = await res.json();
+        if (chatMsgs.length !== lastMessageCount || !silent) {
+            lastMessageCount = chatMsgs.length;
+            renderStoreChatMessages(chatMsgs);
+        }
+    } catch (err) {
+        console.error("Failed to fetch store chat history:", err);
+    }
+}
+
+function renderStoreChatMessages(chatMsgs) {
+    const messages = document.getElementById('chatbotMessages');
+    if (!messages) return;
+    
+    if (chatMsgs.length === 0) {
+        messages.innerHTML = `
+            <div class="ai-bubble-bot">
+                👋 Welcome to ${currentShopName || 'our shop'}! You can send us a message here for manual customer support, and we will get back to you shortly.
+            </div>
+        `;
+        return;
+    }
+    
+    messages.innerHTML = chatMsgs.map(m => {
+        const isUser = m.sender === 'user';
+        if (isUser) {
+            return `
+                <div class="ai-bubble-user">
+                    ${m.message}
+                </div>
+            `;
+        } else {
+            return `
+                <div class="ai-bubble-bot">
+                    ${m.message}
+                </div>
+            `;
+        }
+    }).join('');
+    
+    scrollToBottom(messages);
+}
+
 function setupAIChatbot() {
     const bubble = document.getElementById('aiChatbotBubble');
     const widget = document.getElementById('aiChatbotWidget');
@@ -3955,16 +4503,27 @@ function setupAIChatbot() {
 
     // Toggle Chat visibility
     bubble.addEventListener('click', () => {
-        const isHidden = widget.style.display === 'none' || !widget.style.display;
-        widget.style.display = isHidden ? 'flex' : 'none';
+        if (supportMode === 'store' && activeSupportShopId) {
+            window.location.href = `support.html?shop_id=${activeSupportShopId}`;
+            return;
+        }
+        const isHidden = !widget.classList.contains('active');
         if (isHidden) {
+            widget.classList.add('active');
             input.focus();
             scrollToBottom(messages);
+            if (supportMode === 'store') {
+                startStoreChatPolling();
+            }
+        } else {
+            widget.classList.remove('active');
+            stopStoreChatPolling();
         }
     });
 
     closeBtn.addEventListener('click', () => {
-        widget.style.display = 'none';
+        widget.classList.remove('active');
+        stopStoreChatPolling();
     });
 
     // Send Message
@@ -3994,19 +4553,40 @@ function handleChatbotSend() {
 
     // Append User message
     messages.innerHTML += `
-        <div style="align-self: flex-end; background: var(--primary); color: white; border-radius: 18px 18px 2px 18px; padding: 0.75rem 1rem; font-size: 0.85rem; max-width: 80%; line-height: 1.4; box-shadow: 0 4px 12px rgba(10, 92, 54, 0.15);">
+        <div class="ai-bubble-user">
             ${userText}
         </div>
     `;
     scrollToBottom(messages);
 
+    if (supportMode === 'store' && activeSupportShopId) {
+        // Send message to the store vendor manual support API
+        fetch('/api/support/store-chat/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                shop_id: activeSupportShopId,
+                message: userText,
+                session_id: getChatSessionId(),
+                user_name: getChatUserName()
+            })
+        })
+        .then(res => {
+            if (res.ok) {
+                fetchStoreChatHistory(); // sync history immediately
+            }
+        })
+        .catch(err => console.error("Error sending store support message:", err));
+        return;
+    }
+
     // Simulate typing loader
     const loaderId = `chat-loader-${Date.now()}`;
     messages.innerHTML += `
-        <div id="${loaderId}" style="align-self: flex-start; background: var(--card-bg); border: 1px solid var(--border); border-radius: 18px 18px 18px 2px; padding: 0.75rem 1rem; font-size: 0.85rem; max-width: 80%; display: flex; align-items: center; gap: 0.25rem;">
-            <span style="width: 6px; height: 6px; background: var(--text-muted); border-radius: 50%; display: inline-block; animation: bounce 1.4s infinite ease-in-out;"></span>
-            <span style="width: 6px; height: 6px; background: var(--text-muted); border-radius: 50%; display: inline-block; animation: bounce 1.4s infinite ease-in-out 0.2s;"></span>
-            <span style="width: 6px; height: 6px; background: var(--text-muted); border-radius: 50%; display: inline-block; animation: bounce 1.4s infinite ease-in-out 0.4s;"></span>
+        <div id="${loaderId}" class="ai-bubble-bot" style="display: flex; align-items: center; gap: 0.35rem; padding: 0.8rem 1.2rem; min-height: 38px;">
+            <span style="width: 7px; height: 7px; background: var(--primary); border-radius: 50%; display: inline-block; animation: bounce 1.2s infinite ease-in-out;"></span>
+            <span style="width: 7px; height: 7px; background: var(--primary); border-radius: 50%; display: inline-block; animation: bounce 1.2s infinite ease-in-out 0.2s;"></span>
+            <span style="width: 7px; height: 7px; background: var(--primary); border-radius: 50%; display: inline-block; animation: bounce 1.2s infinite ease-in-out 0.4s;"></span>
         </div>
     `;
     scrollToBottom(messages);
@@ -4019,32 +4599,274 @@ function handleChatbotSend() {
         let botReply = "I am a helpful assistant for ADYANTA. You can ask me about available vendor shops, active coupons, or delivery times!";
         const query = userText.toLowerCase();
 
-        if (query.includes('shop') || query.includes('store') || query.includes('browse')) {
-            if (allShopsList.length > 0) {
-                const list = allShopsList.map(s => `🌾 **${s.name}** (${s.category || 'Grocery'}) - ${s.rating}⭐`).join('<br>');
-                botReply = `Currently active stores in Nellore:<br>${list}<br><br>Click on their shop card on the homepage to explore their storefront!`;
+        if (query.includes('shop') || query.includes('store') || query.includes('browse') || query.includes('nellore')) {
+            if (typeof allShopsList !== 'undefined' && allShopsList.length > 0) {
+                const list = allShopsList.map(s => `
+                    <div class="premium-bot-card">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
+                            <div>
+                                <strong class="premium-bot-card-title">${s.name}</strong>
+                                <div style="font-size: 0.72rem; color: var(--text-soft); font-weight: 600; margin-top: 2px;">
+                                    <i class="ph-fill ph-tag" style="color: var(--primary);"></i> ${s.category || 'Store'}
+                                </div>
+                            </div>
+                            <span style="font-size: 0.78rem; font-weight: 700; color: #D4AF37; background: #FFFDF0; padding: 2px 6px; border-radius: 6px; border: 1px solid rgba(212,175,55,0.2); display: flex; align-items: center; gap: 3px;">
+                                <i class="ph-fill ph-star"></i> ${s.rating || '4.5'}
+                            </span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed rgba(0,0,0,0.06); padding-top: 8px; margin-top: 8px;">
+                            <span style="font-size: 0.72rem; color: var(--text-soft); font-weight: 600; display: flex; align-items: center; gap: 4px;">
+                                <i class="ph ph-clock" style="color: var(--primary); font-size: 0.85rem;"></i> ${s.delivery_time || '15-30 mins'}
+                            </span>
+                            <button onclick="enterEcosystemStorefront(${s.id}); document.getElementById('aiChatbotWidget').classList.remove('active');" style="background: linear-gradient(135deg, var(--primary), var(--primary-hover)); color: white; border: none; padding: 5px 12px; border-radius: 12px; font-size: 0.72rem; font-weight: 700; cursor: pointer; transition: all 0.2s; box-shadow: 0 3px 6px rgba(10,92,54,0.15);" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform='none'">Visit Store</button>
+                        </div>
+                    </div>
+                `).join('');
+                botReply = `<div style="font-weight: 700; margin-bottom: 0.5rem; color: var(--primary);"><i class="ph ph-map-pin" style="color: var(--accent);"></i> Active partner stores near you:</div>${list}`;
             } else {
                 botReply = "There are no stores active right now. Please check back later!";
             }
         } else if (query.includes('coupon') || query.includes('discount') || query.includes('code') || query.includes('offer')) {
-            botReply = `🎉 Active Marketplace Coupons available:<br>
-            - 🎁 **WELCOME10**: Flat 10% OFF on all grocery orders!<br>
-            - 🎁 **FIRSTSAVE100**: Flat ₹100 OFF on orders above ₹500!<br><br>
-            Copy the code and enter it during checkout to redeem instantly!`;
+            const coupons = [
+                { code: 'WELCOME10', desc: 'Flat 10% OFF on all grocery orders' },
+                { code: 'FIRSTSAVE100', desc: 'Flat ₹100 OFF on orders above ₹500' }
+            ];
+            const list = coupons.map(c => `
+                <div class="golden-ticket-card">
+                    <div style="min-width: 0; flex: 1; padding-right: 8px;">
+                        <span class="golden-ticket-code">${c.code}</span>
+                        <div style="font-size: 0.75rem; color: #92400E; font-weight: 700; margin-top: 6px;">${c.desc}</div>
+                    </div>
+                    <button onclick="navigator.clipboard.writeText('${c.code}'); if(window.Toast) Toast.show('Coupon code copied to clipboard!', 'success');" style="background: linear-gradient(135deg, #0A5C36, #06341D); color: white; border: none; padding: 6px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: 800; cursor: pointer; transition: all 0.2s; box-shadow: 0 3px 8px rgba(10,92,54,0.15);" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">Copy</button>
+                </div>
+            `).join('');
+            botReply = `<div style="font-weight: 700; margin-bottom: 0.5rem; color: var(--primary);"><i class="ph ph-gift" style="color: var(--accent);"></i> Available discount codes:</div>${list}`;
         } else if (query.includes('delivery') || query.includes('speed') || query.includes('minutes') || query.includes('time')) {
-            botReply = "⚡ ADYANTA lightning-fast delivery takes between **15 to 45 minutes** depending on your distance! We source directly from nearby local shops to ensure maximum freshness.";
+            botReply = `
+            <strong style="color: var(--primary); font-size: 0.95rem; font-family: 'Outfit', sans-serif; display: flex; align-items: center; gap: 6px; margin-bottom: 0.5rem;"><i class="ph ph-lightning" style="color: var(--accent);"></i> Lightning-Fast Deliveries</strong>
+            We dispatch riders immediately. Current estimated delivery is <strong>15 to 45 minutes</strong>.
+            
+            <div class="delivery-gauge">
+                <div class="delivery-gauge-fill"></div>
+                <div class="delivery-step active">
+                    <div class="delivery-step-icon"><i class="ph ph-storefront"></i></div>
+                    <div class="delivery-step-label">Ordered</div>
+                </div>
+                <div class="delivery-step active">
+                    <div class="delivery-step-icon"><i class="ph ph-package"></i></div>
+                    <div class="delivery-step-label">Prepared</div>
+                </div>
+                <div class="delivery-step active">
+                    <div class="delivery-step-icon"><i class="ph ph-moped"></i></div>
+                    <div class="delivery-step-label">On Route</div>
+                </div>
+                <div class="delivery-step">
+                    <div class="delivery-step-icon" style="border-color: #CBD5E1; color: #94A3B8;"><i class="ph ph-house"></i></div>
+                    <div class="delivery-step-label">Delivered</div>
+                </div>
+            </div>
+            <div style="background: var(--primary-light); color: var(--primary); padding: 10px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; border-left: 4px solid var(--primary); text-align: left; margin-top: 12px; display: flex; gap: 8px; align-items: flex-start;">
+                <i class="ph ph-info" style="font-size: 0.9rem; margin-top: 1px;"></i>
+                <span>Our average delivery speed in Nellore is just 22 minutes today!</span>
+            </div>`;
         } else if (query.includes('hi') || query.includes('hello') || query.includes('hey')) {
-            botReply = "👋 Hey there! How can I help you today? Ask me about our shops, coupons, or checkout details!";
+            botReply = `
+            <strong style="font-size: 1rem; color: var(--primary); display: block; margin-bottom: 0.5rem; font-family: 'Outfit', sans-serif;">👋 Hello! I am the ADYANTA Premium Assistant.</strong>
+            I can help you navigate the marketplace and find the best deals. Click one of the options below or type your question:
+            <div style="margin-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                <button class="chat-suggest-btn" onclick="sendChatbotSuggestion('🔍 Show active shops')"><i class="ph ph-storefront"></i> Browse Partner Shops</button>
+                <button class="chat-suggest-btn" onclick="sendChatbotSuggestion('🎁 Give me active coupons')"><i class="ph ph-ticket"></i> Active Coupons & Offers</button>
+                <button class="chat-suggest-btn" onclick="sendChatbotSuggestion('⚡ Check delivery speeds')"><i class="ph ph-lightning"></i> Delivery Timelines</button>
+                <button class="chat-suggest-btn" onclick="sendChatbotSuggestion('💳 Payment Options')"><i class="ph ph-credit-card"></i> Accepted Payments</button>
+            </div>`;
         } else if (query.includes('payment') || query.includes('upi') || query.includes('cod') || query.includes('pay')) {
-            botReply = "💳 We support multiple secure payment gateways! You can pay using **UPI (GPay/PhonePe), Credit/Debit Cards, Net Banking, Net Wallets, or Cash on Delivery (COD)**.";
+            botReply = `
+            <strong style="color: var(--primary); font-size: 0.95rem; font-family: 'Outfit', sans-serif; display: flex; align-items: center; gap: 6px; margin-bottom: 0.5rem;"><i class="ph ph-shield-check" style="color: var(--accent);"></i> Secure Payment Channels</strong>
+            Choose from several verified sandbox gateways at checkout:
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px;">
+                <div style="background: var(--card-bg); border: 1px solid rgba(0,0,0,0.06); padding: 8px; border-radius: 12px; text-align: center; font-size: 0.75rem; font-weight: 700; color: var(--text-main); display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                    <i class="ph ph-device-mobile" style="font-size: 1.4rem; color: var(--primary);"></i> UPI Transfer
+                </div>
+                <div style="background: var(--card-bg); border: 1px solid rgba(0,0,0,0.06); padding: 8px; border-radius: 12px; text-align: center; font-size: 0.75rem; font-weight: 700; color: var(--text-main); display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                    <i class="ph ph-credit-card" style="font-size: 1.4rem; color: var(--primary);"></i> Credit/Debit Card
+                </div>
+                <div style="background: var(--card-bg); border: 1px solid rgba(0,0,0,0.06); padding: 8px; border-radius: 12px; text-align: center; font-size: 0.75rem; font-weight: 700; color: var(--text-main); display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                    <i class="ph ph-wallet" style="font-size: 1.4rem; color: var(--primary);"></i> Cash on Delivery
+                </div>
+                <div style="background: var(--card-bg); border: 1px solid rgba(0,0,0,0.06); padding: 8px; border-radius: 12px; text-align: center; font-size: 0.75rem; font-weight: 700; color: var(--text-main); display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                    <i class="ph ph-bank" style="font-size: 1.4rem; color: var(--primary);"></i> Net Banking
+                </div>
+            </div>`;
         }
 
         messages.innerHTML += `
-            <div style="align-self: flex-start; background: var(--card-bg); border: 1px solid var(--border); border-radius: 18px 18px 18px 2px; padding: 0.75rem 1rem; font-size: 0.85rem; max-width: 80%; line-height: 1.4; color: var(--text-main);">
+            <div class="ai-bubble-bot">
                 ${botReply}
             </div>
         `;
         scrollToBottom(messages);
     }, 1000);
 }
+
+// --- DYNAMIC MARKETPLACE SHOP FILTERING ---
+window.filterShops = function(category) {
+    const buttons = document.querySelectorAll('.shop-filter-btn');
+    buttons.forEach(btn => {
+        const text = btn.innerText.trim();
+        if (text === category || (category === 'All' && text === 'All Stores')) {
+            btn.classList.add('active');
+            btn.style.background = 'var(--primary)';
+            btn.style.color = 'white';
+            btn.style.borderColor = 'var(--primary)';
+            btn.style.fontWeight = '700';
+        } else {
+            btn.classList.remove('active');
+            btn.style.background = 'var(--card-bg)';
+            btn.style.color = 'var(--text-soft)';
+            btn.style.borderColor = 'var(--border)';
+            btn.style.fontWeight = '600';
+        }
+    });
+
+    if (category === 'All') {
+        renderEcosystemShops(allShopsList);
+    } else {
+        const filtered = allShopsList.filter(shop => shop.category === category);
+        renderEcosystemShops(filtered);
+    }
+};
+
+// --- MOCK PAYMENT GATEWAY INTERACTION ---
+window.openMockPayment = function(method) {
+    const modal = document.getElementById('mockPaymentModal');
+    const amtText = document.getElementById('mockPaymentAmountText');
+    const cardFields = document.getElementById('mockCardFields');
+    const upiFields = document.getElementById('mockUpiFields');
+    const btnText = document.getElementById('mockSubmitBtnText');
+    const spinner = document.getElementById('mockPaymentSpinner');
+
+    if (!modal) return;
+
+    const totalStr = document.getElementById('modalFinalTotal').innerText;
+    amtText.innerText = totalStr;
+
+    if (method === 'card') {
+        cardFields.style.display = 'block';
+        upiFields.style.display = 'none';
+        btnText.innerText = "Authorize Credit Card";
+    } else {
+        cardFields.style.display = 'none';
+        upiFields.style.display = 'block';
+        btnText.innerText = "Authorize UPI Transfer";
+    }
+
+    spinner.style.display = 'none';
+    modal.style.display = 'flex';
+};
+
+window.closeMockPayment = function() {
+    const modal = document.getElementById('mockPaymentModal');
+    if (modal) modal.style.display = 'none';
+};
+
+window.processMockPayment = async function() {
+    const spinner = document.getElementById('mockPaymentSpinner');
+    const btnText = document.getElementById('mockSubmitBtnText');
+    
+    spinner.style.display = 'inline-block';
+    btnText.innerText = "Processing sandbox transaction...";
+
+    setTimeout(async () => {
+        closeMockPayment();
+        
+        const houseVal = document.getElementById('checkoutHouse')?.value.trim() || '';
+        const streetVal = document.getElementById('checkoutStreet')?.value.trim() || '';
+        const pincodeVal = document.getElementById('checkoutPincode')?.value.trim() || '';
+        const confirmOrderBtn = document.getElementById('confirmOrderBtn');
+
+        if (confirmOrderBtn) {
+            confirmOrderBtn.innerText = "Processing...";
+            confirmOrderBtn.disabled = true;
+        }
+
+        const orderData = {
+            name: document.getElementById('checkoutName').value.trim() || 'Pickup Order',
+            phone: document.getElementById('checkoutPhone').value.trim() || 'N/A',
+            address: window.selectedDeliveryType === 'Pickup from Shop' ? 'Store Pickup' : `${houseVal}, ${streetVal} (${pincodeVal})`,
+            paymentMethod: selectedPaymentMethod,
+            items: cart,
+            couponId: window.appliedCoupon ? window.appliedCoupon.id : null,
+            deliveryType: window.selectedDeliveryType,
+            useCoins: document.getElementById('useCoinsToggle')?.checked || false
+        };
+
+        try {
+            const res = await fetch(API_BASE + '/api/orders', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(orderData)
+            });
+            
+            const data = await res.json().catch(() => ({ error: "Server returned an invalid response." }));
+            
+            if (!res.ok) {
+                Toast.show(data.error || "Order failed.", "error");
+                return;
+            }
+            
+            const dbOrderId = data.orderId;
+
+            // Clear cart
+            cart = [];
+            localStorage.removeItem('cart');
+            updateCartSidebar();
+            
+            Toast.show("Payment authorized & order placed successfully!", "success");
+            showCheckoutStep('success');
+            
+            if (document.getElementById('successOrderId')) {
+                document.getElementById('successOrderId').innerText = `#${data.dailySeq || dbOrderId || '0000'}`;
+            }
+            if (document.getElementById('successMethod')) {
+                document.getElementById('successMethod').innerText = selectedPaymentMethod === 'card' ? 'Credit / Debit Card' : 'UPI';
+            }
+            if (document.getElementById('successTotalAmount')) {
+                document.getElementById('successTotalAmount').innerText = document.getElementById('modalFinalTotal').innerText;
+            }
+
+            if (data.coinsUsed > 0) {
+                const row = document.getElementById('successCoinsUsedRow');
+                const txt = document.getElementById('successCoinsUsedText');
+                if (row && txt) {
+                    row.style.display = 'flex';
+                    txt.innerText = `-${data.coinsUsed} Coins (Saved ₹${data.coinDiscount})`;
+                }
+            } else {
+                const row = document.getElementById('successCoinsUsedRow');
+                if (row) row.style.display = 'none';
+            }
+
+            if (data.coinsEarned > 0) {
+                const row = document.getElementById('successCoinsEarnedRow');
+                const txt = document.getElementById('successCoinsEarnedText');
+                if (row && txt) {
+                    row.style.display = 'flex';
+                    txt.innerText = `+${data.coinsEarned} Coins`;
+                }
+            } else {
+                const row = document.getElementById('successCoinsEarnedRow');
+                if (row) row.style.display = 'none';
+            }
+
+        } catch(e) { 
+            console.error("Order error:", e); 
+            Toast.show("Error: " + (e.message || "Connection error"), "error"); 
+        } finally {
+            if (confirmOrderBtn) {
+                confirmOrderBtn.innerText = "Confirm Order";
+                confirmOrderBtn.disabled = false;
+            }
+        }
+    }, 1500);
+};
 

@@ -142,9 +142,28 @@
                    <a href="#" onclick="goBackToCategories(event)" style="color: var(--primary); text-decoration: none; font-weight: 600;"><i class="ph ph-arrow-left"></i> All Categories</a> / <span id="currentCatName">Category</span>
                 </div>
                 <h3 class="section-title" id="categoryTitle" style="font-size: 2.25rem; font-weight: 700; color: var(--text-main); margin: 0;">Loading...</h3>
-                <div class="search-bar" id="catSearchWrapper" style="width: 100%; max-width: 500px; position: relative; display: none;">
+                <div class="search-bar" id="catSearchWrapper" style="width: 100%; max-width: 400px; position: relative; display: none;">
                     <i class="ph ph-magnifying-glass" style="position: absolute; left: 1.25rem; top: 50%; transform: translateY(-50%); color: var(--text-soft); font-size: 1.25rem;"></i>
-                    <input type="text" id="catSearchInput" autocomplete="new-password" placeholder="Search in this category..." style="width: 100%; padding: 1rem 1.5rem 1rem 3.5rem; border: 1px solid var(--border); border-radius: 50px; background: white; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); font-size: 1.1rem; outline: none; transition: border-color 0.2s, box-shadow 0.2s;">
+                    <input type="text" id="catSearchInput" autocomplete="new-password" placeholder="Search in this category..." style="width: 100%; padding: 0.8rem 1.5rem 0.8rem 3.5rem; border: 1px solid var(--border); border-radius: 50px; background: white; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); font-size: 0.95rem; outline: none; transition: border-color 0.2s, box-shadow 0.2s;">
+                </div>
+                <div class="sorting-filtering-wrapper" id="sortingFilteringWrapper" style="display: none; width: 100%; max-width: 500px; justify-content: space-between; gap: 1rem; margin-top: 0.75rem;">
+                    <div style="flex: 1; position: relative;">
+                        <select id="priceSortSelect" onchange="applySortAndFilter()" style="width: 100%; padding: 0.6rem 1rem; border: 1.5px solid var(--border); border-radius: 10px; background: white; font-size: 0.85rem; font-weight: 600; color: var(--text-main); outline: none; appearance: none; -webkit-appearance: none; cursor: pointer;">
+                            <option value="default">Sort by Price</option>
+                            <option value="low-high">Price: Low to High</option>
+                            <option value="high-low">Price: High to Low</option>
+                        </select>
+                        <i class="ph ph-caret-down" style="position: absolute; right: 1rem; top: 50%; transform: translateY(-50%); pointer-events: none; font-size: 0.8rem; color: var(--text-soft);"></i>
+                    </div>
+                    <div style="flex: 1; position: relative;">
+                        <select id="ratingFilterSelect" onchange="applySortAndFilter()" style="width: 100%; padding: 0.6rem 1rem; border: 1.5px solid var(--border); border-radius: 10px; background: white; font-size: 0.85rem; font-weight: 600; color: var(--text-main); outline: none; appearance: none; -webkit-appearance: none; cursor: pointer;">
+                            <option value="all">Filter by Rating</option>
+                            <option value="4.5">4.5★ & above</option>
+                            <option value="4.0">4.0★ & above</option>
+                            <option value="3.5">3.5★ & above</option>
+                        </select>
+                        <i class="ph ph-caret-down" style="position: absolute; right: 1rem; top: 50%; transform: translateY(-50%); pointer-events: none; font-size: 0.8rem; color: var(--text-soft);"></i>
+                    </div>
                 </div>
             </div>
 
@@ -335,6 +354,20 @@
             const urlParams = new URLSearchParams(window.location.search);
             const type = urlParams.get('type');
             const catName = urlParams.get('name');
+            const shopId = urlParams.get('shop_id');
+
+            if (shopId) {
+                try {
+                    const shopRes = await fetch(API_BASE + '/api/shops/' + shopId);
+                    if (shopRes.ok) {
+                        const shopData = await shopRes.json();
+                        if (shopData.shop) {
+                            activeShopName = shopData.shop.name;
+                            activeShopProducts = shopData.products || [];
+                        }
+                    }
+                } catch(e) { console.error("Failed to load shop details", e); }
+            }
 
             try {
                 const titleEl = document.getElementById('categoryTitle');
@@ -342,38 +375,63 @@
                 // Always fetch categories to ensure the picker is available
                 await fetchAndRenderCategories();
 
+                // Define sorting and filtering function
+                window.applySortAndFilter = function() {
+                    let list = [...allProducts];
+                    
+                    const term = document.getElementById('catSearchInput').value.toLowerCase();
+                    if (term) {
+                        list = list.filter(p => p.name.toLowerCase().includes(term));
+                    }
+
+                    const ratingVal = document.getElementById('ratingFilterSelect').value;
+                    if (ratingVal !== 'all') {
+                        const minRating = parseFloat(ratingVal);
+                        list = list.filter(p => (p.rating || 4.5) >= minRating);
+                    }
+
+                    const priceSort = document.getElementById('priceSortSelect').value;
+                    if (priceSort === 'low-high') {
+                        list.sort((a, b) => parseFloat(a.price) - parseFloat(b.price));
+                    } else if (priceSort === 'high-low') {
+                        list.sort((a, b) => parseFloat(b.price) - parseFloat(a.price));
+                    }
+
+                    renderProducts(list);
+                };
+
                 if (type === 'trending') {
                     const res = await fetch(API_BASE + '/api/products');
                     const products = (await res.json()).filter(p => p.is_trending === 1);
                     titleEl.innerText = "Trending Near You";
                     document.getElementById('trendingHero').style.display = 'block';
                     document.getElementById('catSearchWrapper').style.display = 'block';
+                    document.getElementById('sortingFilteringWrapper').style.display = 'flex';
                     document.getElementById('categoryGrid').style.display = 'none';
                     document.getElementById('breadcrumb').style.display = 'none';
                     allProducts = products;
-                    renderProducts(products);
+                    applySortAndFilter();
                 } else if (type === 'daily-essentials') {
                     const res = await fetch(API_BASE + '/api/products');
                     const products = (await res.json()).filter(p => p.is_daily_essential === 1);
                     titleEl.innerText = "Daily Essentials";
                     document.getElementById('catSearchWrapper').style.display = 'block';
+                    document.getElementById('sortingFilteringWrapper').style.display = 'flex';
                     document.getElementById('categoryGrid').style.display = 'none';
                     document.getElementById('breadcrumb').style.display = 'block';
                     allProducts = products;
-                    renderProducts(products);
+                    applySortAndFilter();
                 } else if (!catName || catName === 'All') {
-                    document.title = "Explore Catalog - ADYANTA";
+                    document.title = activeShopName ? `Explore Catalog - from ${activeShopName} - ADYANTA` : "Explore Catalog - ADYANTA";
                     showCategorySelector();
                 } else {
-                    document.title = `${catName} - ADYANTA`;
+                    document.title = activeShopName ? `${catName} - from ${activeShopName} - ADYANTA` : `${catName} - ADYANTA`;
                     await selectCategory(catName, false);
                 }
 
                 // Search logic
-                document.getElementById('catSearchInput').addEventListener('input', (e) => {
-                    const term = e.target.value.toLowerCase();
-                    const filtered = allProducts.filter(p => p.name.toLowerCase().includes(term));
-                    renderProducts(filtered);
+                document.getElementById('catSearchInput').addEventListener('input', () => {
+                    applySortAndFilter();
                 });
 
                 window.addEventListener('popstate', () => {
@@ -393,8 +451,9 @@
         }
 
         async function showCategorySelector() {
-            document.getElementById('categoryTitle').innerText = "Explore Categories";
+            document.getElementById('categoryTitle').innerText = activeShopName ? `Explore Categories - from ${activeShopName}` : "Explore Categories";
             document.getElementById('catSearchWrapper').style.display = 'none';
+            document.getElementById('sortingFilteringWrapper').style.display = 'none';
             document.getElementById('mainGrid').innerHTML = '';
             document.getElementById('categoryGrid').style.display = 'grid';
             document.getElementById('categoryGrid').classList.remove('category-scroll-active');
@@ -419,6 +478,15 @@
                 const res = await fetch(API_BASE + '/api/categories');
                 categoriesList = await res.json();
                 
+                let categoriesToRender = categoriesList;
+                if (activeShopProducts && activeShopProducts.length > 0) {
+                    const uniqueShopCategories = [...new Set(activeShopProducts.map(p => p.category || p.Category).filter(Boolean))];
+                    categoriesToRender = categoriesList.filter(c => uniqueShopCategories.some(sc => sc.toLowerCase() === c.name.toLowerCase()));
+                    if (categoriesToRender.length === 0) {
+                        categoriesToRender = categoriesList;
+                    }
+                }
+                
                 const icons = {
                     'Fresh Vegetables': 'ph-leaf',
                     'Fruits': 'ph-orange',
@@ -430,7 +498,7 @@
                     'Default': 'ph-package'
                 };
 
-                grid.innerHTML = categoriesList.map(c => `
+                grid.innerHTML = categoriesToRender.map(c => `
                     <div class="category-card cat-card-base" onclick="selectCategory('${c.name}')">
                         <div class="cat-icon-circle cat-icon-base">
                             <i class="ph-fill ${icons[c.name] || icons['Default']}"></i>
@@ -451,9 +519,20 @@
                 window.history.pushState({}, '', url);
             }
             
-            document.getElementById('categoryTitle').innerText = catName;
+            document.getElementById('categoryTitle').innerText = activeShopName ? `${catName} - from ${activeShopName}` : catName;
             document.getElementById('currentCatName').innerText = catName;
+            
+            const breadcrumbAllCats = document.querySelector('#breadcrumb a');
+            if (breadcrumbAllCats) {
+                breadcrumbAllCats.innerHTML = activeShopName ? `<i class="ph ph-arrow-left"></i> All Categories - from ${activeShopName}` : `<i class="ph ph-arrow-left"></i> All Categories`;
+            }
+
+            document.title = activeShopName ? `${catName} - from ${activeShopName} - ADYANTA` : `${catName} - ADYANTA`;
+            
             document.getElementById('catSearchWrapper').style.display = 'block';
+            document.getElementById('sortingFilteringWrapper').style.display = 'flex';
+            document.getElementById('priceSortSelect').value = 'default';
+            document.getElementById('ratingFilterSelect').value = 'all';
             
             // Switch grid to compact scroll for better focus
             const grid = document.getElementById('categoryGrid');
@@ -480,7 +559,13 @@
         }
 
         async function loadCategoryProducts(catName) {
-            const res = await fetch(API_BASE + '/api/products/category/' + encodeURIComponent(catName));
+            const urlParams = new URLSearchParams(window.location.search);
+            const shopId = urlParams.get('shop_id');
+            let fetchUrl = API_BASE + '/api/products/category/' + encodeURIComponent(catName);
+            if (shopId) {
+                fetchUrl += `?shop_id=${shopId}`;
+            }
+            const res = await fetch(fetchUrl);
             allProducts = await res.json();
             renderProducts(allProducts);
         }
@@ -700,7 +785,7 @@
             <i class="ph-fill ph-house"></i>
             <span>Home</span>
         </a>
-        <a href="category.html?name=All" class="nav-item active">
+        <a href="stores.html?category=All" class="nav-item">
             <i class="ph ph-squares-four"></i>
             <span>Categories</span>
         </a>

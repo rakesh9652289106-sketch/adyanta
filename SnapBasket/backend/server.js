@@ -7,6 +7,9 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 // Supabase is initialized in individual route files via supabaseClient.js
 
+const { initDb } = require('./db');
+initDb();
+
 // Middleware
 app.use(express.json());
 app.use(cookieParser());
@@ -14,6 +17,8 @@ app.use(cookieParser());
 const allowedOrigins = [
     'http://localhost:5173',
     'http://localhost:3000',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:3000',
     'https://adyanta.vercel.app',
     'https://adyanta.vercel.app/'
 ];
@@ -25,7 +30,13 @@ app.use(cors({
         const cleanOrigin = origin.replace(/\/$/, '');
         const cleanEnvOrigin = process.env.ALLOWED_ORIGIN ? process.env.ALLOWED_ORIGIN.replace(/\/$/, '') : null;
         
-        const isAllowed = allowedOrigins.some(o => o.replace(/\/$/, '') === cleanOrigin) || 
+        const isLocalhost = cleanOrigin.startsWith('http://localhost:') || 
+                            cleanOrigin.startsWith('http://127.0.0.1:') || 
+                            cleanOrigin === 'http://localhost' || 
+                            cleanOrigin === 'http://127.0.0.1';
+
+        const isAllowed = isLocalhost || 
+                         allowedOrigins.some(o => o.replace(/\/$/, '') === cleanOrigin) || 
                          (cleanEnvOrigin && cleanEnvOrigin === cleanOrigin);
 
         if (isAllowed) {
@@ -67,9 +78,14 @@ app.use('/api', indexRouter);
 const path = require('path');
 app.use(express.static(path.join(__dirname, '../frontend')));
 
-// Fallback for SPA routing if needed (optional)
+// Health Check endpoint for uptime pingers
+app.get('/api/health', (req, res) => {
+    res.status(200).json({ status: 'active', message: 'ADYANTA Backend API is running' });
+});
+
+// Fallback for SPA routing / backend health check
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/index.html'));
+    res.status(200).json({ status: 'active', message: 'ADYANTA Backend API is running' });
 });
 
 const server = app.listen(PORT, () => {

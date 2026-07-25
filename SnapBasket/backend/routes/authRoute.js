@@ -1,7 +1,16 @@
 const express = require('express');
 const router = express.Router();
-const { supabase } = require('../supabaseClient');
 const crypto = require('crypto');
+const sqlite3 = require('sqlite3').verbose();
+const path = require('path');
+
+const dbPath = path.join(__dirname, '../database.sqlite');
+const db = new sqlite3.Database(dbPath);
+
+// Ensure users table has role column
+db.run("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'customer'", (err) => {
+    // Column might already exist, which is fine
+});
 
 // Password Hashing Helpers
 function hashPassword(password) {
@@ -26,160 +35,152 @@ router.post('/register', async (req, res) => {
     }
 
     const assignedRole = role === 'vendor' ? 'vendor' : 'customer';
+    const hashedPassword = hashPassword(password);
+    const lowercaseA1 = security_a1.toLowerCase().trim();
+    const lowercaseA2 = security_a2.toLowerCase().trim();
 
-    // 1. Sign up with Supabase Auth
-    // Use phone-style email as a proxy for Supabase Auth
-    const email = `${phone}@adyanta.com`;
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-            data: {
-                full_name,
-                phone,
-                role: assignedRole
+    // Check if user already exists
+    db.get("SELECT id FROM users WHERE phone = ? OR username = ?", [phone, phone], (err, user) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (user) return res.status(400).json({ error: "Mobile number already registered." });
+
+        // Insert new user
+        db.run(`INSERT INTO users (username, password, full_name, phone, role, security_q1, security_a1, security_q2, security_a2, status) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [phone, hashedPassword, full_name, phone, assignedRole, security_q1, lowercaseA1, security_q2, lowercaseA2, 'active'],
+            function(err) {
+                if (err) return res.status(500).json({ error: err.message });
+                const insertedId = this.lastID.toString();
+
+                res.cookie('user_id', insertedId, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
+                res.cookie('username', phone, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
+                res.cookie('full_name', full_name, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
+                res.cookie('role', assignedRole, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
+
+                res.status(201).json({ 
+                    id: insertedId, 
+                    username: phone, 
+                    full_name, 
+                    role: assignedRole,
+                    token: insertedId 
+                });
             }
-        }
-    });
-
-    if (authError) {
-        console.error("Auth Registration error:", authError);
-        return res.status(400).json({ error: authError.message });
-    }
-
-    // 2. Sync with public.users table for metadata/recovery
-    const { data: userData, error: dbError } = await supabase.from('users').insert([{
-        id: authData.user.id,
-        username: phone, 
-        full_name, 
-        phone,
-        role: assignedRole,
-        security_q1, 
-        security_a1: security_a1.toLowerCase(),
-        security_q2, 
-        security_a2: security_a2.toLowerCase()
-    }]).select().single();
-
-    if (dbError) {
-        console.error("Profile sync error:", dbError);
-    }
-
-    const finalUser = userData || { id: authData.user.id, full_name, username: phone };
-
-    res.cookie('user_id', finalUser.id, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
-    res.cookie('username', phone, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
-    res.cookie('full_name', finalUser.full_name, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
-    res.cookie('role', finalUser.role || assignedRole, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
-    
-    res.status(201).json({ 
-        id: finalUser.id, 
-        username: phone, 
-        full_name: finalUser.full_name, 
-        role: finalUser.role || assignedRole,
-        token: authData.session?.access_token || finalUser.id 
+        );
     });
 });
 
 router.post('/recovery/initiate', async (req, res) => {
     const { name, phone } = req.body;
-    const { data: user, error } = await supabase.from('users').select('full_name, security_q1, security_q2').eq('phone', phone).single();
     
-    if (error || !user) return res.status(404).json({ error: "Mobile number not found." });
-    
-    if (!name || user.full_name.toLowerCase() !== name.toLowerCase()) {
-        return res.status(401).json({ error: "Name and Mobile Number combination is incorrect." });
-    }
-    
-    if (!user.security_q1 || !user.security_q2) {
-        return res.status(400).json({ error: "No security questions set for this account. Please contact support." });
-    }
-    
-    res.json({ questions: [user.security_q1, user.security_q2] });
+    db.get("SELECT full_name, security_q1, security_q2 FROM users WHERE phone = ?", [phone], (err, user) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!user) return res.status(404).json({ error: "Mobile number not found." });
+        
+        if (!name || user.full_name.toLowerCase().trim() !== name.toLowerCase().trim()) {
+            return res.status(401).json({ error: "Name and Mobile Number combination is incorrect." });
+        }
+        
+        if (!user.security_q1 || !user.security_q2) {
+            return res.status(400).json({ error: "No security questions set for this account. Please contact support." });
+        }
+        
+        res.json({ questions: [user.security_q1, user.security_q2] });
+    });
 });
 
 router.post('/recovery/verify-answer', async (req, res) => {
     const { phone, questionIndex, answer } = req.body;
     const answerCol = questionIndex === 0 ? 'security_a1' : 'security_a2';
     
-    const { data: user, error } = await supabase.from('users').select(answerCol).eq('phone', phone).single();
-    if (error || !user) return res.status(404).json({ error: "User not found." });
-    
-    if (user[answerCol] === answer.toLowerCase()) {
-        res.json({ message: "Answer correct." });
-    } else {
-        res.status(401).json({ error: "Incorrect answer." });
-    }
+    db.get(`SELECT ${answerCol} FROM users WHERE phone = ?`, [phone], (err, user) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!user) return res.status(404).json({ error: "User not found." });
+        
+        if (user[answerCol] === answer.toLowerCase().trim()) {
+            res.json({ message: "Answer correct." });
+        } else {
+            res.status(401).json({ error: "Incorrect answer." });
+        }
+    });
 });
 
 router.post('/recovery/verify-all', async (req, res) => {
     const { phone, security_a1, security_a2 } = req.body;
-    const { data: user, error } = await supabase.from('users').select('security_a1, security_a2').eq('phone', phone).single();
     
-    if (error || !user) return res.status(404).json({ error: "User not found." });
-    
-    const isA1Correct = security_a1 && user.security_a1 === security_a1.toLowerCase().trim();
-    const isA2Correct = security_a2 && user.security_a2 === security_a2.toLowerCase().trim();
-    
-    if (isA1Correct && isA2Correct) {
-        res.json({ message: "Both answers correct." });
-    } else {
-        res.status(401).json({ error: "Incorrect security answers." });
-    }
+    db.get("SELECT security_a1, security_a2 FROM users WHERE phone = ?", [phone], (err, user) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!user) return res.status(404).json({ error: "User not found." });
+        
+        const isA1Correct = security_a1 && user.security_a1 === security_a1.toLowerCase().trim();
+        const isA2Correct = security_a2 && user.security_a2 === security_a2.toLowerCase().trim();
+        
+        if (isA1Correct && isA2Correct) {
+            res.json({ message: "Both answers correct." });
+        } else {
+            res.status(401).json({ error: "Incorrect security answers." });
+        }
+    });
 });
-
 
 router.post('/recovery/verify-and-login', async (req, res) => {
     const { phone, answer } = req.body;
-    const { data: user, error } = await supabase.from('users').select('*').eq('phone', phone).single();
-    if (error || !user) return res.status(404).json({ error: "User not found." });
     
-    if (user.status !== 'active') {
-        return res.status(403).json({ error: "Account is inactive." });
-    }
-
-    const providedAnswer = answer.toLowerCase().trim();
-    if ((user.security_a1 && user.security_a1 === providedAnswer) || 
-        (user.security_a2 && user.security_a2 === providedAnswer)) {
+    db.get("SELECT * FROM users WHERE phone = ?", [phone], (err, user) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!user) return res.status(404).json({ error: "User not found." });
         
-        res.json({ 
-            message: "Login successful", 
-            username: user.username, 
-            full_name: user.full_name, 
-            language: user.language,
-            token: user.id
-        });
-    } else {
-        res.status(401).json({ error: "Incorrect security answer." });
-    }
+        if (user.status !== 'active') {
+            return res.status(403).json({ error: "Account is inactive." });
+        }
+
+        const providedAnswer = answer.toLowerCase().trim();
+        if ((user.security_a1 && user.security_a1 === providedAnswer) || 
+            (user.security_a2 && user.security_a2 === providedAnswer)) {
+            
+            const userIdStr = user.id.toString();
+            res.cookie('user_id', userIdStr, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
+            res.cookie('username', user.username, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
+            res.cookie('full_name', user.full_name, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
+            res.cookie('role', user.role || 'customer', { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
+
+            res.json({ 
+                message: "Login successful", 
+                username: user.username, 
+                full_name: user.full_name, 
+                language: user.language,
+                role: user.role || 'customer',
+                user_id: userIdStr,
+                token: userIdStr
+            });
+        } else {
+            res.status(401).json({ error: "Incorrect security answer." });
+        }
+    });
 });
 
 router.post('/reset-password', async (req, res) => {
     const { phone, password, security_a1, security_a2 } = req.body;
 
-    const { data: user, error: dbError } = await supabase.from('users').select('id, security_a1, security_a2').eq('phone', phone).single();
-    if (dbError || !user) return res.status(404).json({ error: "User not found." });
-    
-    const providedA1 = security_a1 ? security_a1.toLowerCase() : null;
-    const providedA2 = security_a2 ? security_a2.toLowerCase() : null;
+    db.get("SELECT id, security_a1, security_a2 FROM users WHERE phone = ?", [phone], (err, user) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!user) return res.status(404).json({ error: "User not found." });
+        
+        const providedA1 = security_a1 ? security_a1.toLowerCase().trim() : null;
+        const providedA2 = security_a2 ? security_a2.toLowerCase().trim() : null;
 
-    const isA1Correct = providedA1 && user.security_a1 === providedA1;
-    const isA2Correct = providedA2 && user.security_a2 === providedA2;
+        const isA1Correct = providedA1 && user.security_a1 === providedA1;
+        const isA2Correct = providedA2 && user.security_a2 === providedA2;
 
-    if (!isA1Correct || !isA2Correct) {
-        return res.status(401).json({ error: "Identity verification failed. Both security questions must be answered correctly." });
-    }
+        if (!isA1Correct || !isA2Correct) {
+            return res.status(401).json({ error: "Identity verification failed. Both security questions must be answered correctly." });
+        }
 
-    // Update password in Supabase Auth using the service role power
-    const { error: authError } = await supabase.auth.admin.updateUserById(user.id, {
-        password: password
+        const newHashed = hashPassword(password);
+        db.run("UPDATE users SET password = ? WHERE id = ?", [newHashed, user.id], (err) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ message: "Password reset successful!" });
+        });
     });
-    
-    if (authError) {
-        console.error("Auth password reset error:", authError);
-        return res.status(500).json({ error: "Password update failed: " + authError.message });
-    }
-
-    res.json({ message: "Password reset successful!" });
 });
 
 router.post('/login', async (req, res) => {
@@ -189,18 +190,11 @@ router.post('/login', async (req, res) => {
         return res.status(400).json({ error: "Full Name, Mobile Number and Password are required." });
     }
     
-    // 1. Attempt Supabase Auth Login
-    const email = `${username}@adyanta.com`;
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password
-    });
+    // 1. Attempt user login from SQLite users table
+    db.get("SELECT * FROM users WHERE phone = ? OR username = ?", [username, username], (err, userProfile) => {
+        if (err) return res.status(500).json({ error: err.message });
 
-    if (!authError && authData.user) {
-        // 2. Fetch profile from public.users
-        const { data: userProfile } = await supabase.from('users').select('*').eq('id', authData.user.id).single();
-        
-        if (userProfile) {
+        if (userProfile && verifyPassword(password, userProfile.password)) {
             const dbName = (userProfile.full_name || '').toLowerCase().trim();
             const providedName = (full_name || '').toLowerCase().trim();
 
@@ -209,7 +203,8 @@ router.post('/login', async (req, res) => {
                     return res.status(403).json({ error: "Account is inactive. Please contact support." });
                 }
 
-                res.cookie('user_id', userProfile.id, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
+                const userIdStr = userProfile.id.toString();
+                res.cookie('user_id', userIdStr, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
                 res.cookie('username', userProfile.username, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
                 res.cookie('full_name', userProfile.full_name, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
                 res.cookie('role', userProfile.role || 'customer', { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
@@ -219,38 +214,44 @@ router.post('/login', async (req, res) => {
                     username: userProfile.username, 
                     full_name: userProfile.full_name, 
                     language: userProfile.language,
-                    user_id: userProfile.id,
+                    user_id: userIdStr,
                     role: userProfile.role || 'customer',
-                    token: authData.session.access_token,
+                    token: userIdStr,
                     is_admin: userProfile.role === 'super_admin'
                 });
             }
         }
-    }
 
-    // 3. Fallback to admin_users table (Legacy/Separate Admin)
-    const { data: adminUser } = await supabase.from('admin_users').select('*').or(`phone.eq.${username}`).single();
-    if (adminUser && verifyPassword(password, adminUser.password)) {
-        const dbName = (adminUser.full_name || '').toLowerCase().trim();
-        const providedName = (full_name || '').toLowerCase().trim();
+        // 2. Fallback to admin_users table (Legacy/Separate Admin)
+        db.get("SELECT * FROM admin_users WHERE phone = ?", [username], (err, adminUser) => {
+            if (err) return res.status(500).json({ error: err.message });
 
-        if (dbName === providedName) {
-            res.cookie('admin_auth', 'true', { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
-            res.cookie('user_id', adminUser.id, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
-            res.cookie('username', adminUser.phone, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
-            res.cookie('full_name', adminUser.full_name, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
+            if (adminUser && verifyPassword(password, adminUser.password)) {
+                const dbName = (adminUser.full_name || '').toLowerCase().trim();
+                const providedName = (full_name || '').toLowerCase().trim();
 
-            return res.json({
-                message: "Admin Login successful",
-                username: adminUser.phone,
-                full_name: adminUser.full_name,
-                is_admin: true,
-                token: adminUser.id
-            });
-        }
-    }
+                if (dbName === providedName) {
+                    const adminIdStr = adminUser.id.toString();
+                    res.cookie('admin_auth', 'true', { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
+                    res.cookie('user_id', adminIdStr, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
+                    res.cookie('username', adminUser.phone, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
+                    res.cookie('full_name', adminUser.full_name, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
+                    res.cookie('role', 'super_admin', { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
 
-    return res.status(401).json({ error: "Invalid credentials or Name/Phone combination incorrect." });
+                    return res.json({
+                        message: "Admin Login successful",
+                        username: adminUser.phone,
+                        full_name: adminUser.full_name,
+                        is_admin: true,
+                        role: "super_admin",
+                        token: adminIdStr
+                    });
+                }
+            }
+
+            return res.status(401).json({ error: "Invalid credentials or Name/Phone combination incorrect." });
+        });
+    });
 });
 
 router.post('/logout', (req, res) => {
@@ -258,6 +259,7 @@ router.post('/logout', (req, res) => {
     res.clearCookie('user_id', { path: '/' });
     res.clearCookie('username', { path: '/' });
     res.clearCookie('full_name', { path: '/' });
+    res.clearCookie('role', { path: '/' });
     res.json({ message: "Logged out" });
 });
 

@@ -537,6 +537,41 @@
                 </div>
             </section>
 
+            <!-- Vendor Notifications View -->
+            <section id="view-vendor-notifications" class="content-section">
+                <div class="section-header-row">
+                    <h1 class="page-title"><i class="ph-fill ph-bell" style="color: var(--primary);"></i> Announcements & Notifications</h1>
+                    <div class="global-date-filter">
+                        <label>Filter Date</label>
+                        <input type="date" onchange="fetchVendorNotifications(this.value)">
+                    </div>
+                </div>
+                
+                <div class="form-card" style="margin-top: 1rem; border-top: 4px solid var(--primary);">
+                    <div style="margin-bottom: 1.5rem; display: flex; gap: 1rem; align-items: center; background: #F0FDF4; padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid #DCFCE7;">
+                        <i class="ph ph-info" style="color: var(--primary); font-size: 1.25rem;"></i>
+                        <p style="font-size: 0.85rem; color: #15803D; margin: 0; font-weight: 600;">These are official broadcasts and announcements sent by the Super Admin specifically for vendors or all users.</p>
+                    </div>
+                    
+                    <div class="table-container">
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 120px;">Type</th>
+                                    <th>Announcement</th>
+                                    <th style="width: 200px;">Date Received</th>
+                                </tr>
+                            </thead>
+                            <tbody id="vendorNotificationsTableBody">
+                                <tr>
+                                    <td colspan="3" style="text-align: center; padding: 2rem; color: #64748B;">Loading announcements...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
             <!-- Notifications View -->
             <section id="view-notifications" class="content-section">
                 <div class="section-header-row">
@@ -552,6 +587,14 @@
                         top of the site, use the "Banner Scrolling Text" form below.</p>
                     <form id="adminNotificationForm">
                         <div class="form-group"><label>Message</label><input type="text" id="nMessage" required></div>
+                        <div class="form-group">
+                            <label>Target Audience (Broadcast Role)</label>
+                            <select id="nTargetRole" class="admin-input" style="width: 100%; padding: 0.6rem; border-radius: 8px; border: 1px solid #CBD5E1; font-weight: 600; cursor: pointer; outline: none;">
+                                <option value="all">📢 All Users (Everyone)</option>
+                                <option value="customer">👥 Customers Only</option>
+                                <option value="vendor">🏪 Vendors Only</option>
+                            </select>
+                        </div>
                         <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.5rem; padding: 0.75rem; background: #FEF2F2; border: 1px solid #FEE2E2; border-radius: 8px;">
                             <input type="checkbox" id="nIsImportant" style="width: 18px; height: 18px; cursor: pointer;">
                             <label for="nIsImportant" style="margin: 0; color: #EF4444; font-weight: 600; font-size: 0.9rem; cursor: pointer;">
@@ -646,7 +689,7 @@
                 </div>
 
                 <!-- Sliding Promo Banners -->
-                <div class="form-card" style="margin-top: 2rem; border-top: 4px solid #4F46E5;">
+                <div class="form-card" id="slidingPromoBannersCard" style="margin-top: 2rem; border-top: 4px solid #4F46E5;">
                     <h3 class="section-title"><i class="ph ph-presentation"></i> Sliding Promo Banners (Max 6)</h3>
                     <p style="font-size: 0.85rem; color: #64748B; margin-bottom: 1.5rem;">These photos slide automatically on the homepage. Recommended size: 1200x500px.</p>
                     
@@ -763,6 +806,65 @@
                 </div>
             </section>
 
+            <!-- Vendor Customer Support Chats (Private Vendor Support) -->
+            <section id="view-vendor-chats" class="content-section" style="padding: 0; height: calc(100vh - 120px); overflow: hidden;">
+                <div class="chat-container-split" style="display: flex; height: 100%; width: 100%; background: #ffffff; border-radius: 12px; border: 1px solid #E2E8F0; overflow: hidden;">
+                    <!-- Left pane: Chats List -->
+                    <div class="chat-sidebar" style="width: 320px; border-right: 1px solid #E2E8F0; display: flex; flex-direction: column; background: #F8FAFC;">
+                        <div class="chat-sidebar-header" style="padding: 1.25rem; border-bottom: 1px solid #E2E8F0; background: #ffffff;">
+                            <h3 style="margin: 0 0 0.75rem 0; font-size: 1.1rem; font-weight: 700; color: #0F172A; font-family: 'Outfit', sans-serif;"><i class="ph ph-chat-circle-dots" style="color: #4F46E5;"></i> Customer Chats</h3>
+                            <div style="position: relative;">
+                                <i class="ph ph-magnifying-glass" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #64748B; font-size: 0.9rem;"></i>
+                                <input type="text" id="vendorChatSearch" placeholder="Search customer chats..." onkeyup="filterVendorChats(this.value)" style="width: 100%; padding: 8px 8px 8px 32px; border: 1px solid #E2E8F0; border-radius: 20px; font-size: 0.8rem; font-family: 'Inter', sans-serif; outline: none;">
+                            </div>
+                        </div>
+                        <div class="chat-list" id="vendorChatList" style="flex: 1; overflow-y: auto; padding: 0.5rem 0;">
+                            <!-- Chats list elements will be populated here -->
+                            <div style="padding: 2rem 1rem; text-align: center; color: #64748B; font-size: 0.85rem;">
+                                No active conversations
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right pane: Chat Area -->
+                    <div class="chat-main" id="vendorChatMain" style="flex: 1; display: flex; flex-direction: column; background: #ffffff; position: relative;">
+                        <!-- Default placeholder when no chat selected -->
+                        <div id="vendorChatPlaceholder" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; color: #64748B; text-align: center;">
+                            <i class="ph ph-chat-circle-dots" style="font-size: 4rem; color: #CBD5E1; margin-bottom: 1rem;"></i>
+                            <h4 style="margin: 0; font-size: 1.1rem; font-weight: 700; color: #0F172A; font-family: 'Outfit', sans-serif;">Store Manual Support Panel</h4>
+                            <p style="font-size: 0.85rem; max-width: 320px; margin-top: 0.5rem;">Select a customer conversation from the list to view queries and reply directly.</p>
+                        </div>
+
+                        <!-- Chat workspace (hidden by default) -->
+                        <div id="vendorChatWorkspace" style="display: none; flex-direction: column; height: 100%; width: 100%;">
+                            <div class="chat-header" style="padding: 1rem 1.5rem; border-bottom: 1px solid #E2E8F0; display: flex; align-items: center; justify-content: space-between; background: #ffffff;">
+                                <div>
+                                    <h4 id="vendorActiveChatUser" style="margin: 0; font-size: 1rem; font-weight: 700; color: #0F172A; font-family: 'Outfit', sans-serif;">Customer</h4>
+                                    <span id="vendorActiveChatStatus" style="font-size: 0.75rem; color: #22C55E; display: flex; align-items: center; gap: 4px; font-weight: 600; margin-top: 2px;">
+                                        <span style="width: 6px; height: 6px; background: #22C55E; border-radius: 50%;"></span> Active Session
+                                    </span>
+                                </div>
+                                <button onclick="loadVendorChats()" class="btn-submit" style="width: auto; padding: 6px 12px; font-size: 0.75rem; display: flex; align-items: center; gap: 4px; background: #F1F5F9; border: 1px solid #E2E8F0; color: #475569;">
+                                    <i class="ph ph-arrows-clockwise"></i> Refresh
+                                </button>
+                            </div>
+                            
+                            <div class="chat-messages" id="vendorChatMessages" style="flex: 1; overflow-y: auto; padding: 1.5rem; background: #F8FAFC; display: flex; flex-direction: column; gap: 1rem;">
+                                <!-- Messages will render here -->
+                            </div>
+
+                            <form id="vendorChatReplyForm" onsubmit="submitVendorReply(event)" style="padding: 1rem; border-top: 1px solid #E2E8F0; background: #ffffff; display: flex; gap: 0.75rem; align-items: center;">
+                                <input type="hidden" id="vendorActiveChatId">
+                                <textarea id="vendorChatReplyInput" placeholder="Type a helpful reply to the customer..." required style="flex: 1; height: 44px; padding: 10px 14px; border: 1px solid #CBD5E1; border-radius: 22px; font-family: 'Inter', sans-serif; font-size: 0.85rem; outline: none; resize: none; border-color: #CBD5E1; transition: border-color 0.2s;" onkeydown="if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); document.getElementById('vendorChatReplyForm').requestSubmit(); }"></textarea>
+                                <button type="submit" style="background: #4F46E5; color: white; border: none; width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.25rem; transition: transform 0.2s, background-color 0.2s;" onmouseover="this.style.backgroundColor='#4338CA'" onmouseout="this.style.backgroundColor='#4F46E5'">
+                                    <i class="ph ph-paper-plane-tilt"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <!-- Reviews -->
             <section id="view-reviews" class="content-section">
                 <div class="section-header-row">
@@ -834,6 +936,7 @@
                                 <th>ID</th>
                                 <th>Icon</th>
                                 <th>Name</th>
+                                <th>Commission Rate</th>
                                 <th>Action</th>
                             </tr>
                         </thead>
@@ -1242,6 +1345,7 @@ ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS coin_value_per_rupee INTEGE
                                 <tr>
                                     <th>Shop ID</th>
                                     <th>Shop Profile</th>
+                                    <th>Registered Shop</th>
                                     <th>Vendor Info</th>
                                     <th>KYC Doc</th>
                                     <th>Timings / Category</th>
@@ -1251,7 +1355,7 @@ ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS coin_value_per_rupee INTEGE
                             </thead>
                             <tbody id="vendorApprovalsTableBody">
                                 <tr>
-                                    <td colspan="7" style="text-align:center; padding:3rem; color:#64748B;">
+                                    <td colspan="8" style="text-align:center; padding:3rem; color:#64748B;">
                                         Loading vendor onboarding applications...
                                     </td>
                                 </tr>
@@ -1337,11 +1441,78 @@ ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS coin_value_per_rupee INTEGE
                             <button onclick="showSection('view-products')" class="btn-submit" style="margin-bottom:0.75rem; background: #10B981;"><i class="ph ph-plus"></i> Add Store Catalog Product</button>
                             <button onclick="showSection('view-orders')" class="btn-submit" style="background: #F59E0B;"><i class="ph ph-receipt"></i> Process Store Orders</button>
                         </div>
+
+                        <!-- Vendor Shop Subscription Status Card -->
+                        <div class="form-card" id="vendorSubscriptionCard" style="background: linear-gradient(135deg, #06341D, #031F11); color: white; border: 1px solid var(--accent); margin-top: 1.5rem;">
+                            <h3 style="margin-bottom: 0.5rem; font-family: 'Outfit'; color: var(--accent); display: flex; align-items: center; gap: 0.5rem;"><i class="ph ph-crown"></i> Shop Subscription</h3>
+                            <p style="font-size: 0.8rem; opacity: 0.9; margin-bottom: 1rem; color: #E2E8F0;">Keep your store active to accept customer orders.</p>
+                            <div style="background: rgba(255,255,255,0.08); border-radius: 8px; padding: 0.75rem; border: 1px solid rgba(255,255,255,0.1); margin-bottom: 1rem;">
+                                <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.4rem;">
+                                    <span>Expiry Date:</span>
+                                    <strong id="vendorSubExpiryVal" style="color: var(--accent);">Never</strong>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
+                                    <span>Days Remaining:</span>
+                                    <strong id="vendorSubDaysVal">Active</strong>
+                                </div>
+                            </div>
+                            <button type="button" onclick="renewVendorSubscription()" class="btn-submit" style="background: var(--accent); color: #06341D; font-weight: 800; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; width: 100%;">
+                                <i class="ph ph-arrows-clockwise"></i> Renew Subscription (₹500 / Year)
+                            </button>
+                        </div>
                     </div>
                 </section>
 
-                <!-- Vendor: Customize Storefront -->
-                <section id="view-vendor-shop" class="content-section">
+            <!-- Vendor Special Offers View -->
+            <section id="view-vendor-special-offers" class="content-section">
+                <h1 class="page-title">Manage Shop Special Offers</h1>
+                <p style="font-size: 0.85rem; color: #64748B; margin-bottom: 2rem;">These offers appear on your storefront's special offers section to entice customers.</p>
+                
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem;">
+                    <div class="form-card" style="max-width: none;">
+                        <h3>Offer 1 (Orange)</h3>
+                        <form id="vendorOfferForm1">
+                            <input type="hidden" id="vOfferId1">
+                            <div class="form-group">
+                                <label>Title</label>
+                                <input type="text" id="vOTitle1" placeholder="Title" class="admin-input" style="width:100%" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Description</label>
+                                <textarea id="vODesc1" placeholder="Description" style="width:100%; height: 80px; padding:0.75rem; border:1px solid #CBD5E1; border-radius:8px; outline:none; font-family:'Inter',sans-serif;"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label>Target Category</label>
+                                <select id="vOCategory1" class="admin-input" style="width:100%; padding: 0.6rem; border-radius: 8px; border: 1px solid #CBD5E1; font-weight: 600; cursor: pointer; outline: none;"></select>
+                            </div>
+                            <button type="submit" class="btn-submit" style="margin-top:1rem; background:#F97316;">Save Offer 1</button>
+                        </form>
+                    </div>
+                    
+                    <div class="form-card" style="max-width: none;">
+                        <h3>Offer 2 (Purple)</h3>
+                        <form id="vendorOfferForm2">
+                            <input type="hidden" id="vOfferId2">
+                            <div class="form-group">
+                                <label>Title</label>
+                                <input type="text" id="vOTitle2" placeholder="Title" class="admin-input" style="width:100%" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Description</label>
+                                <textarea id="vODesc2" placeholder="Description" style="width:100%; height: 80px; padding:0.75rem; border:1px solid #CBD5E1; border-radius:8px; outline:none; font-family:'Inter',sans-serif;"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label>Target Category</label>
+                                <select id="vOCategory2" class="admin-input" style="width:100%; padding: 0.6rem; border-radius: 8px; border: 1px solid #CBD5E1; font-weight: 600; cursor: pointer; outline: none;"></select>
+                            </div>
+                            <button type="submit" class="btn-submit" style="margin-top:1rem; background:#A855F7;">Save Offer 2</button>
+                        </form>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Vendor: Customize Storefront -->
+            <section id="view-vendor-shop" class="content-section">
                     <div class="section-header-row">
                         <h1 class="page-title">Customize Storefront</h1>
                     </div>
@@ -1387,13 +1558,27 @@ ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS coin_value_per_rupee INTEGE
                         <form id="vendorStorefrontForm">
                             <div class="form-row">
                                 <div class="form-group" style="flex: 2;"><label>Shop Name</label><input type="text" id="vStoreName" required placeholder="e.g. Adyanta Dairy Delight"></div>
+                                <div class="form-group" style="flex: 2;"><label>Registered Shop Name</label>
+                                    <select id="vStoreRegisteredShop" class="admin-input" required style="width: 100%;">
+                                        <option value="" disabled selected>-- Select Shop Name --</option>
+                                        <option value="Frozen Shop">Frozen Shop</option>
+                                        <option value="Juice Shop">Juice Shop</option>
+                                        <option value="Gold Shop">Gold Shop</option>
+                                        <option value="Dressing Shop">Dressing Shop</option>
+                                        <option value="General Store">General Store</option>
+                                        <option value="Fresh Produce Shop">Fresh Produce Shop</option>
+                                        <option value="Pharmacy / Health Shop">Pharmacy / Health Shop</option>
+                                    </select>
+                                </div>
                                 <div class="form-group" style="flex: 1;"><label>Shop Category</label>
                                     <select id="vStoreCategory" class="admin-input" required style="width: 100%;">
-                                        <option value="Fresh Vegetables & Fruits">Fresh Vegetables & Fruits</option>
-                                        <option value="Organic Farm Produce">Organic Farm Produce</option>
-                                        <option value="Dairy & Bakery">Dairy & Bakery</option>
-                                        <option value="Gourmet & Snacks">Gourmet & Snacks</option>
+                                        <option value="Frozen Shop">Frozen Shop</option>
+                                        <option value="Juice Shop">Juice Shop</option>
+                                        <option value="Gold Shop">Gold Shop</option>
+                                        <option value="Dressing Shop">Dressing Shop</option>
                                         <option value="General Store">General Store</option>
+                                        <option value="Fresh Produce Shop">Fresh Produce Shop</option>
+                                        <option value="Pharmacy / Health Shop">Pharmacy / Health Shop</option>
                                     </select>
                                 </div>
                             </div>
@@ -1405,6 +1590,28 @@ ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS coin_value_per_rupee INTEGE
                             <div class="form-row">
                                 <div class="form-group"><label>Operating Timings</label><input type="text" id="vStoreTimings" placeholder="e.g. 9:00 AM - 10:00 PM"></div>
                                 <div class="form-group"><label>Contact Phone Number</label><input type="text" id="vStorePhone" placeholder="e.g. +91 9876543210" required></div>
+                            </div>
+                            <div class="form-row" style="margin-bottom: 1.5rem; gap: 2rem;">
+                                <div style="display: flex; align-items: center; gap: 0.75rem; flex: 1; padding: 0.75rem; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px;">
+                                    <label class="switch" style="position: relative; display: inline-block; width: 44px; height: 24px; cursor: pointer; margin: 0;">
+                                        <input type="checkbox" id="vStoreActiveToggle" style="opacity: 0; width: 0; height: 0; cursor: pointer;">
+                                        <span class="slider round" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #CBD5E1; transition: .3s; border-radius: 24px;"></span>
+                                    </label>
+                                    <div>
+                                        <strong style="display: block; font-size: 0.9rem; color: #1E293B;">Show Shop Active in Store</strong>
+                                        <span style="font-size: 0.75rem; color: #64748B;">Toggle visibility of your shop inside the main marketplace.</span>
+                                    </div>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 0.75rem; flex: 1; padding: 0.75rem; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px;">
+                                    <label class="switch" style="position: relative; display: inline-block; width: 44px; height: 24px; cursor: pointer; margin: 0;">
+                                        <input type="checkbox" id="vStoreShowOffersToggle" style="opacity: 0; width: 0; height: 0; cursor: pointer;">
+                                        <span class="slider round" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #CBD5E1; transition: .3s; border-radius: 24px;"></span>
+                                    </label>
+                                    <div>
+                                        <strong style="display: block; font-size: 0.9rem; color: #1E293B;">Show Special Offers in Storefront</strong>
+                                        <span style="font-size: 0.75rem; color: #64748B;">Display promotional special offers within your storefront page.</span>
+                                    </div>
+                                </div>
                             </div>
                             <div class="form-group" id="kycDocContainer"><label>KYC Document URL / Reference (ID Card, Trade License, FSSAI)</label><input type="text" id="vStoreKyc" placeholder="Upload or enter text document reference number"></div>
                             
@@ -1563,11 +1770,16 @@ ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS coin_value_per_rupee INTEGE
     <div id="categoryModal" class="modal-overlay">
         <div class="modal-content">
             <h2>Category</h2>
-            <form id="categoryForm"><input type="hidden" id="catId"><label>Name</label><input type="text" id="catName"
-                    class="admin-input" style="width:100%"><label
-                    style="margin-top:1rem; display:block;">Icon</label><input type="text" id="catIcon"
-                    class="admin-input" style="width:100%"><button type="submit" class="btn-submit"
-                    style="margin-top:1.5rem;">Save</button></form>
+            <form id="categoryForm">
+                <input type="hidden" id="catId">
+                <label>Name</label>
+                <input type="text" id="catName" class="admin-input" style="width:100%">
+                <label style="margin-top:1rem; display:block;">Icon</label>
+                <input type="text" id="catIcon" class="admin-input" style="width:100%">
+                <label style="margin-top:1rem; display:block;">Commission Rate (%)</label>
+                <input type="number" id="catCommissionRate" class="admin-input" style="width:100%" min="0" max="100" value="5">
+                <button type="submit" class="btn-submit" style="margin-top:1.5rem;">Save</button>
+            </form>
         </div>
     </div>
     <div id="brandModal" class="modal-overlay">
@@ -1686,6 +1898,54 @@ ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS coin_value_per_rupee INTEGE
                 <a href="#" id="adminBackToLoginBtn"
                     style="color: #64748B; font-size: 0.85rem; text-decoration: underline; display: none;">Back to
                     Login</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mock Payment Gateway Modal (Stripe / PayPal Simulation) -->
+    <div id="mockPaymentModal" class="modal-overlay" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(4px); z-index: 20000; align-items: center; justify-content: center; padding: 1rem;">
+        <div class="modal-content" style="background: white; width: 100%; max-width: 450px; border-radius: 20px; border: 1px solid #CBD5E1; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); overflow: hidden; animation: fadeIn 0.3s ease; text-align: left;">
+            <!-- Modal Header -->
+            <div style="background: linear-gradient(135deg, #06341D, #031F11); color: white; padding: 1.5rem; text-align: center; position: relative;">
+                <h3 style="font-family: 'Outfit', sans-serif; font-size: 1.25rem; font-weight: 700; margin-bottom: 0.25rem; color: white;">ADYANTA SECURE GATEWAY</h3>
+                <p style="font-size: 0.75rem; color: #E2E8F0; opacity: 0.9;">Simulated Sandbox Payment Processing</p>
+                <button type="button" onclick="closeMockPayment()" style="position: absolute; top: 1rem; right: 1rem; background: rgba(255,255,255,0.15); border: none; color: white; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.2s;"><i class="ph ph-x"></i></button>
+            </div>
+            <!-- Modal Body -->
+            <div style="padding: 1.5rem;" id="mockPaymentBody">
+                <div style="display: flex; justify-content: space-between; align-items: center; background: #F8FAFC; border: 1px solid #E2E8F0; padding: 0.75rem 1rem; border-radius: 12px; margin-bottom: 1.25rem;">
+                    <span style="font-size: 0.85rem; color: #64748B; font-weight: 600;">Amount Payable:</span>
+                    <strong id="mockPaymentAmountText" style="font-size: 1.2rem; color: #06341D; font-weight: 800;">₹0</strong>
+                </div>
+                
+                <!-- Card Fields Form -->
+                <div id="mockCardFields">
+                    <div style="margin-bottom: 1rem;">
+                        <label style="display: block; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: #1E293B; margin-bottom: 0.4rem; letter-spacing: 0.5px;">Cardholder Name</label>
+                        <input type="text" id="mockCardName" value="Suresh Kumar" class="admin-input" style="width: 100%;" placeholder="e.g. Suresh Kumar">
+                    </div>
+                    <div style="margin-bottom: 1rem;">
+                        <label style="display: block; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: #1E293B; margin-bottom: 0.4rem; letter-spacing: 0.5px;">Card Number</label>
+                        <div class="input-wrapper" style="width: 100%; position: relative;">
+                            <input type="text" id="mockCardNumber" value="4111 2222 3333 4444" class="admin-input" style="width: 100%;" placeholder="4111 2222 3333 4444" maxlength="19">
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
+                        <div style="flex: 1;">
+                            <label style="display: block; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: #1E293B; margin-bottom: 0.4rem; letter-spacing: 0.5px;">Expiry Date</label>
+                            <input type="text" id="mockCardExpiry" value="12/28" class="admin-input" style="width: 100%;" placeholder="MM/YY" maxlength="5">
+                        </div>
+                        <div style="flex: 1;">
+                            <label style="display: block; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: #1E293B; margin-bottom: 0.4rem; letter-spacing: 0.5px;">CVV</label>
+                            <input type="password" id="mockCardCvv" value="123" class="admin-input" style="width: 100%;" placeholder="123" maxlength="3">
+                        </div>
+                    </div>
+                </div>
+
+                <button type="button" id="mockVendorPaymentBtn" class="btn-submit" style="width: 100%; padding: 0.9rem; font-weight: 700; font-size: 1rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem; background: #06341D; color: white; border: none; border-radius: 12px; cursor: pointer;">
+                    <span class="spinner" id="mockPaymentSpinner" style="width: 18px; height: 18px; display: none; border: 3px solid rgba(255,255,255,0.3); border-top: 3px solid white; border-radius: 50%; animation: spin 0.8s linear infinite;"></span>
+                    <span id="mockSubmitBtnText">Authorize Payment</span>
+                </button>
             </div>
         </div>
     </div>

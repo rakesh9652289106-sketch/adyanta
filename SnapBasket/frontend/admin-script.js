@@ -4,7 +4,7 @@
  */
 const API_BASE = (typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) 
     ? import.meta.env.VITE_API_URL 
-    : (typeof window !== 'undefined' && window.location && window.location.port === '5173' ? 'http://localhost:3000' : (typeof window !== 'undefined' && window.location ? window.location.origin : 'https://adyanta-commerce.onrender.com'));
+    : (typeof window !== 'undefined' && window.location && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:3000' : (typeof window !== 'undefined' && window.location ? window.location.origin : 'https://adyanta-commerce.onrender.com'));
 
 let currentAdmin = null;
 let revenueChart = null;
@@ -28,6 +28,26 @@ async function adminFetch(url, options = {}) {
 
 // Switch between Super Admin and Vendor access portals
 function switchPortalRole(role) {
+    const userRole = getCookie('role');
+    const username = getCookie('username');
+    const isSuresh = userRole === 'super_admin' && username === '9490229108';
+
+    if (role === 'super_admin' && !isSuresh) {
+        alert("Access Denied: Only Suresh is authorized to access the Super Admin Panel.");
+        currentPortalRole = 'vendor';
+        localStorage.setItem('admin_portal_role', 'vendor');
+        const roleSelector = document.getElementById('portalRoleSelector');
+        if (roleSelector) {
+            roleSelector.value = 'vendor';
+            roleSelector.disabled = true;
+            const container = document.getElementById('roleSelectorContainer');
+            if (container) container.style.display = 'none';
+        }
+        renderSidebarForRole('vendor');
+        showSection('view-vendor-dashboard');
+        return;
+    }
+
     currentPortalRole = role;
     localStorage.setItem('admin_portal_role', role);
     renderSidebarForRole(role);
@@ -68,13 +88,14 @@ function renderSidebarForRole(role) {
         menu.innerHTML = `
             <li onclick="showSection('view-vendor-dashboard')"><i class="ph ph-chart-pie"></i> Store Dashboard</li>
             <li onclick="showSection('view-vendor-shop')"><i class="ph ph-storefront"></i> Customize storefront</li>
+            <li onclick="showSection('view-vendor-notifications')"><i class="ph ph-bell"></i> Notifications</li>
+            <li onclick="showSection('view-vendor-special-offers')"><i class="ph ph-gift"></i> Special Offers</li>
             <li onclick="showSection('view-products')"><i class="ph ph-package"></i> Manage Products</li>
             <li onclick="showSection('view-orders')"><i class="ph ph-receipt"></i> Recent Orders</li>
             <li onclick="showSection('view-vendor-wallet')"><i class="ph ph-wallet"></i> Wallet & Payouts</li>
-            <li onclick="showSection('view-promo')"><i class="ph ph-presentation"></i> Shop Banners & Offers</li>
             <li onclick="showSection('view-coupons')"><i class="ph ph-ticket"></i> Shop Coupons</li>
             <li onclick="showSection('view-reviews')"><i class="ph ph-star-half"></i> Store Reviews</li>
-            <li onclick="showSection('view-inquiries')"><i class="ph ph-chat-circle-text"></i> Customer Support</li>
+            <li onclick="showSection('view-inquiries')"><i class="ph ph-chat-circle-text"></i> Customer Inquiries</li>
             <li onclick="showSection('view-orders', true)"><i class="ph ph-truck"></i> Manage Delivery</li>
             <li><a href="/" style="text-decoration: none; color: inherit; display: flex; align-items: center; gap: 0.5rem;"><i class="ph ph-storefront"></i> View Store</a></li>
             <li onclick="adminLogout()" style="margin-top: 2rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1.5rem; color: #FDA4AF;"><i class="ph ph-sign-out"></i> Vendor Logout</li>
@@ -131,36 +152,43 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function checkInitialAuth() {
     const userRole = getCookie('role');
+    const username = getCookie('username');
+
+    // Restrict access: Only Suresh (super_admin) or Vendors can access the admin panel page
+    const isSuresh = userRole === 'super_admin' && username === '9490229108';
+    const isVendor = userRole === 'vendor';
+
+    if (!isSuresh && !isVendor) {
+        alert("Access Denied: You do not have permissions to access the Admin Panel.");
+        window.location.href = 'login.html';
+        return;
+    }
 
     const overlay = document.getElementById('adminLoginOverlay');
     const main = document.getElementById('adminLayoutMain');
 
-    // Admin Panel Lock Removed: Always show dashboard
     if (overlay) overlay.style.display = 'none';
     if (main) main.style.display = 'flex';
     
     // Multi-Vendor Role Setup
     const roleSelector = document.getElementById('portalRoleSelector');
     
-    if (userRole === 'vendor') {
+    if (isVendor) {
         currentPortalRole = 'vendor';
+        localStorage.setItem('admin_portal_role', 'vendor');
         if (roleSelector) {
             roleSelector.value = 'vendor';
             roleSelector.disabled = true;
             const container = document.getElementById('roleSelectorContainer');
             if (container) container.style.display = 'none';
         }
-    } else if (userRole === 'super_admin') {
+    } else if (isSuresh) {
         const lastSavedRole = localStorage.getItem('admin_portal_role') || 'super_admin';
         currentPortalRole = lastSavedRole;
         if (roleSelector) {
             roleSelector.value = lastSavedRole;
-        }
-    } else {
-        const lastSavedRole = localStorage.getItem('admin_portal_role') || 'super_admin';
-        currentPortalRole = lastSavedRole;
-        if (roleSelector) {
-            roleSelector.value = lastSavedRole;
+            const container = document.getElementById('roleSelectorContainer');
+            if (container) container.style.display = 'block';
         }
     }
     
@@ -291,6 +319,27 @@ async function adminLogout() {
 function showSection(sectionId, forFulfillment = false) {
     if (sectionId === 'view-fulfillment') sectionId = 'view-orders';
     
+    // Block super admin sections if the user is not Suresh
+    const superAdminSections = [
+        'view-dashboard',
+        'view-feature-switchboard',
+        'view-vendor-approvals',
+        'view-users',
+        'view-loyalty',
+        'view-settings',
+        'view-promo'
+    ];
+    const userRole = getCookie('role');
+    const username = getCookie('username');
+    const isSuresh = userRole === 'super_admin' && username === '9490229108';
+
+    if (superAdminSections.includes(sectionId) && !isSuresh) {
+        console.warn(`Unauthorized section access attempt: ${sectionId}`);
+        // Fallback to vendor dashboard
+        showSection('view-vendor-dashboard');
+        return;
+    }
+
     // Save state for persistence
     localStorage.setItem('admin_last_section', sectionId);
     localStorage.setItem('admin_last_fulfillment', forFulfillment ? 'true' : 'false');
@@ -340,6 +389,8 @@ function showSection(sectionId, forFulfillment = false) {
         if (sectionId === 'view-brands') fetchAdminBrands();
         if (sectionId === 'view-coupons') { fetchAdminCoupons(); populateCouponShopsDropdown(); }
         if (sectionId === 'view-notifications') { fetchNotificationsHistory(); loadMarquee(); }
+        if (sectionId === 'view-vendor-notifications') { fetchVendorNotifications(); }
+        if (sectionId === 'view-vendor-special-offers') { fetchVendorOffers(); }
         if (sectionId === 'view-inquiries') fetchMessages();
         if (sectionId === 'view-reviews') fetchAdminReviews();
         if (sectionId === 'view-users') fetchUsers();
@@ -360,6 +411,8 @@ function showSection(sectionId, forFulfillment = false) {
         if (sectionId === 'view-vendor-dashboard') fetchVendorDashboardStats();
         if (sectionId === 'view-vendor-shop') fetchVendorShopDetails();
         if (sectionId === 'view-vendor-wallet') fetchVendorWalletDetails();
+        if (sectionId === 'view-vendor-chats') loadVendorChats();
+        if (sectionId !== 'view-vendor-chats') stopVendorChatPolling();
     }
     
     // UI updates
@@ -390,13 +443,38 @@ async function initDashboard() {
         localStorage.removeItem('admin_pending_toast');
     }
 
+    const userRole = getCookie('role');
+    const username = getCookie('username');
+    const isSuresh = userRole === 'super_admin' && username === '9490229108';
+
     // Restore last section
-    const lastSection = localStorage.getItem('admin_last_section') || 'view-dashboard';
+    let lastSection = localStorage.getItem('admin_last_section');
+    if (!lastSection) {
+        lastSection = isSuresh ? 'view-dashboard' : 'view-vendor-dashboard';
+    }
+    
+    // Ensure vendor is forced away from super admin sections
+    const superAdminSections = [
+        'view-dashboard',
+        'view-feature-switchboard',
+        'view-vendor-approvals',
+        'view-users',
+        'view-loyalty',
+        'view-settings'
+    ];
+    if (superAdminSections.includes(lastSection) && !isSuresh) {
+        lastSection = 'view-vendor-dashboard';
+    }
+
     const lastFulfillment = localStorage.getItem('admin_last_fulfillment') === 'true';
     showSection(lastSection, lastFulfillment);
 
-    fetchDashboardStats();
-    setupCharts();
+    if (isSuresh && lastSection === 'view-dashboard') {
+        fetchDashboardStats();
+        setupCharts();
+    } else if (!isSuresh && lastSection === 'view-vendor-dashboard') {
+        fetchVendorDashboardStats();
+    }
 }
 
 function refreshWithToast(message, type = 'success', forceReload = false) {
@@ -642,7 +720,8 @@ async function handleAddProduct(e) {
     };
 
     try {
-        const res = await fetch(API_BASE + '/api/admin/products', {
+        const url = currentPortalRole === 'vendor' ? `${API_BASE}/api/vendor/products` : `${API_BASE}/api/admin/products`;
+        const res = await adminFetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -699,8 +778,9 @@ async function handleEditProduct(e) {
         variants: currentEditVariants
     };
     try {
-        const res = await fetch(`${API_BASE}/api/admin/products/${id}`, {
-            method: 'PUT',
+        const url = currentPortalRole === 'vendor' ? `${API_BASE}/api/vendor/products/${id}` : `${API_BASE}/api/admin/products/${id}`;
+        const res = await adminFetch(url, {
+            method: currentPortalRole === 'vendor' ? 'PATCH' : 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
@@ -717,7 +797,8 @@ async function handleEditProduct(e) {
 
 async function deleteProduct(id) {
     if (confirm("Delete product?")) {
-        await fetch(`${API_BASE}/api/admin/products/${id}`, { method: 'DELETE' });
+        const url = currentPortalRole === 'vendor' ? `${API_BASE}/api/vendor/products/${id}` : `${API_BASE}/api/admin/products/${id}`;
+        await adminFetch(url, { method: 'DELETE' });
         refreshWithToast("Product removed", "warning");
     }
 }
@@ -1095,7 +1176,9 @@ async function fetchPaymentHistory(date = "") {
 // --- SUPPORT ---
 
 async function fetchMessages(date = "") {
-    const url = date ? `/api/admin/support-messages?date=${date}` : '/api/admin/support-messages';
+    const isVendor = currentPortalRole === 'vendor';
+    const baseUrl = isVendor ? '/api/vendor/support-messages' : '/api/admin/support-messages';
+    const url = date ? `${baseUrl}?date=${date}` : baseUrl;
     const res = await adminFetch(url);
     const messages = await res.json();
     const tbody = document.getElementById('messagesTableBody');
@@ -1117,25 +1200,29 @@ async function fetchMessages(date = "") {
 }
 
 window.viewMessage = async (id) => {
-    const res = await adminFetch(`${API_BASE}/api/admin/support-messages/${id}`);
+    const isVendor = currentPortalRole === 'vendor';
+    const baseUrl = isVendor ? `/api/vendor/support-messages` : `/api/admin/support-messages`;
+    const res = await adminFetch(`${baseUrl}/${id}`);
     const m = await res.json();
     if (m) {
         document.getElementById('messageDetailContent').innerHTML = `
             <h3>${m.subject}</h3>
             <p>From: ${m.name} (${m.email})</p>
             <div style="background:#f1f5f9; padding:15px; border-radius:8px; margin:10px 0;">${m.message}</div>
-            ${m.reply ? `<div style="border-left:4px solid #4F46E5; padding-left:10px;"><strong>Admin:</strong> ${m.reply}</div>` : ''}
+            ${m.reply ? `<div style="border-left:4px solid #4F46E5; padding-left:10px;"><strong>Reply:</strong> ${m.reply}</div>` : ''}
         `;
         document.getElementById('sendReplyBtn').onclick = () => handleSendReply(id);
         document.getElementById('viewMessageModal').style.display = 'flex';
-        adminFetch(`${API_BASE}/api/admin/support-messages/${id}/read`, { method: 'PATCH' });
+        adminFetch(`${baseUrl}/${id}/read`, { method: 'PATCH' });
     }
 };
 
 async function handleSendReply(id) {
     const reply = document.getElementById('replyText').value;
     if (!reply) return;
-    await adminFetch(`${API_BASE}/api/admin/support-messages/${id}/reply`, {
+    const isVendor = currentPortalRole === 'vendor';
+    const baseUrl = isVendor ? `/api/vendor/support-messages` : `/api/admin/support-messages`;
+    await adminFetch(`${baseUrl}/${id}/reply`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reply })
@@ -1145,7 +1232,9 @@ async function handleSendReply(id) {
 
 async function deleteMessage(id) {
     if (confirm("Delete message?")) {
-        await adminFetch(`${API_BASE}/api/admin/support-messages/${id}`, { method: 'DELETE' });
+        const isVendor = currentPortalRole === 'vendor';
+        const baseUrl = isVendor ? `/api/vendor/support-messages` : `/api/admin/support-messages`;
+        await adminFetch(`${baseUrl}/${id}`, { method: 'DELETE' });
         refreshWithToast("Message removed", "warning");
     }
 }
@@ -1344,6 +1433,69 @@ window.copyLoyaltySqlScript = () => {
 window.fetchLoyaltySettings = fetchLoyaltySettings;
 window.handleSaveLoyaltySettings = handleSaveLoyaltySettings;
 
+// --- VENDOR NOTIFICATIONS ---
+async function fetchVendorNotifications(date = "") {
+    const tbody = document.getElementById('vendorNotificationsTableBody');
+    if (!tbody) return;
+    
+    try {
+        const url = date ? `${API_BASE}/api/vendor/notifications?date=${date}` : `${API_BASE}/api/vendor/notifications`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("Failed to fetch notifications");
+        const notifications = await res.json();
+        
+        if (notifications.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="3" style="text-align: center; padding: 3rem; color: #64748B;">
+                        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem;">
+                            <i class="ph ph-bell-slash" style="font-size: 3rem; color: #CBD5E1; display: block;"></i>
+                            <span style="font-weight: 600; font-family: 'Outfit', sans-serif;">No Announcements Yet</span>
+                            <span style="font-size: 0.8rem; color: #94A3B8;">Check back later for updates from Super Admin.</span>
+                        </div>
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+        
+        tbody.innerHTML = notifications.map(n => {
+            const dateStr = new Date(n.created_at).toLocaleString();
+            const isImportant = n.is_important === 1 || n.is_important === true;
+            return `
+                <tr style="${isImportant ? 'background: rgba(254, 242, 242, 0.7); border-left: 4px solid #EF4444;' : ''}">
+                    <td style="vertical-align: middle;">
+                        ${isImportant 
+                            ? `<span style="background: #FEE2E2; color: #EF4444; padding: 4px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;"><i class="ph-fill ph-warning-circle"></i> Important</span>`
+                            : `<span style="background: #F0FDF4; color: #15803D; padding: 4px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;"><i class="ph-fill ph-info"></i> Broadcast</span>`
+                        }
+                    </td>
+                    <td>
+                        <span style="${isImportant ? 'font-weight: 700; color: #991B1B;' : 'color: #334155;'} font-family: 'Inter', sans-serif; font-size: 0.9rem; line-height: 1.5; display: block;">
+                            ${n.message}
+                        </span>
+                    </td>
+                    <td style="vertical-align: middle;">
+                        <span style="font-size: 0.8rem; color: #64748B; font-weight: 600; font-family: 'Inter', sans-serif;">
+                            ${dateStr}
+                        </span>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    } catch (err) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="3" style="text-align: center; padding: 2rem; color: #EF4444; font-weight: 600;">
+                    <i class="ph ph-warning" style="font-size: 1.5rem; display: block; margin-bottom: 0.5rem;"></i>
+                    Error loading announcements.
+                </td>
+            </tr>
+        `;
+    }
+}
+window.fetchVendorNotifications = fetchVendorNotifications;
+
 // --- NOTIFICATIONS ---
 
 async function fetchNotificationsHistory(date = "") {
@@ -1376,6 +1528,7 @@ async function handleSendNotification(e) {
     e.preventDefault();
     const message = document.getElementById('nMessage').value;
     const is_important = document.getElementById('nIsImportant')?.checked ? 1 : 0;
+    const target_role = document.getElementById('nTargetRole')?.value || 'all';
 
     const btn = e.target.querySelector('button');
     btn.disabled = true;
@@ -1385,7 +1538,7 @@ async function handleSendNotification(e) {
         await fetch(API_BASE + '/api/admin/notifications', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message, is_important })
+            body: JSON.stringify({ message, is_important, target_role })
         });
         refreshWithToast("Broadcast sent", "success");
         e.target.reset();
@@ -1522,6 +1675,88 @@ async function handleSaveOffer(e, idx) {
     refreshWithToast("Offer updated", "success");
 }
 
+// --- VENDOR SPECIAL OFFERS ---
+async function fetchVendorOffers() {
+    try {
+        // Fetch vendor products to extract categories related specifically to this store
+        const prodRes = await fetch(`${API_BASE}/api/vendor/products`);
+        const products = await prodRes.json();
+        
+        // Extract unique category names from vendor products
+        let uniqueCategories = [...new Set(products.map(p => p.category || p.Category).filter(Boolean))];
+        
+        // Fallback to global categories if no products exist
+        if (uniqueCategories.length === 0) {
+            const catRes = await fetch(`${API_BASE}/api/categories`);
+            if (catRes.ok) {
+                const cats = await catRes.json();
+                uniqueCategories = cats.map(c => c.name);
+            }
+        }
+        
+        for (let i = 1; i <= 2; i++) {
+            const select = document.getElementById(`vOCategory${i}`);
+            if (select) {
+                select.innerHTML = '<option value="All">All Categories</option>' + 
+                    uniqueCategories.map(cat => `<option value="${cat}">${cat}</option>`).join('');
+            }
+        }
+
+        const res = await fetch(API_BASE + '/api/vendor/special-offers');
+        const offers = await res.json();
+        
+        offers.forEach((o, i) => {
+            const id = i + 1;
+            if (document.getElementById(`vOfferId${id}`)) {
+                document.getElementById(`vOfferId${id}`).value = o.id;
+                document.getElementById(`vOTitle${id}`).value = o.title;
+                document.getElementById(`vODesc${id}`).value = o.description || '';
+                document.getElementById(`vOCategory${id}`).value = o.target_category || 'All';
+            }
+        });
+    } catch (err) {
+        console.error("Failed to fetch vendor offers:", err);
+    }
+}
+
+async function handleSaveVendorOffer(e, idx) {
+    e.preventDefault();
+    const btn = e.target.querySelector('button');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="ph ph-spinner-gap ph-spin"></i> Saving...';
+    
+    try {
+        const id = document.getElementById(`vOfferId${idx}`).value;
+        const data = {
+            title: document.getElementById(`vOTitle${idx}`).value,
+            description: document.getElementById(`vODesc${idx}`).value,
+            target_category: document.getElementById(`vOCategory${idx}`).value
+        };
+        
+        const res = await fetch(`${API_BASE}/api/vendor/special-offers/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        
+        if (res.ok) {
+            Toast.show(`Offer ${idx} updated successfully!`, "success");
+        } else {
+            const errData = await res.json();
+            Toast.show(errData.error || "Failed to update offer", "error");
+        }
+    } catch (err) {
+        console.error(err);
+        Toast.show("Network error saving offer", "error");
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = `Save Offer ${idx}`;
+    }
+}
+
+window.fetchVendorOffers = fetchVendorOffers;
+window.handleSaveVendorOffer = handleSaveVendorOffer;
+
 // --- MANAGEMENT ---
 
 async function fetchAdminCategories() {
@@ -1532,8 +1767,9 @@ async function fetchAdminCategories() {
             <td>#${c.id}</td>
             <td><i class="ph ${c.iconUrl || c.iconurl}" style="font-size:1.2rem;"></i></td>
             <td>${c.name}</td>
+            <td>${c.commission_rate !== undefined ? c.commission_rate : 5}%</td>
             <td>
-                <button onclick="openEditCategoryModal(${c.id}, '${c.name}', '${c.iconUrl || c.iconurl}')" class="action-btn" style="background:#4F46E5;"><i class="ph ph-pencil-simple"></i></button>
+                <button onclick="openEditCategoryModal(${c.id}, '${c.name.replace(/'/g, "\\'")}', '${c.iconUrl || c.iconurl}', ${c.commission_rate !== undefined ? c.commission_rate : 5})" class="action-btn" style="background:#4F46E5;"><i class="ph ph-pencil-simple"></i></button>
                 <button onclick="deleteCategory(${c.id})" class="action-btn" style="background:#EF4444;"><i class="ph ph-trash"></i></button>
             </td>
         </tr>
@@ -1544,20 +1780,26 @@ window.openAddCategoryModal = () => {
     document.getElementById('catId').value = '';
     document.getElementById('catName').value = '';
     document.getElementById('catIcon').value = '';
+    document.getElementById('catCommissionRate').value = '5';
     document.getElementById('categoryModal').style.display = 'flex';
 };
 
-window.openEditCategoryModal = (id, name, icon) => {
+window.openEditCategoryModal = (id, name, icon, commissionRate) => {
     document.getElementById('catId').value = id;
     document.getElementById('catName').value = name;
     document.getElementById('catIcon').value = icon;
+    document.getElementById('catCommissionRate').value = commissionRate !== undefined ? commissionRate : 5;
     document.getElementById('categoryModal').style.display = 'flex';
 };
 
 async function handleCategorySubmit(e) {
     e.preventDefault();
     const id = document.getElementById('catId').value;
-    const data = { name: document.getElementById('catName').value, iconUrl: document.getElementById('catIcon').value };
+    const data = { 
+        name: document.getElementById('catName').value, 
+        iconUrl: document.getElementById('catIcon').value,
+        commission_rate: parseInt(document.getElementById('catCommissionRate').value) || 5
+    };
     const method = id ? 'PUT' : 'POST';
     const url = id ? `/api/admin/categories/${id}` : '/api/admin/categories';
     await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
@@ -1680,22 +1922,21 @@ async function fetchUsers(search = "", date = "") {
             <td><span class="badge ${u.status || 'active'}">${u.status || 'active'}</span></td>
             <td><small>${new Date(u.created_at).toLocaleDateString()}</small></td>
             <td>
-                <button onclick="toggleUserStatus(${u.id}, '${u.status === 'blocked' ? 'active' : 'blocked'}')" class="action-btn" style="background:${u.status === 'blocked' ? '#10B981' : '#F59E0B'};" title="${u.status === 'blocked' ? 'Unblock' : 'Block'} User"><i class="ph ph-prohibit"></i></button>
+                <button onclick="toggleUserStatus('${u.id}', '${u.status === 'blocked' ? 'active' : 'blocked'}')" class="action-btn" style="background:${u.status === 'blocked' ? '#10B981' : '#F59E0B'};" title="${u.status === 'blocked' ? 'Unblock' : 'Block'} User"><i class="ph ph-prohibit"></i></button>
                 <button onclick="changeUserRole('${u.id}', '${u.role === 'vendor' ? 'customer' : 'vendor'}')" class="action-btn" style="background:${u.role === 'vendor' ? '#F59E0B' : '#10B981'}; margin-left:5px;" title="${u.role === 'vendor' ? 'Demote to Customer' : 'Upgrade to Vendor'}"><i class="${u.role === 'vendor' ? 'ph ph-user-minus' : 'ph ph-user-gear'}"></i></button>
-                <button onclick="deleteUser(${u.id})" class="action-btn" style="background:#EF4444; margin-left:5px;"><i class="ph ph-trash"></i></button>
+                <button onclick="deleteUser('${u.id}')" class="action-btn" style="background:#EF4444; margin-left:5px;"><i class="ph ph-trash"></i></button>
             </td>
         </tr>
     `).join('');
 }
 
-async function toggleUserStatus(id, current) {
-    const status = current === 'active' ? 'inactive' : 'active';
+async function toggleUserStatus(id, newStatus) {
     await fetch(`${API_BASE}/api/admin/users/${id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status })
+        body: JSON.stringify({ status: newStatus })
     });
-    refreshWithToast(`User ${status === 'active' ? 'activated' : 'blocked'}`, "success");
+    refreshWithToast(`User ${newStatus === 'active' ? 'activated' : 'blocked'}`, "success");
 }
 
 async function changeUserRole(id, role) {
@@ -1753,7 +1994,39 @@ async function deleteReview(id) {
 
 async function fetchCategoriesForSelects() {
     const res = await fetch(API_BASE + '/api/categories');
-    const cats = await res.json();
+    let cats = await res.json();
+
+    const isVendor = getCookie('role') === 'vendor' || currentPortalRole === 'vendor';
+    if (isVendor) {
+        if (!window.vendorShop) {
+            try {
+                const shopRes = await adminFetch('/api/vendor/shop');
+                if (shopRes.ok) {
+                    window.vendorShop = await shopRes.json();
+                }
+            } catch (e) {
+                console.error("Failed to load vendor shop details for category filtering", e);
+            }
+        }
+
+        const shopType = window.vendorShop?.registered_shop;
+        if (shopType) {
+            const shopCategoriesMap = {
+                'Fresh Produce Shop': ['Fresh Fruits', 'Vegetables'],
+                'Frozen Shop': ['Frozen Foods', 'Desserts'],
+                'Juice Shop': ['Drinks'],
+                'Gold Shop': ['Gold Jewelry', 'Diamond Jewelry'],
+                'Dressing Shop': ['Mens Wear', 'Womens Wear'],
+                'General Store': ['Dals & Pulses', 'Snacks', 'Dairy & Bakery', 'Dry Fruits', 'Household'],
+                'Pharmacy / Health Shop': ['Healthcare']
+            };
+            const allowed = shopCategoriesMap[shopType] || [];
+            if (allowed.length > 0) {
+                cats = cats.filter(c => allowed.some(name => name.toLowerCase() === c.name.toLowerCase()));
+            }
+        }
+    }
+
     const options = cats.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
     const selects = ['pCategory', 'editPCategory', 'adminProductCategory', 'bCategory', 'mfCategory', 'oCategory1', 'oCategory2', 'oCategory3'];
     selects.forEach(id => {
@@ -1775,6 +2048,7 @@ function setupEventListeners() {
     document.getElementById('bannerEditForm')?.addEventListener('submit', handleSaveBanner);
     document.getElementById('morningFreshBannerForm')?.addEventListener('submit', handleSaveMorningFreshBanner);
     [1,2,3].forEach(i => document.getElementById(`offerForm${i}`)?.addEventListener('submit', (e) => handleSaveOffer(e, i)));
+    [1,2].forEach(i => document.getElementById(`vendorOfferForm${i}`)?.addEventListener('submit', (e) => handleSaveVendorOffer(e, i)));
     document.getElementById('categoryForm')?.addEventListener('submit', handleCategorySubmit);
     document.getElementById('brandForm')?.addEventListener('submit', handleBrandSubmit);
     document.getElementById('couponForm')?.addEventListener('submit', handleCouponSubmit);
@@ -1784,7 +2058,62 @@ function setupEventListeners() {
     document.getElementById('vendorStorefrontForm')?.addEventListener('submit', handleVendorStorefrontSubmit);
     document.getElementById('vendorPayoutRequestForm')?.addEventListener('submit', handleVendorPayoutSubmit);
     document.getElementById('loyaltyProgramSettingsForm')?.addEventListener('submit', handleSaveLoyaltySettings);
+
+    document.getElementById('mockVendorPaymentBtn')?.addEventListener('click', async () => {
+        const spinner = document.getElementById('mockPaymentSpinner');
+        const btnText = document.getElementById('mockSubmitBtnText');
+        if (spinner) spinner.style.display = 'inline-block';
+        if (btnText) btnText.innerText = "Processing sandbox transaction...";
+        
+        setTimeout(async () => {
+            try {
+                const res = await adminFetch('/api/vendor/renew-subscription', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        payment_id: 'pay_' + Math.random().toString(36).substring(2, 11),
+                        amount: 500
+                    })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    if (window.Toast) Toast.show(data.message || "Subscription renewed successfully!", "success");
+                    closeMockPayment();
+                    fetchVendorDashboardStats();
+                } else {
+                    if (window.Toast) Toast.show(data.error || "Failed to renew subscription", "error");
+                    if (spinner) spinner.style.display = 'none';
+                    if (btnText) btnText.innerText = "Authorize Payment";
+                }
+            } catch (err) {
+                console.error("Renewal failed:", err);
+                if (window.Toast) Toast.show("Error renewing subscription", "error");
+                if (spinner) spinner.style.display = 'none';
+                if (btnText) btnText.innerText = "Authorize Payment";
+            }
+        }, 1500);
+    });
 }
+
+async function renewVendorSubscription() {
+    const modal = document.getElementById('mockPaymentModal');
+    if (!modal) return;
+    
+    document.getElementById('mockPaymentAmountText').innerText = '₹500';
+    document.getElementById('mockSubmitBtnText').innerText = "Authorize Payment";
+    
+    const spinner = document.getElementById('mockPaymentSpinner');
+    if (spinner) spinner.style.display = 'none';
+    
+    modal.style.display = 'flex';
+}
+window.renewVendorSubscription = renewVendorSubscription;
+
+function closeMockPayment() {
+    const modal = document.getElementById('mockPaymentModal');
+    if (modal) modal.style.display = 'none';
+}
+window.closeMockPayment = closeMockPayment;
 
 async function handleSecurityUpdate(e) {
     e.preventDefault();
@@ -2016,15 +2345,18 @@ async function fetchPromoBannersAdmin() {
         const heroCard = document.getElementById('platformHeroBannerCard');
         const morningCard = document.getElementById('platformMorningFreshBannerCard');
         const offersCard = document.getElementById('platformOffersCard');
+        const slidingCard = document.getElementById('slidingPromoBannersCard');
         
         if (currentPortalRole === 'vendor') {
             if (heroCard) heroCard.style.display = 'none';
             if (morningCard) morningCard.style.display = 'none';
             if (offersCard) offersCard.style.display = 'none';
+            if (slidingCard) slidingCard.style.display = 'none';
         } else {
             if (heroCard) heroCard.style.display = 'block';
             if (morningCard) morningCard.style.display = 'block';
             if (offersCard) offersCard.style.display = 'grid';
+            if (slidingCard) slidingCard.style.display = 'block';
         }
 
         const url = currentPortalRole === 'vendor' ? `${API_BASE}/api/vendor/promo-banners` : `${API_BASE}/api/admin/promo-banners`;
@@ -2175,7 +2507,7 @@ async function fetchVendorApprovals() {
         if (!tbody) return;
         
         if (vendors.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:3rem; color:#64748B;">No shop onboarding applications found.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:3rem; color:#64748B;">No shop onboarding applications found.</td></tr>';
             return;
         }
         
@@ -2203,13 +2535,22 @@ async function fetchVendorApprovals() {
                         </div>
                     </td>
                     <td>
+                        <span style="font-weight:600; color:#1E293B; background:#F1F5F9; border:1px solid #E2E8F0; padding:4px 8px; border-radius:6px; font-size:0.8rem;">
+                            ${v.registered_shop || 'N/A'}
+                        </span>
+                    </td>
+                    <td>
                         <div style="font-weight:600; color:#1E293B;">${v.users?.full_name || 'N/A'}</div>
                         <div style="font-size:0.75rem; color:#64748B;">${v.contact_phone || v.users?.phone || ''}</div>
                     </td>
                     <td>${docHtml}</td>
                     <td>
                         <div style="font-size:0.85rem; font-weight:600;">${v.category}</div>
-                        <div style="font-size:0.75rem; color:#64748B;">${v.timings || ''}</div>
+                        <div style="font-size:0.75rem; color:#64748B; margin-bottom:4px;">Rate: ${v.commission_rate !== undefined ? v.commission_rate : 5}%</div>
+                        <div style="display:flex; gap:4px; align-items:center;">
+                            <input type="number" id="commission-rate-${v.id}" value="${v.commission_rate !== undefined ? v.commission_rate : 5}" style="width:50px; padding:2px 4px; border:1px solid var(--border); border-radius:4px; font-size:0.75rem;" min="0" max="100">
+                            <button onclick="updateVendorCommission(${v.id})" style="padding:2px 6px; background:var(--primary); color:white; border:none; border-radius:4px; font-size:0.7rem; font-weight:700; cursor:pointer;">Set</button>
+                        </div>
                     </td>
                     <td>
                         <span style="display:inline-block; padding:4px 10px; border-radius:20px; font-size:0.75rem; font-weight:700; background:${statusBg}; color:${statusColor}; text-transform:uppercase;">
@@ -2238,6 +2579,32 @@ async function fetchVendorApprovals() {
         if (window.Toast) Toast.show("Could not load vendor onboarding list", "error");
     }
 }
+
+async function updateVendorCommission(id) {
+    const rateInput = document.getElementById(`commission-rate-${id}`);
+    if (!rateInput) return;
+    const rate = parseInt(rateInput.value);
+    if (isNaN(rate) || rate < 0 || rate > 100) {
+        if (window.Toast) Toast.show("Please enter a valid commission rate percentage (0-100).", "error");
+        return;
+    }
+
+    try {
+        const res = await adminFetch(`/api/admin/vendors/${id}/commission`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ commission_rate: rate })
+        });
+        if (!res.ok) throw new Error("Failed to update commission rate.");
+        const data = await res.json();
+        if (window.Toast) Toast.show(data.message || "Commission rate updated!", "success");
+        fetchVendorApprovals();
+    } catch(e) {
+        console.error(e);
+        if (window.Toast) Toast.show("Error updating commission rate", "error");
+    }
+}
+window.updateVendorCommission = updateVendorCommission;
 
 async function updateVendorStatus(id, status) {
     if (!confirm(`Are you sure you want to change shop status to: ${status}?`)) return;
@@ -2273,6 +2640,7 @@ async function fetchVendorDashboardStats() {
         // Fetch shop details for quick preview card
         const shopRes = await adminFetch('/api/vendor/shop');
         const shop = await shopRes.json();
+        window.vendorShop = shop;
         
         if (shop && !shop.error) {
             if (document.getElementById('vendorShopStatusBadge')) {
@@ -2293,6 +2661,34 @@ async function fetchVendorDashboardStats() {
                 const img = document.getElementById('vendorShopQuickLogo').querySelector('img');
                 if (img) img.src = shop.logo || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=150';
             }
+
+            // Render subscription details
+            if (shop.subscription_expires) {
+                const expires = new Date(shop.subscription_expires);
+                const diffTime = expires - new Date();
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                
+                if (document.getElementById('vendorSubExpiryVal')) {
+                    document.getElementById('vendorSubExpiryVal').innerText = expires.toLocaleDateString();
+                }
+                if (document.getElementById('vendorSubDaysVal')) {
+                    if (diffDays <= 0) {
+                        document.getElementById('vendorSubDaysVal').innerText = "Expired";
+                        document.getElementById('vendorSubDaysVal').style.color = "#EF4444";
+                    } else {
+                        document.getElementById('vendorSubDaysVal').innerText = `${diffDays} Days`;
+                        document.getElementById('vendorSubDaysVal').style.color = diffDays < 15 ? "#F59E0B" : "#10B981";
+                    }
+                }
+            } else {
+                if (document.getElementById('vendorSubExpiryVal')) {
+                    document.getElementById('vendorSubExpiryVal').innerText = "Never";
+                }
+                if (document.getElementById('vendorSubDaysVal')) {
+                    document.getElementById('vendorSubDaysVal').innerText = "Active";
+                    document.getElementById('vendorSubDaysVal').style.color = "#10B981";
+                }
+            }
         }
     } catch (e) {
         console.error("Failed to load vendor stats", e);
@@ -2304,6 +2700,7 @@ async function fetchVendorShopDetails() {
     try {
         const res = await adminFetch('/api/vendor/shop');
         const shop = await res.json();
+        window.vendorShop = shop;
         
         const onboardingMsg = document.getElementById('vendorOnboardingMessage');
         const kycContainer = document.getElementById('kycDocContainer');
@@ -2317,12 +2714,16 @@ async function fetchVendorShopDetails() {
             
             // Clear inputs
             document.getElementById('vStoreName').value = '';
+            document.getElementById('vStoreRegisteredShop').value = '';
             document.getElementById('vStoreDesc').value = '';
             document.getElementById('vStoreLogo').value = '';
             document.getElementById('vStoreBanner').value = '';
             document.getElementById('vStoreTimings').value = '';
             document.getElementById('vStorePhone').value = '';
             document.getElementById('vStoreKyc').value = '';
+            
+            if (document.getElementById('vStoreActiveToggle')) document.getElementById('vStoreActiveToggle').checked = true;
+            if (document.getElementById('vStoreShowOffersToggle')) document.getElementById('vStoreShowOffersToggle').checked = true;
             
             // Check settings to show setup fee card
             try {
@@ -2357,12 +2758,20 @@ async function fetchVendorShopDetails() {
             if (payCard) payCard.style.display = 'none';
             
             document.getElementById('vStoreName').value = shop.name;
+            document.getElementById('vStoreRegisteredShop').value = shop.registered_shop || '';
             document.getElementById('vStoreCategory').value = shop.category || 'General Store';
             document.getElementById('vStoreDesc').value = shop.description || '';
             document.getElementById('vStoreLogo').value = shop.logo || '';
             document.getElementById('vStoreBanner').value = shop.banner || '';
             document.getElementById('vStoreTimings').value = shop.timings || '';
             document.getElementById('vStorePhone').value = shop.contact_phone || '';
+            
+            if (document.getElementById('vStoreActiveToggle')) {
+                document.getElementById('vStoreActiveToggle').checked = shop.is_active_store !== 0;
+            }
+            if (document.getElementById('vStoreShowOffersToggle')) {
+                document.getElementById('vStoreShowOffersToggle').checked = shop.show_special_offers !== 0;
+            }
         }
     } catch (e) {
         console.error(e);
@@ -2423,12 +2832,15 @@ async function handleVendorStorefrontSubmit(e) {
     
     const payload = {
         name: document.getElementById('vStoreName').value,
+        registered_shop: document.getElementById('vStoreRegisteredShop').value,
         category: document.getElementById('vStoreCategory').value,
         description: document.getElementById('vStoreDesc').value,
         logo: document.getElementById('vStoreLogo').value,
         banner: document.getElementById('vStoreBanner').value,
         timings: document.getElementById('vStoreTimings').value,
         contact_phone: document.getElementById('vStorePhone').value,
+        is_active_store: document.getElementById('vStoreActiveToggle').checked ? 1 : 0,
+        show_special_offers: document.getElementById('vStoreShowOffersToggle').checked ? 1 : 0,
     };
     
     if (isNew) {
@@ -2580,6 +2992,237 @@ async function populateCouponShopsDropdown() {
     }
 }
 
+// --- VENDOR CUSTOMER SUPPORT CHAT PANEL ---
+let vendorChats = [];
+let activeVendorChatId = null;
+let activeVendorChatUserName = '';
+let vendorChatPollInterval = null;
+let lastVendorMessageCount = 0;
+
+async function loadVendorChats() {
+    try {
+        const res = await adminFetch(API_BASE + '/api/vendor/support/chats');
+        if (!res.ok) return;
+        vendorChats = await res.json();
+        renderVendorChatsList();
+        
+        // If there's an active chat, refresh it silently
+        if (activeVendorChatId) {
+            await fetchActiveChatHistory(true);
+        }
+    } catch (err) {
+        console.error("Failed to load vendor chats:", err);
+    }
+}
+
+function renderVendorChatsList() {
+    const listEl = document.getElementById('vendorChatList');
+    if (!listEl) return;
+    
+    if (vendorChats.length === 0) {
+        listEl.innerHTML = '<div style="padding: 2rem 1rem; text-align: center; color: #64748B; font-size: 0.85rem;">No active conversations</div>';
+        return;
+    }
+    
+    listEl.innerHTML = vendorChats.map(c => {
+        const isActive = c.chat_id === activeVendorChatId;
+        const activeBg = isActive ? '#E2E8F0' : '#ffffff';
+        const lastMsg = c.last_message || 'No messages';
+        const timeStr = c.created_at ? new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+        const unreadBadge = c.unread_count > 0 ? `<span style="background: #ef4444; color: white; font-size: 0.65rem; font-weight: 700; padding: 2px 6px; border-radius: 10px; min-width: 18px; text-align: center;">${c.unread_count}</span>` : '';
+        
+        return `
+            <div class="chat-item ${isActive ? 'active' : ''}" onclick="selectVendorChat('${c.chat_id}', '${c.user_name.replace(/'/g, "\\'")}')" style="padding: 1rem; border-bottom: 1px solid #E2E8F0; cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: background 0.2s; background: ${activeBg};">
+                <div style="flex: 1; min-width: 0;">
+                    <h5 style="margin: 0; font-size: 0.9rem; font-weight: 700; color: #0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${c.user_name}</h5>
+                    <p style="margin: 4px 0 0 0; font-size: 0.75rem; color: #64748B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${lastMsg}</p>
+                </div>
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; margin-left: 8px;">
+                    <span style="font-size: 0.65rem; color: #94A3B8;">${timeStr}</span>
+                    ${unreadBadge}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function selectVendorChat(chatId, userName) {
+    activeVendorChatId = chatId;
+    activeVendorChatUserName = userName;
+    lastVendorMessageCount = 0; // Force messages redraw
+    
+    const placeholder = document.getElementById('vendorChatPlaceholder');
+    const workspace = document.getElementById('vendorChatWorkspace');
+    const userHeader = document.getElementById('vendorActiveChatUser');
+    const chatIdInput = document.getElementById('vendorActiveChatId');
+    
+    if (placeholder) placeholder.style.display = 'none';
+    if (workspace) workspace.style.display = 'flex';
+    if (userHeader) userHeader.innerText = userName;
+    if (chatIdInput) chatIdInput.value = chatId;
+    
+    // Refresh sidebar highlights
+    document.querySelectorAll('.chat-item').forEach(item => {
+        item.style.background = '#ffffff';
+        item.classList.remove('active');
+    });
+    
+    // Find matching items in sidebar and highlight
+    const items = Array.from(document.querySelectorAll('.chat-item'));
+    items.forEach(item => {
+        const clickAttr = item.getAttribute('onclick') || '';
+        if (clickAttr.includes(chatId)) {
+            item.style.background = '#E2E8F0';
+            item.classList.add('active');
+        }
+    });
+    
+    await fetchActiveChatHistory();
+    startVendorChatPolling();
+}
+
+async function fetchActiveChatHistory(silent = false) {
+    if (!activeVendorChatId) return;
+    try {
+        const res = await adminFetch(API_BASE + `/api/vendor/support/chats/${activeVendorChatId}`);
+        if (!res.ok) return;
+        const messages = await res.json();
+        
+        if (messages.length !== lastVendorMessageCount || !silent) {
+            lastVendorMessageCount = messages.length;
+            renderActiveChatMessages(messages);
+            
+            // If new messages fetched while open, refresh the unread badges on the left pane silently
+            if (silent) {
+                const listRes = await adminFetch(API_BASE + '/api/vendor/support/chats');
+                if (listRes.ok) {
+                    vendorChats = await listRes.json();
+                    renderVendorChatsList();
+                }
+            }
+        }
+    } catch (err) {
+        console.error("Failed to fetch vendor chat history:", err);
+    }
+}
+
+function renderActiveChatMessages(messages) {
+    const container = document.getElementById('vendorChatMessages');
+    if (!container) return;
+    
+    if (messages.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: #64748B; font-size: 0.85rem; padding: 2rem;">No messages in this chat.</div>';
+        return;
+    }
+    
+    container.innerHTML = messages.map(m => {
+        const isVendor = m.sender === 'vendor';
+        const bg = isVendor ? '#06341D' : '#E2E8F0'; // Match forest green theme
+        const color = isVendor ? 'white' : '#0F172A';
+        const align = isVendor ? 'flex-end' : 'flex-start';
+        const radius = isVendor ? '14px 14px 2px 14px' : '14px 14px 14px 2px';
+        const float = isVendor ? 'right' : 'left';
+        
+        return `
+            <div style="align-self: ${align}; max-width: 70%; background: ${bg}; color: ${color}; padding: 0.75rem 1rem; border-radius: ${radius}; font-size: 0.85rem; line-height: 1.4; box-shadow: 0 1px 2px rgba(0,0,0,0.05); margin-bottom: 2px;">
+                <div>${m.message}</div>
+                <div style="font-size: 0.6rem; opacity: 0.7; text-align: ${float}; margin-top: 4px;">
+                    ${new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    container.scrollTop = container.scrollHeight;
+}
+
+async function submitVendorReply(event) {
+    if (event) event.preventDefault();
+    
+    const chatIdInput = document.getElementById('vendorActiveChatId');
+    const replyInput = document.getElementById('vendorChatReplyInput');
+    if (!chatIdInput || !replyInput) return;
+    
+    const chatId = chatIdInput.value;
+    const message = replyInput.value.trim();
+    if (!chatId || !message) return;
+    
+    try {
+        const res = await adminFetch(API_BASE + '/api/vendor/support/chats/reply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: chatId, message })
+        });
+        
+        if (res.ok) {
+            replyInput.value = '';
+            // Refresh messages
+            await fetchActiveChatHistory();
+            // Refresh sidebar list
+            const chatsRes = await adminFetch(API_BASE + '/api/vendor/support/chats');
+            if (chatsRes.ok) {
+                vendorChats = await chatsRes.json();
+                renderVendorChatsList();
+            }
+        } else {
+            alert("Failed to send reply. Please verify your shop registration.");
+        }
+    } catch (err) {
+        console.error("Error sending vendor reply:", err);
+    }
+}
+
+function filterVendorChats(query) {
+    const listEl = document.getElementById('vendorChatList');
+    if (!listEl) return;
+    
+    const lowerQuery = query.toLowerCase().trim();
+    const filtered = vendorChats.filter(c => {
+        return (c.user_name || '').toLowerCase().includes(lowerQuery) || (c.last_message || '').toLowerCase().includes(lowerQuery);
+    });
+    
+    if (filtered.length === 0) {
+        listEl.innerHTML = '<div style="padding: 2rem 1rem; text-align: center; color: #64748B; font-size: 0.85rem;">No matching conversations</div>';
+        return;
+    }
+    
+    listEl.innerHTML = filtered.map(c => {
+        const isActive = c.chat_id === activeVendorChatId;
+        const activeBg = isActive ? '#E2E8F0' : '#ffffff';
+        const lastMsg = c.last_message || 'No messages';
+        const timeStr = c.created_at ? new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+        const unreadBadge = c.unread_count > 0 ? `<span style="background: #ef4444; color: white; font-size: 0.65rem; font-weight: 700; padding: 2px 6px; border-radius: 10px; min-width: 18px; text-align: center;">${c.unread_count}</span>` : '';
+        
+        return `
+            <div class="chat-item ${isActive ? 'active' : ''}" onclick="selectVendorChat('${c.chat_id}', '${c.user_name.replace(/'/g, "\\'")}')" style="padding: 1rem; border-bottom: 1px solid #E2E8F0; cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: background 0.2s; background: ${activeBg};">
+                <div style="flex: 1; min-width: 0;">
+                    <h5 style="margin: 0; font-size: 0.9rem; font-weight: 700; color: #0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${c.user_name}</h5>
+                    <p style="margin: 4px 0 0 0; font-size: 0.75rem; color: #64748B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${lastMsg}</p>
+                </div>
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; margin-left: 8px;">
+                    <span style="font-size: 0.65rem; color: #94A3B8;">${timeStr}</span>
+                    ${unreadBadge}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function startVendorChatPolling() {
+    stopVendorChatPolling();
+    if (!activeVendorChatId) return;
+    vendorChatPollInterval = setInterval(() => {
+        fetchActiveChatHistory(true);
+    }, 3000);
+}
+
+function stopVendorChatPolling() {
+    if (vendorChatPollInterval) {
+        clearInterval(vendorChatPollInterval);
+        vendorChatPollInterval = null;
+    }
+}
+
 // GLOBAL EXPORTS
 window.fetchFeatureFlags = fetchFeatureFlags;
 window.toggleFeatureFlag = toggleFeatureFlag;
@@ -2590,4 +3233,10 @@ window.fetchVendorShopDetails = fetchVendorShopDetails;
 window.handleVendorStorefrontSubmit = handleVendorStorefrontSubmit;
 window.fetchVendorWalletDetails = fetchVendorWalletDetails;
 window.handleVendorPayoutSubmit = handleVendorPayoutSubmit;
-window.populateCouponShopsDropdown = populateCouponShopsDropdown;
+window.populateCouponShopsDropdown = populateCouponShopsDropdown;
+
+window.loadVendorChats = loadVendorChats;
+window.selectVendorChat = selectVendorChat;
+window.submitVendorReply = submitVendorReply;
+window.stopVendorChatPolling = stopVendorChatPolling;
+window.filterVendorChats = filterVendorChats;

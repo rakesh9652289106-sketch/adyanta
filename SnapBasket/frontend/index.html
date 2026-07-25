@@ -101,6 +101,11 @@
     <script type="module" src="analytics.js"></script>
 </head>
 <body>
+    <!-- Dummy fields to trap browser credential autofill in search bar -->
+    <div style="position: absolute; top: -1000px; left: -1000px; width: 1px; height: 1px; overflow: hidden; opacity: 0;">
+        <input type="text" name="fake_username_remembered" tabindex="-1" autocomplete="username" />
+        <input type="password" name="fake_password_remembered" tabindex="-1" autocomplete="current-password" />
+    </div>
     <div class="creative-blob"></div>
     <div class="creative-blob" style="animation-delay: -10s; background: linear-gradient(135deg, rgba(212, 175, 55, 0.05) 0%, rgba(10, 92, 54, 0.05) 100%);"></div>
     
@@ -161,8 +166,7 @@
             
             <div class="search-bar" style="position: relative;">
                 <i class="ph ph-magnifying-glass search-icon"></i>
-                <input type="text" id="mainSearchInput" autocomplete="off" data-i18n="nav_search_placeholder" placeholder="Search for 'Atta', 'Maggi' or 'Milk'...">
-                <span class="search-brand-watermark">ADYANTA</span>
+                <input type="text" id="mainSearchInput" autocomplete="new-password" data-i18n="nav_search_placeholder" placeholder="Search for 'Atta', 'Maggi' or 'Milk'...">
                 <div id="searchHistoryDropdown" style="display: none; position: absolute; top: 100%; left: 0; width: 100%; background: var(--card-bg); border: 1px solid var(--border); box-shadow: var(--shadow-md); border-radius: var(--radius-md); z-index: 1000; margin-top: 0.5rem; overflow: hidden;">
                     <div style="padding: 0.5rem 1rem; font-size: 0.75rem; color: var(--text-soft); font-weight: 600; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border);">
                         Recent Searches
@@ -275,8 +279,24 @@
         <section class="shops-browser-section" id="shopsBrowserSection" style="margin-top: 1rem; margin-bottom: 2.5rem; clear: both; position: relative;">
             <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                 <h3 class="section-title" style="font-size: 1.4rem; font-weight: 700; color: var(--text-main); font-family: 'Outfit', sans-serif; display: flex; align-items: center; gap: 0.5rem;"><i class="ph-fill ph-storefront" style="color: var(--primary);"></i> Browse Multi-Vendor Stores</h3>
-                <span style="font-size: 0.8rem; color: var(--text-soft); font-weight: 600;" id="activeShopsCount">Loading stores...</span>
+                <div style="display: flex; align-items: center; gap: 1rem;">
+                    <span style="font-size: 0.8rem; color: var(--text-soft); font-weight: 600;" id="activeShopsCount">Loading stores...</span>
+                    <a href="stores.html" class="view-all">View All <i class="ph ph-caret-right"></i></a>
+                </div>
             </div>
+            
+            <!-- Shop Category Filter Tabs -->
+            <div class="shop-filter-tabs" style="display: flex; gap: 0.5rem; overflow-x: auto; padding: 0.5rem 0.25rem; margin-bottom: 1rem; scrollbar-width: none;">
+                <button class="shop-filter-btn active" onclick="filterShops('All')" style="padding: 6px 16px; border: 1.5px solid var(--primary); background: var(--primary); color: white; border-radius: 20px; font-size: 0.8rem; font-weight: 700; cursor: pointer; transition: all 0.2s; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;"><i class="ph ph-storefront"></i> All Stores</button>
+                <button class="shop-filter-btn" onclick="filterShops('Frozen Shop')" style="padding: 6px 16px; border: 1.5px solid var(--border); background: var(--card-bg); color: var(--text-soft); border-radius: 20px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;"><i class="ph ph-snowflake"></i> Frozen Shop</button>
+                <button class="shop-filter-btn" onclick="filterShops('Juice Shop')" style="padding: 6px 16px; border: 1.5px solid var(--border); background: var(--card-bg); color: var(--text-soft); border-radius: 20px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;"><i class="ph ph-drop"></i> Juice Shop</button>
+                <button class="shop-filter-btn" onclick="filterShops('Gold Shop')" style="padding: 6px 16px; border: 1.5px solid var(--border); background: var(--card-bg); color: var(--text-soft); border-radius: 20px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;"><i class="ph ph-crown"></i> Gold Shop</button>
+                <button class="shop-filter-btn" onclick="filterShops('Dressing Shop')" style="padding: 6px 16px; border: 1.5px solid var(--border); background: var(--card-bg); color: var(--text-soft); border-radius: 20px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;"><i class="ph ph-t-shirt"></i> Dressing Shop</button>
+                <button class="shop-filter-btn" onclick="filterShops('General Store')" style="padding: 6px 16px; border: 1.5px solid var(--border); background: var(--card-bg); color: var(--text-soft); border-radius: 20px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;"><i class="ph ph-shopping-bag"></i> General Store</button>
+                <button class="shop-filter-btn" onclick="filterShops('Fresh Produce Shop')" style="padding: 6px 16px; border: 1.5px solid var(--border); background: var(--card-bg); color: var(--text-soft); border-radius: 20px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;"><i class="ph ph-leaf"></i> Fresh Produce Shop</button>
+                <button class="shop-filter-btn" onclick="filterShops('Pharmacy / Health Shop')" style="padding: 6px 16px; border: 1.5px solid var(--border); background: var(--card-bg); color: var(--text-soft); border-radius: 20px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;"><i class="ph ph-first-aid"></i> Pharmacy / Health Shop</button>
+            </div>
+
             <div class="shops-carousel-wrapper" style="position: relative;">
                 <div class="shops-scroll" id="shopsScroll" style="display: flex; gap: 1.25rem; overflow-x: auto; padding: 0.5rem 0.25rem; scrollbar-width: none; -ms-overflow-style: none;">
                     <!-- Dynamically populated vendor shops cards -->
@@ -290,7 +310,7 @@
         <section class="category-section">
             <div class="section-header">
                 <h3 class="section-title" data-i18n="section_category_title">Shop by Category</h3>
-                <a href="category.html?name=All" class="view-all"><span data-i18n="view_all">View All</span> <i class="ph ph-caret-right"></i></a>
+                <a href="stores.html?category=All" class="view-all"><span data-i18n="view_all">View All</span> <i class="ph ph-caret-right"></i></a>
             </div>
             <div class="carousel-wrapper">
                 <button class="carousel-arrow left-arrow" id="categoryLeftArrow" onclick="document.getElementById('categoryScroll').scrollBy({left: -300, behavior: 'smooth'})"><i class="ph ph-caret-left"></i></button>
@@ -801,7 +821,7 @@
             
             <div class="nav-section">
                 <h5 data-i18n="sidebar_section_others">Others</h5>
-                <a href="admin.html" class="nav-item" style="color: var(--primary); font-weight: 700;"><i class="ph ph-shield-check"></i> <span>Admin Panel</span></a>
+                <a href="admin.html" id="sidebarAdminLink" class="nav-item" style="color: var(--primary); font-weight: 700; display: none;"><i class="ph ph-shield-check"></i> <span>Admin Panel</span></a>
                 <a href="support.html" class="nav-item"><i class="ph ph-info"></i> <span data-i18n="sidebar_help_support">Help & Support</span></a>
                 <a href="#" class="nav-item" id="sidebarLogout" style="display: none;"><i class="ph ph-sign-out"></i> <span data-i18n="sidebar_logout">Logout</span></a>
             </div>
@@ -828,7 +848,7 @@
             <i class="ph-fill ph-house"></i>
             <span>Home</span>
         </a>
-        <a href="category.html?name=All" class="nav-item">
+        <a href="stores.html?category=All" class="nav-item">
             <i class="ph ph-squares-four"></i>
             <span>Categories</span>
         </a>
@@ -896,42 +916,109 @@
         </div>
     </div>
     <!-- AI Customer Support Chatbot Floating UI -->
-    <div id="aiChatbotWidget" style="position: fixed; bottom: 85px; right: 25px; width: 360px; height: 500px; background: var(--card-bg); border: 1.5px solid var(--border); box-shadow: var(--shadow-lg); border-radius: 20px; z-index: 9999; display: none; flex-direction: column; overflow: hidden; animation: fadeIn 0.3s ease;">
-        <div style="background: linear-gradient(135deg, var(--primary), var(--primary-hover)); color: white; padding: 1.25rem; display: flex; align-items: center; justify-content: space-between;">
+    <div id="aiChatbotWidget" class="ai-chatbot-widget">
+        <div class="ai-chatbot-header">
             <div style="display: flex; align-items: center; gap: 0.75rem;">
-                <div style="width: 38px; height: 38px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.4rem;">
+                <div class="ai-chatbot-avatar">
                     <i class="ph-fill ph-robot" style="color: white;"></i>
+                    <span class="online-badge"></span>
                 </div>
-                <div>
-                    <h4 style="margin: 0; font-family: 'Outfit', sans-serif; font-size: 1.05rem; font-weight: 700; letter-spacing: 0.5px; color: white;">ADYANTA Support Bot</h4>
-                    <span style="font-size: 0.75rem; opacity: 0.85; display: flex; align-items: center; gap: 0.3rem; color: white;"><span style="width: 6px; height: 6px; background: #22C55E; border-radius: 50%; display: inline-block;"></span> Active Marketplace Assistant</span>
+                <div class="ai-chatbot-header-info">
+                    <h4>ADYANTA Support Bot</h4>
+                    <span>Active Marketplace Assistant</span>
                 </div>
             </div>
             <button id="closeChatbotBtn" style="background: none; border: none; color: white; font-size: 1.4rem; cursor: pointer; opacity: 0.85; transition: opacity 0.2s;">
                 <i class="ph ph-x"></i>
             </button>
         </div>
-        <div id="chatbotMessages" style="flex: 1; padding: 1.25rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem; background: var(--bg-color); scrollbar-width: none;">
-            <div style="align-self: flex-start; background: var(--card-bg); border: 1px solid var(--border); border-radius: 18px 18px 18px 2px; padding: 0.75rem 1rem; font-size: 0.85rem; max-width: 80%; line-height: 1.4; color: var(--text-main);">
+        <div id="chatbotMessages" class="ai-chatbot-messages">
+            <div class="ai-bubble-bot">
                 👋 Hello! Welcome to the ADYANTA Multi-Vendor Marketplace. I am your AI assistant! How can I help you today? You can ask me to:
-                <div style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.4rem;">
-                    <button class="chat-suggest-btn" onclick="sendChatbotSuggestion('🔍 Show active shops in Nellore')" style="text-align: left; background: var(--primary-light); color: var(--primary); border: none; padding: 6px 12px; border-radius: var(--radius-sm); font-size: 0.75rem; font-weight: 600; cursor: pointer;">🔍 Show active shops in Nellore</button>
-                    <button class="chat-suggest-btn" onclick="sendChatbotSuggestion('🎁 Give me active coupons')" style="text-align: left; background: var(--primary-light); color: var(--primary); border: none; padding: 6px 12px; border-radius: var(--radius-sm); font-size: 0.75rem; font-weight: 600; cursor: pointer;">🎁 Give me active coupons</button>
-                    <button class="chat-suggest-btn" onclick="sendChatbotSuggestion('⚡ What is the fastest delivery store?')" style="text-align: left; background: var(--primary-light); color: var(--primary); border: none; padding: 6px 12px; border-radius: var(--radius-sm); font-size: 0.75rem; font-weight: 600; cursor: pointer;">⚡ What is the fastest delivery store?</button>
+                <div style="margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                    <button class="chat-suggest-btn" onclick="sendChatbotSuggestion('🔍 Show active shops in Nellore')">
+                        <i class="ph ph-storefront"></i> Show active shops in Nellore
+                    </button>
+                    <button class="chat-suggest-btn" onclick="sendChatbotSuggestion('🎁 Give me active coupons')">
+                        <i class="ph ph-ticket"></i> Give me active coupons
+                    </button>
+                    <button class="chat-suggest-btn" onclick="sendChatbotSuggestion('⚡ What is the fastest delivery store?')">
+                        <i class="ph ph-lightning"></i> What is the fastest delivery store?
+                    </button>
                 </div>
             </div>
         </div>
-        <div style="padding: 0.75rem 1rem; border-top: 1px solid var(--border); background: var(--card-bg); display: flex; gap: 0.75rem; align-items: center;">
-            <input type="text" id="chatbotInput" placeholder="Ask anything about stores & products..." style="flex: 1; border: 1.5px solid var(--border); border-radius: 30px; padding: 8px 16px; font-size: 0.85rem; outline: none; transition: border 0.2s;" />
-            <button id="sendChatbotMsgBtn" style="background: var(--primary); color: white; border: none; border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.2s;">
+        <div class="ai-chatbot-input-bar">
+            <input type="text" id="chatbotInput" placeholder="Ask anything about stores & products..." />
+            <button id="sendChatbotMsgBtn" class="ai-chatbot-send-btn">
                 <i class="ph-fill ph-paper-plane-tilt" style="font-size: 1.1rem; color: white;"></i>
             </button>
         </div>
     </div>
 
     <!-- AI Chatbot Trigger Circle -->
-    <div id="aiChatbotBubble" style="position: fixed; bottom: 25px; right: 25px; width: 56px; height: 56px; background: linear-gradient(135deg, var(--primary), var(--primary-hover)); color: white; border-radius: 50%; box-shadow: var(--shadow-lg); display: flex; align-items: center; justify-content: center; font-size: 1.8rem; cursor: pointer; z-index: 9998; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.2); border: 2px solid white;">
+    <div id="aiChatbotBubble" class="ai-chatbot-bubble-trigger">
         <i class="ph-fill ph-robot" id="chatBubbleIcon" style="color: white;"></i>
+    </div>
+
+    <!-- Mock Payment Gateway Modal (Stripe / PayPal Simulation) -->
+    <div id="mockPaymentModal" class="modal-overlay" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(4px); z-index: 20000; align-items: center; justify-content: center; padding: 1rem;">
+        <div class="modal-content" style="background: white; width: 100%; max-width: 450px; border-radius: 20px; border: 1px solid var(--border); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); overflow: hidden; animation: fadeIn 0.3s ease;">
+            <!-- Modal Header -->
+            <div style="background: linear-gradient(135deg, var(--primary), #031F11); color: white; padding: 1.5rem; text-align: center; position: relative;">
+                <h3 style="font-family: 'Outfit', sans-serif; font-size: 1.25rem; font-weight: 700; margin-bottom: 0.25rem; color: white;">ADYANTA SECURE GATEWAY</h3>
+                <p style="font-size: 0.75rem; color: #E2E8F0; opacity: 0.9;">Simulated Sandbox Payment Processing</p>
+                <button type="button" onclick="closeMockPayment()" style="position: absolute; top: 1rem; right: 1rem; background: rgba(255,255,255,0.15); border: none; color: white; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.2s;"><i class="ph ph-x"></i></button>
+            </div>
+            <!-- Modal Body -->
+            <div style="padding: 1.5rem;" id="mockPaymentBody">
+                <div style="display: flex; justify-content: space-between; align-items: center; background: #F8FAFC; border: 1px solid #E2E8F0; padding: 0.75rem 1rem; border-radius: 12px; margin-bottom: 1.25rem;">
+                    <span style="font-size: 0.85rem; color: var(--text-soft); font-weight: 600;">Amount Payable:</span>
+                    <strong id="mockPaymentAmountText" style="font-size: 1.2rem; color: var(--primary); font-weight: 800;">₹0</strong>
+                </div>
+                
+                <!-- Card Fields Form -->
+                <div id="mockCardFields">
+                    <div style="margin-bottom: 1rem;">
+                        <label style="display: block; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--text-main); margin-bottom: 0.4rem; letter-spacing: 0.5px;">Cardholder Name</label>
+                        <input type="text" id="mockCardName" value="Suresh Kumar" class="form-input" style="padding-left: 1rem; width: 100%;" placeholder="e.g. Suresh Kumar">
+                    </div>
+                    <div style="margin-bottom: 1rem;">
+                        <label style="display: block; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--text-main); margin-bottom: 0.4rem; letter-spacing: 0.5px;">Card Number</label>
+                        <div class="input-wrapper" style="width: 100%;">
+                            <i class="ph ph-credit-card" style="left: 1rem; position: absolute; top: 50%; transform: translateY(-50%); color: var(--text-soft);"></i>
+                            <input type="text" id="mockCardNumber" value="4111 2222 3333 4444" class="form-input" style="width: 100%; padding-left: 2.5rem;" placeholder="4111 2222 3333 4444" maxlength="19">
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
+                        <div style="flex: 1;">
+                            <label style="display: block; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--text-main); margin-bottom: 0.4rem; letter-spacing: 0.5px;">Expiry Date</label>
+                            <input type="text" id="mockCardExpiry" value="12/28" class="form-input" style="padding-left: 1rem; width: 100%;" placeholder="MM/YY" maxlength="5">
+                        </div>
+                        <div style="flex: 1;">
+                            <label style="display: block; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--text-main); margin-bottom: 0.4rem; letter-spacing: 0.5px;">CVV</label>
+                            <input type="password" id="mockCardCvv" value="123" class="form-input" style="padding-left: 1rem; width: 100%;" placeholder="123" maxlength="3">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- UPI Fields Form -->
+                <div id="mockUpiFields" style="display: none;">
+                    <div style="margin-bottom: 1.5rem;">
+                        <label style="display: block; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--text-main); margin-bottom: 0.4rem; letter-spacing: 0.5px;">Enter UPI ID (VPA)</label>
+                        <div class="input-wrapper" style="width: 100%;">
+                            <i class="ph ph-qr-code" style="left: 1rem; position: absolute; top: 50%; transform: translateY(-50%); color: var(--text-soft);"></i>
+                            <input type="text" id="mockUpiId" value="suresh@okaxis" class="form-input" style="width: 100%; padding-left: 2.5rem;" placeholder="e.g. username@upi">
+                        </div>
+                    </div>
+                </div>
+
+                <button type="button" onclick="processMockPayment()" class="btn-submit" style="width: 100%; padding: 0.9rem; font-weight: 700; font-size: 1rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem; background: var(--primary); color: white; border: none; border-radius: 12px; cursor: pointer;">
+                    <span class="spinner" id="mockPaymentSpinner" style="width: 18px; height: 18px; display: none; border: 3px solid rgba(255,255,255,0.3); border-top: 3px solid white; border-radius: 50%; animation: spin 0.8s linear infinite;"></span>
+                    <span id="mockSubmitBtnText">Authorize Payment</span>
+                </button>
+            </div>
+        </div>
     </div>
 </body>
 </html>
