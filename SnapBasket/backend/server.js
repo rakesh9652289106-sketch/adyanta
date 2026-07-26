@@ -35,7 +35,12 @@ app.use(cors({
                             cleanOrigin === 'http://localhost' || 
                             cleanOrigin === 'http://127.0.0.1';
 
+        const isVercel = cleanOrigin.endsWith('.vercel.app') || cleanOrigin.includes('.vercel.app');
+        const isRender = cleanOrigin === 'https://adyanta.onrender.com';
+
         const isAllowed = isLocalhost || 
+                         isVercel ||
+                         isRender ||
                          allowedOrigins.some(o => o.replace(/\/$/, '') === cleanOrigin) || 
                          (cleanEnvOrigin && cleanEnvOrigin === cleanOrigin);
 
