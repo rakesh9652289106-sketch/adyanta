@@ -201,98 +201,144 @@ router.post('/orders', async (req, res) => {
     const userId = req.cookies.user_id || null;
     let { items, paymentMethod, address, couponId, deliveryType, useCoins } = req.body;
 
+    if (!items || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ error: "Cart is empty." });
+    }
+
     const parsePrice = (p) => typeof p === 'number' ? p : parseFloat(p.toString().replace(/[^0-9.]/g, '')) || 0;
-    let subtotal = items?.reduce((sum, item) => sum + (parsePrice(item.price) * (item.quantity || 1)), 0) || 0;
-    let finalTotal = subtotal;
 
     try {
+        // Ensure every item has a shop_id (query DB if missing)
+        const enrichedItems = await Promise.all(items.map(async (item) => {
+            let shopId = item.shop_id || item.shopId;
+            if (!shopId && item.id) {
+                const prod = await queryGet("SELECT shop_id FROM products WHERE id = ?", [item.id]);
+                if (prod && prod.shop_id) shopId = prod.shop_id;
+            }
+            return {
+                ...item,
+                shop_id: Number(shopId || 1)
+            };
+        }));
+
+        // Calculate overall subtotal
+        const overallSubtotal = enrichedItems.reduce((sum, item) => sum + (parsePrice(item.price) * (item.quantity || 1)), 0) || 0;
+        let totalCouponDiscount = 0;
+
         if (couponId) {
             const coupon = await queryGet("SELECT * FROM coupons WHERE id = ?", [couponId]);
             if (coupon) {
-                const discount = coupon.discount_type === 'percent' ? (subtotal * coupon.discount_value) / 100 : coupon.discount_value;
-                finalTotal = Math.max(0, subtotal - discount);
+                totalCouponDiscount = coupon.discount_type === 'percent' 
+                    ? Math.round((overallSubtotal * coupon.discount_value) / 100)
+                    : coupon.discount_value;
+                totalCouponDiscount = Math.min(totalCouponDiscount, overallSubtotal);
             }
         }
 
-        let coinsUsed = 0;
-        let coinsEarned = 0;
-        let coinDiscount = 0;
+        let totalCoinsUsed = 0;
+        let totalCoinsEarned = 0;
+        let totalCoinDiscount = 0;
+        let rewardRate = 1000;
+        let rewardAmount = 30;
 
         const settings = await queryGet("SELECT * FROM settings LIMIT 1");
         if (settings && settings.coins_system_active === 1) {
+            rewardRate = settings.coin_reward_rate || 1000;
+            rewardAmount = settings.coin_reward_amount || 30;
+
             if (useCoins && userId) {
                 const user = await queryGet("SELECT coins FROM users WHERE id = ?", [userId]);
                 if (user && user.coins > 0) {
                     const coinValue = settings.coin_value_per_rupee || 10;
-                    coinsUsed = user.coins;
-                    coinDiscount = Math.floor(coinsUsed / coinValue);
+                    totalCoinsUsed = user.coins;
+                    totalCoinDiscount = Math.floor(totalCoinsUsed / coinValue);
                     
-                    if (coinDiscount > finalTotal) {
-                        coinDiscount = finalTotal;
-                        coinsUsed = coinDiscount * coinValue;
+                    const subtotalAfterCoupon = overallSubtotal - totalCouponDiscount;
+                    if (totalCoinDiscount > subtotalAfterCoupon) {
+                        totalCoinDiscount = subtotalAfterCoupon;
+                        totalCoinsUsed = totalCoinDiscount * coinValue;
                     }
-                    finalTotal = Math.max(0, finalTotal - coinDiscount);
                 }
             }
-
-            // Calculate coins earned based on the remaining final total paid
-            const rewardRate = settings.coin_reward_rate || 1000;
-            const rewardAmount = settings.coin_reward_amount || 30;
-            coinsEarned = Math.floor(finalTotal / rewardRate) * rewardAmount;
         }
 
-        // Determine shop_id from items (using shop_id of the first item, default to 1)
-        let shopId = 1;
-        if (items && items.length > 0 && items[0].id) {
-            const product = await queryGet("SELECT shop_id FROM products WHERE id = ?", [items[0].id]);
-            if (product && product.shop_id) {
-                shopId = product.shop_id;
-            }
+        // Group enriched items by shop_id
+        const itemsByShop = {};
+        enrichedItems.forEach(item => {
+            const sId = item.shop_id;
+            if (!itemsByShop[sId]) itemsByShop[sId] = [];
+            itemsByShop[sId].push(item);
+        });
+
+        const shopIds = Object.keys(itemsByShop);
+        const subOrderIds = [];
+        let createdOrdersCount = 0;
+
+        for (const sId of shopIds) {
+            const shopItems = itemsByShop[sId];
+            const shopSubtotal = shopItems.reduce((sum, item) => sum + (parsePrice(item.price) * (item.quantity || 1)), 0);
+            
+            const propFactor = overallSubtotal > 0 ? (shopSubtotal / overallSubtotal) : (1 / shopIds.length);
+            const shopCouponDiscount = Math.round(totalCouponDiscount * propFactor);
+            const shopCoinDiscount = Math.round(totalCoinDiscount * propFactor);
+            const shopCoinsUsed = Math.round(totalCoinsUsed * propFactor);
+            const shopFinalTotal = Math.max(0, shopSubtotal - shopCouponDiscount - shopCoinDiscount);
+            const shopCoinsEarned = Math.floor(shopFinalTotal / rewardRate) * rewardAmount;
+            
+            totalCoinsEarned += shopCoinsEarned;
+
+            const itemsJsonStr = JSON.stringify(shopItems);
+            const result = await queryRun(
+                `INSERT INTO orders (user_id, total, items, payment_method, address, status, discount_amount, coupon_id, delivery_type, coins_used, coins_earned, shop_id) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    userId, 
+                    Math.round(shopFinalTotal), 
+                    itemsJsonStr, 
+                    paymentMethod, 
+                    address, 
+                    'pending', 
+                    Math.round(shopSubtotal - shopFinalTotal), 
+                    couponId, 
+                    deliveryType || 'Home Delivery', 
+                    shopCoinsUsed, 
+                    shopCoinsEarned,
+                    Number(sId)
+                ]
+            );
+
+            subOrderIds.push(result.lastID);
+            createdOrdersCount++;
         }
-
-        const itemsJsonStr = JSON.stringify(items);
-        const result = await queryRun(
-            `INSERT INTO orders (user_id, total, items, payment_method, address, status, discount_amount, coupon_id, delivery_type, coins_used, coins_earned, shop_id) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-                userId, 
-                Math.round(finalTotal), 
-                itemsJsonStr, 
-                paymentMethod, 
-                address, 
-                'pending', 
-                Math.round(subtotal - finalTotal), 
-                couponId, 
-                deliveryType || 'Home Delivery', 
-                coinsUsed, 
-                coinsEarned,
-                shopId
-            ]
-        );
-
-        const orderId = result.lastID;
 
         if (couponId && userId) {
             await queryRun("INSERT INTO coupon_usage (user_id, coupon_id) VALUES (?, ?)", [userId, couponId]);
         }
 
         // Update user's coin balance
-        if (userId && (coinsUsed > 0 || coinsEarned > 0)) {
+        if (userId && (totalCoinsUsed > 0 || totalCoinsEarned > 0)) {
             const user = await queryGet("SELECT coins FROM users WHERE id = ?", [userId]);
             const currentCoins = user?.coins || 0;
-            const newCoins = Math.max(0, currentCoins - coinsUsed + coinsEarned);
+            const newCoins = Math.max(0, currentCoins - totalCoinsUsed + totalCoinsEarned);
             await queryRun("UPDATE users SET coins = ? WHERE id = ?", [newCoins, userId]);
         }
 
+        const primaryOrderId = subOrderIds[0];
+        const displayOrderId = subOrderIds.map(id => `#${id}`).join(', ');
+
         res.status(201).json({ 
-            message: "Order placed!", 
-            orderId: orderId,
-            coinsUsed,
-            coinsEarned,
-            coinDiscount
+            message: createdOrdersCount > 1 ? `Placed ${createdOrdersCount} vendor sub-orders successfully!` : "Order placed!", 
+            orderId: primaryOrderId,
+            subOrderIds: subOrderIds,
+            displayOrderId: displayOrderId,
+            coinsUsed: totalCoinsUsed,
+            coinsEarned: totalCoinsEarned,
+            coinDiscount: totalCoinDiscount,
+            shopCount: createdOrdersCount
         });
 
     } catch (err) {
+        console.error("Error creating multi-shop orders:", err);
         res.status(500).json({ error: err.message });
     }
 });

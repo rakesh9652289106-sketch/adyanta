@@ -2289,7 +2289,7 @@ async function setupCartInteractions() {
                 showCheckoutStep('success');
                 
                 if (document.getElementById('successOrderId')) {
-                    document.getElementById('successOrderId').innerText = `#${data.dailySeq || dbOrderId || '0000'}`;
+                    document.getElementById('successOrderId').innerText = data.displayOrderId || `#${data.dailySeq || dbOrderId || '0000'}`;
                 }
                 if (document.getElementById('successMethod')) document.getElementById('successMethod').innerText = 'Cash on Delivery';
                 if (document.getElementById('successTotalAmount')) document.getElementById('successTotalAmount').innerText = document.getElementById('modalFinalTotal').innerText;
@@ -2789,11 +2789,11 @@ window.updateVariantPrice = function(select, prodId, productName) {
 function addToCart(product, selectedVariant = null) {
     console.log("Adding to cart:", product.name, "Variant:", selectedVariant?.weight);
 
-    
     const weight = selectedVariant ? selectedVariant.weight : product.weight;
     const price = selectedVariant ? selectedVariant.price : product.price;
     const originalprice = selectedVariant ? (selectedVariant.originalprice || selectedVariant.originalPrice) : (product.originalprice || product.originalPrice);
     const imgurl = product.imgurl || product.imgUrl || "";
+    const shopId = Number(product.shop_id || product.shopId || 1);
 
     // check if it exists in cart with same weight
     const existing = cart.find(item => Number(item.id) === Number(product.id) && String(item.weight) === String(weight));
@@ -2802,6 +2802,7 @@ function addToCart(product, selectedVariant = null) {
     } else {
         cart.push({ 
             ...product, 
+            shop_id: shopId,
             weight: weight,
             price: price,
             originalprice: originalprice,
@@ -2834,40 +2835,81 @@ function updateCartSidebar() {
     } else {
         emptyState.style.display = 'none';
         
+        // Group cart items by shop_id
+        const cartByShop = {};
         cart.forEach((item, index) => {
-            // Robust numeric extraction
-            const itemPrice = typeof item.price === 'string' ? parseFloat(item.price.replace(/[^0-9.]/g, '')) : Number(item.price);
-            const itemQty = Number(item.quantity) || 0;
-            
-            subtotal += (itemPrice || 0) * itemQty;
-            totalItems += itemQty;
-            
-            const itemHTML = document.createElement('div');
-            itemHTML.className = 'cart-item-row';
-            itemHTML.style.display = 'flex';
-            itemHTML.style.gap = '1rem';
-            itemHTML.style.marginBottom = '1rem';
-            itemHTML.style.paddingBottom = '1rem';
-            itemHTML.style.borderBottom = '1px solid var(--border)';
-            
-            itemHTML.innerHTML = `
-                <img src="${item.imgurl || item.imgUrl || ''}" onerror="this.src='https://images.unsplash.com/photo-1542838132-92c53300491e?w=300&text=Product'" style="width: 50px; height: 50px; object-fit: contain; background: var(--bg-color); border-radius: 8px;">
-                <div style="flex: 1;">
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                        <h5 style="font-size: 0.9rem; margin-bottom: 0.2rem;">${item.name}</h5>
-                    </div>
-                    <span style="font-size: 0.8rem; color: var(--text-soft);">${item.weight}</span>
-                    <div style="display: flex; justify-content: space-between; margin-top: 0.5rem; align-items: center;">
-                        <span style="font-weight: 600;">₹${itemPrice}</span>
-                        <div style="display: flex; align-items: center; gap: 0.5rem; background: var(--border); border-radius: 4px; overflow: hidden;">
-                            <button onclick="changeQuantity(${index}, -1)" style="border: none; padding: 2px 8px; cursor: pointer; background: #f1f5f9;">-</button>
-                            <span style="font-size: 0.85rem; padding: 0 4px; min-width: 20px; text-align: center;">${itemQty}</span>
-                            <button onclick="changeQuantity(${index}, 1)" style="border: none; padding: 2px 8px; cursor: pointer; background: #f1f5f9;">+</button>
+            const sId = item.shop_id || 1;
+            if (!cartByShop[sId]) cartByShop[sId] = [];
+            cartByShop[sId].push({ item, index });
+        });
+
+        const shopIds = Object.keys(cartByShop);
+
+        shopIds.forEach((sId) => {
+            // Lookup shop name from window.allShopsList or fallback
+            let shopName = "Adyanta Store";
+            if (window.allShopsList && Array.isArray(window.allShopsList)) {
+                const found = window.allShopsList.find(s => Number(s.id) === Number(sId));
+                if (found) shopName = found.name;
+            } else if (cartByShop[sId][0]?.item?.shop_name) {
+                shopName = cartByShop[sId][0].item.shop_name;
+            }
+
+            // Create Store Group Header
+            const shopHeader = document.createElement('div');
+            shopHeader.className = 'cart-item-row cart-shop-header';
+            shopHeader.style.background = '#f8fafc';
+            shopHeader.style.padding = '0.5rem 0.75rem';
+            shopHeader.style.borderRadius = '8px';
+            shopHeader.style.marginBottom = '0.75rem';
+            shopHeader.style.borderLeft = '3px solid #10B981';
+            shopHeader.style.display = 'flex';
+            shopHeader.style.alignItems = 'center';
+            shopHeader.style.justifyContent = 'space-between';
+            shopHeader.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 0.5rem; font-weight: 700; font-size: 0.85rem; color: var(--text-main);">
+                    <i class="ph ph-storefront" style="color: #10B981; font-size: 1.1rem;"></i>
+                    <span>${shopName}</span>
+                </div>
+                <span style="font-size: 0.75rem; background: #e2e8f0; padding: 2px 6px; border-radius: 4px; color: #475569;">${cartByShop[sId].length} item${cartByShop[sId].length > 1 ? 's' : ''}</span>
+            `;
+            itemsContainer.appendChild(shopHeader);
+
+            // Render items for this shop
+            cartByShop[sId].forEach(({ item, index }) => {
+                const itemPrice = typeof item.price === 'string' ? parseFloat(item.price.replace(/[^0-9.]/g, '')) : Number(item.price);
+                const itemQty = Number(item.quantity) || 0;
+                
+                subtotal += (itemPrice || 0) * itemQty;
+                totalItems += itemQty;
+
+                const itemHTML = document.createElement('div');
+                itemHTML.className = 'cart-item-row';
+                itemHTML.style.display = 'flex';
+                itemHTML.style.gap = '1rem';
+                itemHTML.style.marginBottom = '1rem';
+                itemHTML.style.paddingBottom = '1rem';
+                itemHTML.style.borderBottom = '1px solid var(--border)';
+
+                itemHTML.innerHTML = `
+                    <img src="${item.imgurl || item.imgUrl || ''}" onerror="this.src='https://images.unsplash.com/photo-1542838132-92c53300491e?w=300&text=Product'" style="width: 50px; height: 50px; object-fit: contain; background: var(--bg-color); border-radius: 8px;">
+                    <div style="flex: 1;">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <h5 style="font-size: 0.9rem; margin-bottom: 0.2rem;">${item.name}</h5>
+                        </div>
+                        <span style="font-size: 0.8rem; color: var(--text-soft);">${item.weight}</span>
+                        <div style="display: flex; justify-content: space-between; margin-top: 0.5rem; align-items: center;">
+                            <span style="font-weight: 600;">₹${itemPrice}</span>
+                            <div style="display: flex; align-items: center; gap: 0.5rem; background: var(--border); border-radius: 4px; overflow: hidden;">
+                                <button onclick="changeQuantity(${index}, -1)" style="border: none; padding: 2px 8px; cursor: pointer; background: #f1f5f9;">-</button>
+                                <span style="font-size: 0.85rem; padding: 0 4px; min-width: 20px; text-align: center;">${itemQty}</span>
+                                <button onclick="changeQuantity(${index}, 1)" style="border: none; padding: 2px 8px; cursor: pointer; background: #f1f5f9;">+</button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            `;
-            itemsContainer.appendChild(itemHTML);
+                `;
+                itemsContainer.appendChild(itemHTML);
+            });
         });
     }
 
@@ -4825,7 +4867,7 @@ window.processMockPayment = async function() {
             showCheckoutStep('success');
             
             if (document.getElementById('successOrderId')) {
-                document.getElementById('successOrderId').innerText = `#${data.dailySeq || dbOrderId || '0000'}`;
+                document.getElementById('successOrderId').innerText = data.displayOrderId || `#${data.dailySeq || dbOrderId || '0000'}`;
             }
             if (document.getElementById('successMethod')) {
                 document.getElementById('successMethod').innerText = selectedPaymentMethod === 'card' ? 'Credit / Debit Card' : 'UPI';
