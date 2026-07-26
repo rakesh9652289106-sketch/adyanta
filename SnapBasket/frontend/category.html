@@ -303,7 +303,7 @@
                 authContent.querySelector('.logout-trigger')?.addEventListener('click', async (e) => {
                     e.preventDefault();
                     if (confirm("Are you sure you want to log out?")) {
-                        await fetch('/api/auth/logout', { method: 'POST' });
+                        await fetch(API_BASE + '/api/auth/logout', { method: 'POST' });
                         document.cookie = "full_name=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
                         document.cookie = "username=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
                         document.cookie = "user_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";

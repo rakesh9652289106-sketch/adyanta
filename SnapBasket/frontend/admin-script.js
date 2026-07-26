@@ -2447,7 +2447,7 @@ window.fetchPromoBannersAdmin = fetchPromoBannersAdmin;
 // --- FEATURE FLAGS SWITCHBOARD (SUPER ADMIN) ---
 async function fetchFeatureFlags() {
     try {
-        const res = await fetch('/api/admin/features');
+        const res = await fetch(API_BASE + '/api/admin/features');
         if (!res.ok) throw new Error("Could not load features.");
         const flags = await res.json();
         
@@ -2481,7 +2481,7 @@ async function fetchFeatureFlags() {
 
 async function toggleFeatureFlag(id, is_active) {
     try {
-        const res = await fetch(`/api/admin/features/${id}`, {
+        const res = await fetch(`${API_BASE}/api/admin/features/${id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ is_active })

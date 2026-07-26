@@ -3990,7 +3990,7 @@ async function initMarketplaceEcosystem() {
     
     // A. Fetch active Feature Flags and apply toggles
     try {
-        const res = await fetch('/api/features');
+        const res = await fetch(API_BASE + '/api/features');
         if (res.ok) {
             platformFeatureFlags = await res.json();
             applyEcosystemFeatureFlags(platformFeatureFlags);
@@ -4001,7 +4001,7 @@ async function initMarketplaceEcosystem() {
 
     // B. Fetch and Render active Vendor Shops
     try {
-        const res = await fetch('/api/shops');
+        const res = await fetch(API_BASE + '/api/shops');
         if (res.ok) {
             allShopsList = await res.json();
             renderEcosystemShops(allShopsList);
@@ -4223,7 +4223,7 @@ window.enterEcosystemStorefront = async function(shopId) {
     }
 
     try {
-        const res = await fetch(`/api/shops/${shopId}`);
+        const res = await fetch(`${API_BASE}/api/shops/${shopId}`);
         if (!res.ok) throw new Error("Failed to load storefront details");
         const { shop, products: shopProds } = await res.json();
 
@@ -4446,7 +4446,7 @@ async function fetchStoreChatHistory(silent = false) {
     if (!activeSupportShopId) return;
     try {
         const sessId = getChatSessionId();
-        const res = await fetch(`/api/support/store-chat/history?shop_id=${activeSupportShopId}&session_id=${sessId}`);
+        const res = await fetch(`${API_BASE}/api/support/store-chat/history?shop_id=${activeSupportShopId}&session_id=${sessId}`);
         if (!res.ok) return;
         const chatMsgs = await res.json();
         if (chatMsgs.length !== lastMessageCount || !silent) {
@@ -4561,7 +4561,7 @@ function handleChatbotSend() {
 
     if (supportMode === 'store' && activeSupportShopId) {
         // Send message to the store vendor manual support API
-        fetch('/api/support/store-chat/send', {
+        fetch(API_BASE + '/api/support/store-chat/send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
