@@ -494,7 +494,7 @@
     <div id="toastContainer" style="position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 10000; pointer-events: none;"></div>
 
     <script>
-        const API_BASE = window.location.port === '5173' ? 'http://localhost:3000' : window.location.origin;
+        const API_BASE = window.location.port === '5173' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:3000' : 'https://adyanta.onrender.com';
         let recoveryQuestions = [];
 
         function setAuthMode(mode) {
