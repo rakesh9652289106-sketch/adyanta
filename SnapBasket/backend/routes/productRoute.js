@@ -15,20 +15,20 @@ router.get('/coupons/active', (req, res) => {
 router.get('/', (req, res) => {
     const { search, category } = req.query;
     
-    let sql = "SELECT * FROM products WHERE 1=1";
+    let sql = "SELECT p.*, s.name as shop_name FROM products p LEFT JOIN shops s ON p.shop_id = s.id WHERE 1=1";
     let params = [];
 
     if (search) {
-        sql += " AND (name LIKE ? OR description LIKE ?)";
+        sql += " AND (p.name LIKE ? OR p.description LIKE ?)";
         params.push(`%${search}%`, `%${search}%`);
     }
 
     if (category && category !== 'All') {
-        sql += " AND category = ?";
+        sql += " AND p.category = ?";
         params.push(category);
     }
 
-    sql += " ORDER BY id DESC";
+    sql += " ORDER BY p.id DESC";
 
     db.all(sql, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -50,7 +50,7 @@ router.get('/:id', (req, res) => {
     const { id } = req.params;
     if (isNaN(id)) return res.status(400).json({ error: "Invalid product ID" });
     
-    db.get("SELECT * FROM products WHERE id = ?", [id], (err, row) => {
+    db.get("SELECT p.*, s.name as shop_name FROM products p LEFT JOIN shops s ON p.shop_id = s.id WHERE p.id = ?", [id], (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!row) return res.status(404).json({ error: "Product not found" });
         res.json(row);
@@ -61,16 +61,16 @@ router.get('/:id', (req, res) => {
 router.get('/category/:categoryName', (req, res) => {
     const { categoryName } = req.params;
     const { shop_id } = req.query;
-    let sql = "SELECT * FROM products";
+    let sql = "SELECT p.*, s.name as shop_name FROM products p LEFT JOIN shops s ON p.shop_id = s.id";
     let params = [];
     let conditions = [];
     
     if (categoryName !== 'All') {
-        conditions.push("category = ?");
+        conditions.push("p.category = ?");
         params.push(categoryName);
     }
     if (shop_id) {
-        conditions.push("shop_id = ?");
+        conditions.push("p.shop_id = ?");
         params.push(shop_id);
     }
     
@@ -78,7 +78,7 @@ router.get('/category/:categoryName', (req, res) => {
         sql += " WHERE " + conditions.join(" AND ");
     }
     
-    sql += " ORDER BY id DESC";
+    sql += " ORDER BY p.id DESC";
     
     db.all(sql, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });

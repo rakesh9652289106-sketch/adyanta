@@ -498,9 +498,10 @@ router.get('/orders', async (req, res) => {
     const { date, search } = req.query;
     try {
         let sql = `
-            SELECT o.*, u.username as user_username, u.full_name as user_full_name, u.email as user_email, u.phone as user_phone
+            SELECT o.*, u.username as user_username, u.full_name as user_full_name, u.email as user_email, u.phone as user_phone, s.name as shop_name
             FROM orders o
             LEFT JOIN users u ON o.user_id = u.id
+            LEFT JOIN shops s ON o.shop_id = s.id
             WHERE 1=1
         `;
         let params = [];

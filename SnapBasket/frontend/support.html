@@ -244,11 +244,21 @@
     </footer>
 
     <script type="module">
-        const API_BASE = window.location.port === '5173' || window.location.port === '3000' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-            ? 'http://localhost:3000'
-            : 'https://adyanta.onrender.com';
+        const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+            ? `http://${window.location.hostname}:3000`
+            : '';
         
         async function loadSupportPage() {
+            // Auto-fill logged in user info if available
+            const savedName = localStorage.getItem('user_full_name') || '';
+            const savedEmail = localStorage.getItem('user_email') || '';
+            if (savedName && document.getElementById('cName') && !document.getElementById('cName').value) {
+                document.getElementById('cName').value = savedName;
+            }
+            if (savedEmail && document.getElementById('cEmail') && !document.getElementById('cEmail').value) {
+                document.getElementById('cEmail').value = savedEmail;
+            }
+
             // First load global defaults
             try {
                 const res = await fetch(API_BASE + '/api/settings');
@@ -293,18 +303,20 @@
         contactForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             formStatus.className = 'message-status';
-            formStatus.innerText = 'Sending...';
+            formStatus.innerText = 'Sending message...';
             formStatus.style.display = 'block';
 
             const urlParams = new URLSearchParams(window.location.search);
             const shopId = urlParams.get('shop_id') || localStorage.getItem('active_shop_id') || null;
+            const userId = localStorage.getItem('user_id') || null;
 
             const payload = {
                 name: document.getElementById('cName').value,
                 email: document.getElementById('cEmail').value,
                 subject: document.getElementById('cSubject').value,
                 message: document.getElementById('cMessage').value,
-                shop_id: shopId ? parseInt(shopId, 10) : null
+                shop_id: shopId ? parseInt(shopId, 10) : null,
+                user_id: userId ? parseInt(userId, 10) : null
             };
 
             try {
@@ -316,15 +328,16 @@
                 const data = await res.json();
 
                 if (res.ok) {
-                    formStatus.classList.add('success');
-                    formStatus.innerText = data.message;
-                    contactForm.reset();
+                    formStatus.className = 'message-status success';
+                    formStatus.innerText = data.message || 'Message sent successfully!';
+                    document.getElementById('cSubject').value = '';
+                    document.getElementById('cMessage').value = '';
                 } else {
-                    formStatus.classList.add('error');
+                    formStatus.className = 'message-status error';
                     formStatus.innerText = data.error || 'Failed to send message.';
                 }
             } catch(err) {
-                formStatus.classList.add('error');
+                formStatus.className = 'message-status error';
                 formStatus.innerText = 'Connection error. Please try again later.';
             }
         });

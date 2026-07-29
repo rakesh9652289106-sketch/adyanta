@@ -1,0 +1,8 @@
+node_modules/
+*.sqlite
+*.db
+git_diff.txt
+.env
+.env.*
+.DS_Store
+Thumbs.db

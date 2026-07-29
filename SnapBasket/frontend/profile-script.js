@@ -185,7 +185,11 @@ async function fetchOrders() {
                 <div class="dash-card">
                     <div style="display:flex; justify-content:space-between; border-bottom: 1px solid var(--border); padding-bottom:1rem; margin-bottom:1rem;">
                         <div>
-                            <span style="font-size:0.85rem; color:var(--text-soft);">Order ID: #${order.id}</span>
+                            <div style="display:flex; align-items:center; gap:0.4rem; font-size:0.85rem; color:var(--text-soft);">
+                                <span>Order ID: #${order.id}</span>
+                                <span>&bull;</span>
+                                <strong style="color: var(--primary); font-weight: 700;"><i class="ph ph-storefront"></i> ${order.shop_name || items[0]?.shop_name || items[0]?.shopName || 'Store'}</strong>
+                            </div>
                             <h4 style="margin-top:0.25rem;">${new Date(order.created_at).toLocaleDateString()}</h4>
                         </div>
                         <div style="text-align:right;">

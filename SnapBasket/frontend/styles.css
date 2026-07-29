@@ -4557,4 +4557,45 @@ body.dark-theme header.sticky .search-bar .search-brand-watermark {
     100% { background-position: 0% 50%; }
 }
 
+/* Inline Category Showcase Display System */
+.store-category-showcase-section {
+    background: var(--card-bg) !important;
+    border: 1.5px solid rgba(10, 92, 54, 0.18) !important;
+    border-radius: 24px !important;
+    padding: 1.5rem !important;
+    margin: 1.5rem 0 2rem 0 !important;
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(10, 92, 54, 0.08) !important;
+    animation: fadeInShowcase 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    position: relative;
+}
+
+@keyframes fadeInShowcase {
+    from {
+        opacity: 0;
+        transform: translateY(18px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.showcase-chip {
+    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.showcase-chip:hover {
+    transform: translateY(-2px) !important;
+    border-color: var(--primary) !important;
+    color: var(--primary) !important;
+}
+
+.showcase-chip.active {
+    background: linear-gradient(135deg, var(--primary), #06341D) !important;
+    color: white !important;
+    border-color: transparent !important;
+    box-shadow: 0 4px 12px rgba(10, 92, 54, 0.25) !important;
+}
+
+
 

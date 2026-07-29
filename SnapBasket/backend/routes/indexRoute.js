@@ -154,7 +154,8 @@ router.get('/settings', async (req, res) => {
 });
 
 router.post('/support/messages', async (req, res) => {
-    const userId = req.cookies.user_id || null;
+    const rawUserId = req.body.user_id || (req.cookies && req.cookies.user_id) || null;
+    const userId = rawUserId ? parseInt(rawUserId, 10) : null;
     const { name, email, subject, message, shop_id } = req.body;
     if (!name || !email || !message) return res.status(400).json({ error: "Missing fields" });
 
@@ -208,16 +209,28 @@ router.post('/orders', async (req, res) => {
     const parsePrice = (p) => typeof p === 'number' ? p : parseFloat(p.toString().replace(/[^0-9.]/g, '')) || 0;
 
     try {
-        // Ensure every item has a shop_id (query DB if missing)
+        // Ensure every item has a shop_id and shop_name (query DB if missing)
         const enrichedItems = await Promise.all(items.map(async (item) => {
             let shopId = item.shop_id || item.shopId;
-            if (!shopId && item.id) {
-                const prod = await queryGet("SELECT shop_id FROM products WHERE id = ?", [item.id]);
-                if (prod && prod.shop_id) shopId = prod.shop_id;
+            let shopName = item.shop_name || item.shopName || item.store_name;
+
+            if ((!shopId || !shopName) && item.id) {
+                const prod = await queryGet("SELECT p.shop_id, s.name as shop_name FROM products p LEFT JOIN shops s ON p.shop_id = s.id WHERE p.id = ?", [item.id]);
+                if (prod) {
+                    if (!shopId && prod.shop_id) shopId = prod.shop_id;
+                    if (!shopName && prod.shop_name) shopName = prod.shop_name;
+                }
             }
+
+            if (!shopName && shopId) {
+                const shopObj = await queryGet("SELECT name FROM shops WHERE id = ?", [shopId]);
+                if (shopObj && shopObj.name) shopName = shopObj.name;
+            }
+
             return {
                 ...item,
-                shop_id: Number(shopId || 1)
+                shop_id: Number(shopId || 1),
+                shop_name: shopName || `Store #${shopId || 1}`
             };
         }));
 
@@ -419,7 +432,10 @@ router.get('/shops/:id', async (req, res) => {
         const shop = await queryGet("SELECT * FROM shops WHERE id = ?", [id]);
         if (!shop) return res.status(404).json({ error: "Shop not found." });
 
-        const products = await queryAll("SELECT * FROM products WHERE shop_id = ? AND is_available = 1", [id]);
+        let products = await queryAll("SELECT p.*, s.name as shop_name FROM products p LEFT JOIN shops s ON p.shop_id = s.id WHERE p.shop_id = ? AND p.is_available = 1", [id]);
+        if (products && shop) {
+            products = products.map(p => ({ ...p, shop_name: p.shop_name || shop.name }));
+        }
         res.json({ shop, products: products || [] });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -448,7 +464,8 @@ router.post('/support/store-chat/send', async (req, res) => {
             return res.status(400).json({ error: "Missing shop_id or message." });
         }
 
-        const userId = req.cookies.user_id ? parseInt(req.cookies.user_id, 10) : null;
+        const rawUserId = req.body.user_id || (req.cookies && req.cookies.user_id) || null;
+        const userId = rawUserId ? parseInt(rawUserId, 10) : null;
         
         let finalUserName = user_name || 'Guest User';
         if (userId) {
@@ -470,25 +487,33 @@ router.post('/support/store-chat/send', async (req, res) => {
 
 router.get('/support/store-chat/history', async (req, res) => {
     try {
-        const { shop_id, session_id } = req.query;
+        const { shop_id, session_id, user_id } = req.query;
         if (!shop_id) {
             return res.status(400).json({ error: "Missing shop_id." });
         }
 
-        const userId = req.cookies.user_id ? parseInt(req.cookies.user_id, 10) : null;
+        const rawUserId = user_id || (req.cookies && req.cookies.user_id) || null;
+        const userId = rawUserId ? parseInt(rawUserId, 10) : null;
 
         let messages;
-        if (userId) {
+        if (userId && session_id) {
             messages = await queryAll(
                 `SELECT * FROM store_chat_messages 
-                 WHERE shop_id = ? AND (user_id = ? OR (user_id IS NULL AND session_id = ?))
+                 WHERE shop_id = ? AND (user_id = ? OR session_id = ?)
                  ORDER BY created_at ASC`,
-                [shop_id, userId, session_id || '']
+                [shop_id, userId, session_id]
+            );
+        } else if (userId) {
+            messages = await queryAll(
+                `SELECT * FROM store_chat_messages 
+                 WHERE shop_id = ? AND user_id = ?
+                 ORDER BY created_at ASC`,
+                [shop_id, userId]
             );
         } else {
             messages = await queryAll(
                 `SELECT * FROM store_chat_messages 
-                 WHERE shop_id = ? AND session_id = ? AND user_id IS NULL
+                 WHERE shop_id = ? AND session_id = ?
                  ORDER BY created_at ASC`,
                 [shop_id, session_id || '']
             );

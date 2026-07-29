@@ -40,7 +40,7 @@
                             </div>
                             <div class="ai-chatbot-header-info">
                                 <h4 style="margin: 0; color: white; font-size: 1rem; font-weight: 700;">ADYANTA Support Bot</h4>
-                                <span style="font-size: 0.75rem; color: #E2E8F0; opacity: 0.9;">Active Marketplace Assistant</span>
+                                <span class="ai-chatbot-status" style="font-size: 0.75rem; color: #E2E8F0; opacity: 0.9;">Active Marketplace Assistant</span>
                             </div>
                         </div>
                         <button id="closeChatbotBtn" style="background: none; border: none; color: white; font-size: 1.4rem; cursor: pointer; opacity: 0.85; transition: opacity 0.2s;">
@@ -90,10 +90,15 @@
         const messages = document.getElementById('chatbotMessages');
 
         if (!bubble || !widget) return;
-        if (bubble.dataset.globalBound === 'true') return;
-        bubble.dataset.globalBound = 'true';
 
-        bubble.addEventListener('click', () => {
+        // If main script setupAIChatbot is loaded, let script.js manage full dynamic responses
+        if (typeof window.setupAIChatbot === 'function') {
+            window.setupAIChatbot();
+            return;
+        }
+
+        bubble.onclick = (e) => {
+            if (e) e.preventDefault();
             const isHidden = !widget.classList.contains('active');
             if (isHidden) {
                 widget.classList.add('active');
@@ -102,15 +107,20 @@
             } else {
                 widget.classList.remove('active');
             }
-        });
+        };
 
         if (closeBtn) {
-            closeBtn.addEventListener('click', () => {
+            closeBtn.onclick = (e) => {
+                if (e) e.preventDefault();
                 widget.classList.remove('active');
-            });
+            };
         }
 
         const handleSend = () => {
+            if (typeof window.handleChatbotSend === 'function') {
+                window.handleChatbotSend();
+                return;
+            }
             if (!input || !input.value.trim() || !messages) return;
             const userText = input.value.trim();
             input.value = '';
@@ -158,17 +168,22 @@
             }, 600);
         };
 
-        if (sendBtn) sendBtn.addEventListener('click', handleSend);
+        if (sendBtn) sendBtn.onclick = handleSend;
         if (input) {
-            input.addEventListener('keydown', (e) => {
+            input.onkeydown = (e) => {
                 if (e.key === 'Enter') handleSend();
-            });
+            };
         }
 
         window.sendChatbotSuggestion = function(text) {
-            if (input) {
-                input.value = text;
-                handleSend();
+            if (typeof window.handleChatbotSend === 'function') {
+                if (input) input.value = text;
+                window.handleChatbotSend();
+            } else {
+                if (input) {
+                    input.value = text;
+                    handleSend();
+                }
             }
         };
     }

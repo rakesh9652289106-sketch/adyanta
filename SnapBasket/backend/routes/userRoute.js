@@ -4,7 +4,7 @@ const { db } = require('../db');
 
 // Middleware to check if user is logged in
 const checkUserAuth = (req, res, next) => {
-    const userId = req.cookies.user_id;
+    const userId = (req.cookies && req.cookies.user_id) || req.headers['x-user-id'] || req.query.user_id || req.body?.user_id;
     if (!userId) {
         return res.status(401).json({ error: "Please log in to continue." });
     }
@@ -48,7 +48,11 @@ router.put('/profile', (req, res) => {
 
 // 2. Orders History
 router.get('/orders', (req, res) => {
-    db.all("SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC", [req.userId], (err, rows) => {
+    db.all(`SELECT o.*, s.name as shop_name 
+            FROM orders o 
+            LEFT JOIN shops s ON o.shop_id = s.id 
+            WHERE o.user_id = ? 
+            ORDER BY o.created_at DESC`, [req.userId], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows || []);
     });

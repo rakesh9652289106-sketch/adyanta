@@ -278,11 +278,15 @@
                         const price = selectedVariant ? selectedVariant.price : prod.price;
                         const originalprice = selectedVariant ? selectedVariant.originalprice : (prod.originalPrice || prod.originalprice);
 
+                        const shop_id = Number(prod.shop_id || prod.shopId || 1);
+                        const shop_name = prod.shop_name || prod.shopName || prod.store_name || (window.allShopsList?.find(s => Number(s.id) === shop_id)?.name);
+
                         const existing = cart.find(item => Number(item.id) === Number(prod.id) && String(item.weight) === String(weight));
                         if (existing) {
                             existing.quantity += 1;
+                            if (shop_name && !existing.shop_name) existing.shop_name = shop_name;
                         } else {
-                            cart.push({ ...prod, weight, price, originalprice, quantity: 1 });
+                            cart.push({ ...prod, shop_id, shop_name, weight, price, originalprice, quantity: 1 });
                         }
                         localStorage.setItem('cart', JSON.stringify(cart));
                         Toast.show("Added to cart", "success");

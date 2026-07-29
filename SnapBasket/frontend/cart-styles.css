@@ -148,3 +148,17 @@ body.dark-theme .cart-item-row button {
     background: #1E293B !important;
     color: #F8FAFC !important;
 }
+
+body.dark-theme .cart-shop-header {
+    background: #1E293B !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+body.dark-theme .cart-shop-header span {
+    color: #F8FAFC !important;
+}
+
+body.dark-theme .cart-shop-header .cart-item-count-badge {
+    background: #334155 !important;
+    color: #94A3B8 !important;
+}

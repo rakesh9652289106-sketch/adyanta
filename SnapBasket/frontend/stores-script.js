@@ -245,6 +245,10 @@ window.enterStore = function(shopId) {
 
 // Initialize AI Chatbot on All Stores Page
 function setupStoresAIChatbot() {
+    if (typeof window.setupAIChatbot === 'function') {
+        window.setupAIChatbot();
+        return;
+    }
     const bubble = document.getElementById('aiChatbotBubble');
     const widget = document.getElementById('aiChatbotWidget');
     const closeBtn = document.getElementById('closeChatbotBtn');
@@ -254,8 +258,13 @@ function setupStoresAIChatbot() {
 
     if (!bubble || !widget) return;
 
-    // Toggle Chat visibility
-    bubble.addEventListener('click', () => {
+    const activeShopId = localStorage.getItem('active_shop_id') ? parseInt(localStorage.getItem('active_shop_id'), 10) : null;
+    const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+        ? `http://${window.location.hostname}:3000`
+        : '';
+
+    bubble.onclick = (e) => {
+        if (e) e.preventDefault();
         const isHidden = !widget.classList.contains('active');
         if (isHidden) {
             widget.classList.add('active');
@@ -264,20 +273,21 @@ function setupStoresAIChatbot() {
         } else {
             widget.classList.remove('active');
         }
-    });
+    };
 
     if (closeBtn) {
-        closeBtn.addEventListener('click', () => {
+        closeBtn.onclick = (e) => {
+            if (e) e.preventDefault();
             widget.classList.remove('active');
-        });
+        };
     }
 
     // Send Message
     if (sendBtn && input) {
-        sendBtn.addEventListener('click', handleChatbotSend);
-        input.addEventListener('keydown', (e) => {
+        sendBtn.onclick = handleChatbotSend;
+        input.onkeydown = (e) => {
             if (e.key === 'Enter') handleChatbotSend();
-        });
+        };
     }
 
     // Handle suggested clicks
@@ -301,6 +311,28 @@ function setupStoresAIChatbot() {
             </div>
         `;
         messages.scrollTop = messages.scrollHeight;
+
+        if (activeShopId) {
+            const userId = localStorage.getItem('user_id') ? parseInt(localStorage.getItem('user_id'), 10) : null;
+            const userName = localStorage.getItem('user_full_name') || 'Guest User';
+            let sessId = localStorage.getItem('store_chat_session_id');
+            if (!sessId) {
+                sessId = 'session_' + Math.random().toString(36).substring(2, 15) + '_' + Date.now();
+                localStorage.setItem('store_chat_session_id', sessId);
+            }
+            fetch(API_BASE + '/api/support/store-chat/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    shop_id: activeShopId,
+                    user_id: userId,
+                    message: userText,
+                    session_id: sessId,
+                    user_name: userName
+                })
+            }).catch(err => console.error("Error sending store chat:", err));
+            return;
+        }
 
         // Simulate typing loader
         const loaderId = `chat-loader-${Date.now()}`;

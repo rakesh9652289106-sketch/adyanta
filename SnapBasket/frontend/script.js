@@ -2596,34 +2596,134 @@ function mapCategoryToShopCategory(name) {
     return 'General Store';
 }
 
+// New Inline Category Showcase System
+window.showcaseCategoryProducts = function(catName) {
+    console.log(`Showing inline category showcase for: ${catName}`);
+    const activeShopId = localStorage.getItem('active_shop_id');
+    const isStorefront = Boolean(activeShopId && currentShopProducts && currentShopProducts.length > 0);
+    const sourceProducts = isStorefront ? currentShopProducts : (products && products.length > 0 ? products : []);
+    
+    const container = document.getElementById('storeCategoryShowcaseSection');
+    const grid = document.getElementById('showcaseProductGrid');
+    const titleEl = document.getElementById('showcaseCategoryTitle');
+    const subTextEl = document.getElementById('showcaseSubText');
+    const badgeEl = document.getElementById('showcaseItemBadge');
+    const iconEl = document.getElementById('showcaseIcon');
+    
+    if (!container || !grid) return;
+
+    const categoryQuery = (!catName || catName === 'All') ? 'All' : catName.trim();
+
+    // Sync active state on category scroll cards & category chips
+    document.querySelectorAll('#categoryScroll .category-card, .category-chip, .sticky-cat-chip').forEach(el => {
+        const text = (el.querySelector('.category-name') || el.querySelector('span') || el).innerText.trim();
+        if (text.toLowerCase() === categoryQuery.toLowerCase() || (categoryQuery === 'All' && text === 'All')) {
+            el.classList.add('active');
+        } else {
+            el.classList.remove('active');
+        }
+    });
+
+    if (categoryQuery === 'All') {
+        container.style.display = 'none';
+        if (isStorefront) {
+            renderStorefrontProducts(currentShopProducts, currentShopName);
+        } else {
+            toggleHomeSections(true);
+        }
+        return;
+    }
+
+    // Filter products belonging to this category
+    let filtered = sourceProducts.filter(p => {
+        const cat = (p.category || p.Category || '').toLowerCase();
+        return cat === categoryQuery.toLowerCase() || cat.includes(categoryQuery.toLowerCase()) || categoryQuery.toLowerCase().includes(cat);
+    });
+
+    window.currentShowcaseItems = filtered;
+    window.currentShowcaseCategoryName = categoryQuery;
+
+    // Update Showcase Header UI
+    if (titleEl) titleEl.innerText = categoryQuery;
+    if (badgeEl) badgeEl.innerText = `${filtered.length} Item${filtered.length === 1 ? '' : 's'}`;
+    if (subTextEl) {
+        subTextEl.innerText = isStorefront 
+            ? `Available items in ${currentShopName || 'this store'}` 
+            : `Available items in ADYANTA Marketplace`;
+    }
+
+    // Dynamic Category Icon mapping
+    if (iconEl) {
+        let iconClass = 'ph-squares-four';
+        if (categoryQuery.includes('Vegetable') || categoryQuery.includes('Produce')) iconClass = 'ph-leaf';
+        else if (categoryQuery.includes('Fruit')) iconClass = 'ph-apple-logo';
+        else if (categoryQuery.includes('Dairy') || categoryQuery.includes('Bread') || categoryQuery.includes('Bakery')) iconClass = 'ph-drop';
+        else if (categoryQuery.includes('Frozen')) iconClass = 'ph-snowflake';
+        else if (categoryQuery.includes('Drink') || categoryQuery.includes('Juice')) iconClass = 'ph-drop';
+        else if (categoryQuery.includes('Gold') || categoryQuery.includes('Jewelry')) iconClass = 'ph-crown';
+        else if (categoryQuery.includes('Wear') || categoryQuery.includes('Dressing')) iconClass = 'ph-t-shirt';
+        else if (categoryQuery.includes('Health') || categoryQuery.includes('Pharmacy')) iconClass = 'ph-first-aid';
+        else iconClass = 'ph-shopping-bag';
+        
+        iconEl.className = `ph ${iconClass}`;
+    }
+
+    // Show Showcase Section right below category bar
+    container.style.display = 'block';
+
+    if (filtered.length === 0) {
+        grid.innerHTML = `
+            <div style="grid-column: 1 / -1; padding: 3rem; text-align: center; color: var(--text-soft); font-weight: 600; width: 100%;">
+                <i class="ph ph-basket" style="font-size: 3.5rem; color: var(--text-muted); display: block; margin-bottom: 0.75rem;"></i>
+                No items found in <strong>${categoryQuery}</strong> category for ${isStorefront ? currentShopName : 'this store'}.
+                <div style="margin-top: 1rem;">
+                    <button class="btn btn-outline btn-sm" onclick="window.clearShowcaseCategory()">View All Store Products</button>
+                </div>
+            </div>
+        `;
+    } else {
+        populateProducts("showcaseProductGrid", filtered);
+    }
+
+    // Reset sort chips active state
+    document.querySelectorAll('.showcase-chip').forEach(b => b.classList.remove('active'));
+    const firstChip = document.querySelector('.showcase-chip');
+    if (firstChip) firstChip.classList.add('active');
+
+    // Scroll smoothly right to the inline showcase section right below the categories bar
+    setTimeout(() => {
+        container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+};
+
+window.clearShowcaseCategory = function() {
+    window.showcaseCategoryProducts('All');
+};
+
+window.sortShowcaseItems = function(sortType, btnEl) {
+    document.querySelectorAll('.showcase-chip').forEach(b => b.classList.remove('active'));
+    if (btnEl) btnEl.classList.add('active');
+
+    let items = [...(window.currentShowcaseItems || [])];
+    if (sortType === 'trending') {
+        items = items.filter(p => p.is_trending === 1).concat(items.filter(p => p.is_trending !== 1));
+    } else if (sortType === 'price-low') {
+        items.sort((a, b) => Number(a.price) - Number(b.price));
+    } else if (sortType === 'discount') {
+        items.sort((a, b) => {
+            const dA = parseFloat((a.discount || '').replace(/[^0-9.]/g, '')) || 0;
+            const dB = parseFloat((b.discount || '').replace(/[^0-9.]/g, '')) || 0;
+            return dB - dA;
+        });
+    }
+    populateProducts("showcaseProductGrid", items);
+};
+
 window.filterByCategory = function(catName) {
     const activeShopId = localStorage.getItem('active_shop_id');
     if (activeShopId) {
         console.log(`Filtering shop products by category: ${catName}`);
-        
-        // Sync active class on category cards
-        document.querySelectorAll('#categoryScroll .category-card').forEach(c => {
-            const cardText = c.querySelector('.category-name')?.innerText.trim();
-            if (cardText === catName || (catName === 'All' && cardText === 'All')) {
-                c.classList.add('active');
-            } else {
-                c.classList.remove('active');
-            }
-        });
-        
-        // Sync active class on chips
-        document.querySelectorAll('.category-chip, .sticky-cat-chip').forEach(c => {
-            const chipText = c.innerText.trim();
-            if (chipText === catName || (catName === 'All' && chipText === 'All')) {
-                c.classList.add('active');
-            } else {
-                c.classList.remove('active');
-            }
-        });
-
-        // Filter products and render them under storefront products list
-        const filteredProds = (!catName || catName === 'All') ? currentShopProducts : currentShopProducts.filter(p => (p.category || '').toLowerCase() === catName.toLowerCase());
-        renderStorefrontProducts(filteredProds, currentShopName);
+        window.showcaseCategoryProducts(catName);
     } else {
         if (!catName || catName === 'All') {
             window.location.href = 'stores.html?category=All';
@@ -2795,14 +2895,22 @@ function addToCart(product, selectedVariant = null) {
     const imgurl = product.imgurl || product.imgUrl || "";
     const shopId = Number(product.shop_id || product.shopId || 1);
 
+    let shopName = product.shop_name || product.shopName || product.store_name || null;
+    if (!shopName && window.allShopsList && Array.isArray(window.allShopsList)) {
+        const found = window.allShopsList.find(s => Number(s.id) === Number(shopId));
+        if (found && found.name) shopName = found.name;
+    }
+
     // check if it exists in cart with same weight
     const existing = cart.find(item => Number(item.id) === Number(product.id) && String(item.weight) === String(weight));
     if (existing) {
         existing.quantity += 1;
+        if (shopName && !existing.shop_name) existing.shop_name = shopName;
     } else {
         cart.push({ 
             ...product, 
             shop_id: shopId,
+            shop_name: shopName,
             weight: weight,
             price: price,
             originalprice: originalprice,
@@ -2846,22 +2954,36 @@ function updateCartSidebar() {
         const shopIds = Object.keys(cartByShop);
 
         shopIds.forEach((sId) => {
-            // Lookup shop name from window.allShopsList or fallback
-            let shopName = "Adyanta Store";
-            if (window.allShopsList && Array.isArray(window.allShopsList)) {
+            // Lookup shop name from item, window.allShopsList, or fallback
+            let shopName = null;
+            const group = cartByShop[sId];
+            if (group && group.length > 0) {
+                for (const entry of group) {
+                    const item = entry.item;
+                    if (item.shop_name || item.shopName || item.store_name) {
+                        shopName = item.shop_name || item.shopName || item.store_name;
+                        break;
+                    }
+                }
+            }
+
+            if (!shopName && window.allShopsList && Array.isArray(window.allShopsList) && window.allShopsList.length > 0) {
                 const found = window.allShopsList.find(s => Number(s.id) === Number(sId));
-                if (found) shopName = found.name;
-            } else if (cartByShop[sId][0]?.item?.shop_name) {
-                shopName = cartByShop[sId][0].item.shop_name;
+                if (found && found.name) shopName = found.name;
+            }
+
+            if (!shopName) {
+                shopName = `Store #${sId}`;
             }
 
             // Create Store Group Header
             const shopHeader = document.createElement('div');
             shopHeader.className = 'cart-item-row cart-shop-header';
-            shopHeader.style.background = '#f8fafc';
-            shopHeader.style.padding = '0.5rem 0.75rem';
+            shopHeader.style.background = 'var(--bg-color)';
+            shopHeader.style.padding = '0.6rem 0.85rem';
             shopHeader.style.borderRadius = '8px';
             shopHeader.style.marginBottom = '0.75rem';
+            shopHeader.style.border = '1px solid var(--border)';
             shopHeader.style.borderLeft = '3px solid #10B981';
             shopHeader.style.display = 'flex';
             shopHeader.style.alignItems = 'center';
@@ -2869,9 +2991,9 @@ function updateCartSidebar() {
             shopHeader.innerHTML = `
                 <div style="display: flex; align-items: center; gap: 0.5rem; font-weight: 700; font-size: 0.85rem; color: var(--text-main);">
                     <i class="ph ph-storefront" style="color: #10B981; font-size: 1.1rem;"></i>
-                    <span>${shopName}</span>
+                    <span style="color: var(--text-main); font-weight: 700;">${shopName}</span>
                 </div>
-                <span style="font-size: 0.75rem; background: #e2e8f0; padding: 2px 6px; border-radius: 4px; color: #475569;">${cartByShop[sId].length} item${cartByShop[sId].length > 1 ? 's' : ''}</span>
+                <span class="cart-item-count-badge" style="font-size: 0.75rem; background: var(--border); padding: 2px 8px; border-radius: 4px; color: var(--text-soft); font-weight: 600;">${cartByShop[sId].length} item${cartByShop[sId].length > 1 ? 's' : ''}</span>
             `;
             itemsContainer.appendChild(shopHeader);
 
@@ -2901,9 +3023,9 @@ function updateCartSidebar() {
                         <div style="display: flex; justify-content: space-between; margin-top: 0.5rem; align-items: center;">
                             <span style="font-weight: 600;">₹${itemPrice}</span>
                             <div style="display: flex; align-items: center; gap: 0.5rem; background: var(--border); border-radius: 4px; overflow: hidden;">
-                                <button onclick="changeQuantity(${index}, -1)" style="border: none; padding: 2px 8px; cursor: pointer; background: #f1f5f9;">-</button>
+                                <button onclick="changeQuantity(${index}, -1)" style="border: none; padding: 2px 8px; cursor: pointer;">-</button>
                                 <span style="font-size: 0.85rem; padding: 0 4px; min-width: 20px; text-align: center;">${itemQty}</span>
-                                <button onclick="changeQuantity(${index}, 1)" style="border: none; padding: 2px 8px; cursor: pointer; background: #f1f5f9;">+</button>
+                                <button onclick="changeQuantity(${index}, 1)" style="border: none; padding: 2px 8px; cursor: pointer;">+</button>
                             </div>
                         </div>
                     </div>
@@ -3012,7 +3134,13 @@ function refreshProductButtons() {
 }
 
 window.addToCartByGrid = function(btnEl, productName, prodId) {
-    const prod = products.find(p => String(p.id) === String(prodId) || p.name === productName);
+    let prod = null;
+    if (typeof currentShopProducts !== 'undefined' && Array.isArray(currentShopProducts) && currentShopProducts.length > 0) {
+        prod = currentShopProducts.find(p => String(p.id) === String(prodId) || p.name === productName);
+    }
+    if (!prod && typeof products !== 'undefined' && Array.isArray(products)) {
+        prod = products.find(p => String(p.id) === String(prodId) || p.name === productName);
+    }
     if(prod) {
         // Find the card containing THIS button
         const card = btnEl ? btnEl.closest('.product-card') : document.querySelector(`.product-action-container[data-product-id="${prod.id}"]`)?.closest('.product-card');
@@ -3601,43 +3729,9 @@ window.filterByChip = function(name, el) {
     const activeShopId = localStorage.getItem('active_shop_id');
     if (activeShopId) {
         console.log(`Filtering shop products by chip: ${name}`);
-        
-        // Sync active class on chips
-        document.querySelectorAll('.category-chip, .sticky-cat-chip').forEach(c => {
-            const chipText = c.innerText.trim();
-            if (chipText === name || (name === 'All' && chipText === 'All')) {
-                c.classList.add('active');
-            } else {
-                c.classList.remove('active');
-            }
-        });
-
-        // Sync active class on category cards
-        document.querySelectorAll('#categoryScroll .category-card').forEach(c => {
-            const cardText = c.querySelector('.category-name')?.innerText.trim();
-            if (cardText === name || (name === 'All' && cardText === 'All')) {
-                c.classList.add('active');
-            } else {
-                c.classList.remove('active');
-            }
-        });
-
-        // Filter products and render them under storefront products list
-        const filteredProds = (name === 'All') ? currentShopProducts : currentShopProducts.filter(p => (p.category || '').toLowerCase() === name.toLowerCase());
-        renderStorefrontProducts(filteredProds, currentShopName);
+        window.showcaseCategoryProducts(name);
     } else {
-        document.querySelectorAll('.category-chip, .sticky-cat-chip').forEach(c => c.classList.remove('active'));
-        document.querySelectorAll('.category-chip, .sticky-cat-chip').forEach(c => {
-            if (c.innerText.trim() === name || (name === 'All' && c.innerText.trim() === 'All')) {
-                c.classList.add('active');
-            }
-        });
-        if (!name || name === 'All') {
-            window.location.href = 'stores.html?category=All';
-        } else {
-            const mappedCat = mapCategoryToShopCategory(name);
-            window.location.href = `stores.html?category=${encodeURIComponent(mappedCat)}`;
-        }
+        window.showcaseCategoryProducts(name);
     }
 };
 
@@ -4046,7 +4140,11 @@ async function initMarketplaceEcosystem() {
         const res = await fetch(API_BASE + '/api/shops');
         if (res.ok) {
             allShopsList = await res.json();
+            window.allShopsList = allShopsList;
             renderEcosystemShops(allShopsList);
+            if (typeof updateCartSidebar === 'function') {
+                updateCartSidebar();
+            }
         }
     } catch(e) {
         console.warn("Failed to load marketplace shops:", e.message);
@@ -4398,11 +4496,12 @@ window.toggleSupportMode = function(mode, shopId, shopName) {
     const alreadyInStoreMode = (supportMode === 'store' && activeSupportShopId === shopId);
     supportMode = mode;
     activeSupportShopId = shopId;
+    if (shopName) currentShopName = shopName;
     
     const bubbleIcon = document.getElementById('chatBubbleIcon');
     const headerIcon = document.querySelector('#aiChatbotWidget i.ph-robot, #aiChatbotWidget i.ph-chat-circle-dots');
     const headerTitle = document.querySelector('#aiChatbotWidget h4');
-    const headerStatus = document.querySelector('#aiChatbotWidget span');
+    const headerStatus = document.querySelector('#aiChatbotWidget .ai-chatbot-status') || document.querySelector('#aiChatbotWidget .ai-chatbot-header-info span');
     const input = document.getElementById('chatbotInput');
     const messages = document.getElementById('chatbotMessages');
     
@@ -4419,14 +4518,14 @@ window.toggleSupportMode = function(mode, shopId, shopName) {
             headerIcon.style.color = 'white';
         }
         if (headerTitle) {
-            headerTitle.innerText = `${shopName || 'Shop'} Support`;
+            headerTitle.innerText = `${shopName || 'Store'} Support`;
         }
         if (headerStatus) {
-            headerStatus.innerHTML = `<span style="width: 6px; height: 6px; background: #22C55E; border-radius: 50%; display: inline-block;"></span> Manual Store Support`;
+            headerStatus.innerHTML = `<span style="width: 7px; height: 7px; background: #22C55E; border-radius: 50%; display: inline-block;"></span> Vendor Direct Support (Online)`;
             headerStatus.style.color = 'white';
         }
         if (input) {
-            input.placeholder = `Message ${shopName || 'Shop'} Vendor...`;
+            input.placeholder = `Message ${shopName || 'Store'} Vendor...`;
         }
         
         if (!alreadyInStoreMode || !historyFetched) {
@@ -4474,7 +4573,7 @@ function startStoreChatPolling() {
         if (widget && widget.classList.contains('active')) {
             fetchStoreChatHistory(true);
         }
-    }, 3000);
+    }, 2000);
 }
 
 function stopStoreChatPolling() {
@@ -4488,7 +4587,8 @@ async function fetchStoreChatHistory(silent = false) {
     if (!activeSupportShopId) return;
     try {
         const sessId = getChatSessionId();
-        const res = await fetch(`${API_BASE}/api/support/store-chat/history?shop_id=${activeSupportShopId}&session_id=${sessId}`);
+        const userId = localStorage.getItem('user_id') || '';
+        const res = await fetch(`${API_BASE}/api/support/store-chat/history?shop_id=${activeSupportShopId}&session_id=${sessId}&user_id=${userId}`);
         if (!res.ok) return;
         const chatMsgs = await res.json();
         if (chatMsgs.length !== lastMessageCount || !silent) {
@@ -4506,8 +4606,11 @@ function renderStoreChatMessages(chatMsgs) {
     
     if (chatMsgs.length === 0) {
         messages.innerHTML = `
-            <div class="ai-bubble-bot">
-                👋 Welcome to ${currentShopName || 'our shop'}! You can send us a message here for manual customer support, and we will get back to you shortly.
+            <div class="ai-bubble-bot" style="border-left: 4px solid var(--primary); background: rgba(10, 92, 54, 0.08);">
+                <div style="font-weight:700; color:var(--primary); margin-bottom:6px; display:flex; align-items:center; gap:6px;">
+                    <i class="ph ph-storefront" style="font-size:1.1rem;"></i> Contact Store Vendor Directly
+                </div>
+                Welcome to <strong>${currentShopName || 'our store'}</strong>! Send a message below to reach the shop vendor directly. The vendor will reply to you in real-time.
             </div>
         `;
         return;
@@ -4515,16 +4618,22 @@ function renderStoreChatMessages(chatMsgs) {
     
     messages.innerHTML = chatMsgs.map(m => {
         const isUser = m.sender === 'user';
+        const timeStr = m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
         if (isUser) {
             return `
-                <div class="ai-bubble-user">
-                    ${m.message}
+                <div class="ai-bubble-user" style="position: relative;">
+                    <div>${m.message}</div>
+                    <div style="font-size:0.65rem; color:rgba(255,255,255,0.75); text-align:right; margin-top:4px;">${timeStr}</div>
                 </div>
             `;
         } else {
             return `
-                <div class="ai-bubble-bot">
-                    ${m.message}
+                <div class="ai-bubble-bot" style="border-left: 4px solid #0A5C36; background: #F0FDF4; color: #064E3B; border-radius: 14px 14px 14px 2px;">
+                    <div style="font-size:0.75rem; font-weight:700; color:#0A5C36; margin-bottom:4px; display:flex; align-items:center; gap:4px;">
+                        <i class="ph ph-storefront"></i> ${currentShopName || 'Store Vendor'} Reply
+                    </div>
+                    <div style="font-size:0.9rem; line-height:1.4;">${m.message}</div>
+                    <div style="font-size:0.65rem; color:#047857; text-align:right; margin-top:4px;">${timeStr}</div>
                 </div>
             `;
         }
@@ -4543,49 +4652,70 @@ function setupAIChatbot() {
 
     if (!bubble || !widget) return;
 
-    // Toggle Chat visibility
-    bubble.addEventListener('click', () => {
-        if (supportMode === 'store' && activeSupportShopId) {
-            window.location.href = `support.html?shop_id=${activeSupportShopId}`;
-            return;
-        }
+    // Direct assignment to eliminate listener stacking conflicts
+    bubble.onclick = (e) => {
+        if (e) e.preventDefault();
         const isHidden = !widget.classList.contains('active');
         if (isHidden) {
             widget.classList.add('active');
-            input.focus();
-            scrollToBottom(messages);
-            if (supportMode === 'store') {
+            if (input) input.focus();
+            if (messages) scrollToBottom(messages);
+            if (supportMode === 'store' && typeof startStoreChatPolling === 'function') {
                 startStoreChatPolling();
             }
         } else {
             widget.classList.remove('active');
-            stopStoreChatPolling();
+            if (typeof stopStoreChatPolling === 'function') {
+                stopStoreChatPolling();
+            }
         }
-    });
+    };
 
-    closeBtn.addEventListener('click', () => {
-        widget.classList.remove('active');
-        stopStoreChatPolling();
-    });
+    if (closeBtn) {
+        closeBtn.onclick = (e) => {
+            if (e) e.preventDefault();
+            widget.classList.remove('active');
+            if (typeof stopStoreChatPolling === 'function') {
+                stopStoreChatPolling();
+            }
+        };
+    }
 
     // Send Message
-    sendBtn.addEventListener('click', handleChatbotSend);
-    input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') handleChatbotSend();
-    });
+    if (sendBtn) sendBtn.onclick = handleChatbotSend;
+    if (input) {
+        input.onkeydown = (e) => {
+            if (e.key === 'Enter') handleChatbotSend();
+        };
+    }
 
     // Handle suggested clicks
     window.sendChatbotSuggestion = function(text) {
-        input.value = text;
+        if (input) input.value = text;
         handleChatbotSend();
+    };
+
+    // Auto sync store support mode if active_shop_id is present
+    if (activeSupportShopId && supportMode === 'store') {
+        fetch(`${API_BASE}/api/shops/${activeSupportShopId}`)
+            .then(res => res.json())
+            .then(data => {
+                const sName = data && data.shop ? data.shop.name : (currentShopName || 'Shop');
+                toggleSupportMode('store', activeSupportShopId, sName);
+            })
+            .catch(() => {
+                toggleSupportMode('store', activeSupportShopId, currentShopName || 'Shop');
+            });
     }
 }
+window.setupAIChatbot = setupAIChatbot;
 
 function scrollToBottom(container) {
     container.scrollTop = container.scrollHeight;
 }
 
 function handleChatbotSend() {
+    window.handleChatbotSend = handleChatbotSend;
     const input = document.getElementById('chatbotInput');
     const messages = document.getElementById('chatbotMessages');
     if (!input || !input.value.trim()) return;
@@ -4602,12 +4732,14 @@ function handleChatbotSend() {
     scrollToBottom(messages);
 
     if (supportMode === 'store' && activeSupportShopId) {
+        const userId = localStorage.getItem('user_id') ? parseInt(localStorage.getItem('user_id'), 10) : null;
         // Send message to the store vendor manual support API
         fetch(API_BASE + '/api/support/store-chat/send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 shop_id: activeSupportShopId,
+                user_id: userId,
                 message: userText,
                 session_id: getChatSessionId(),
                 user_name: getChatUserName()
