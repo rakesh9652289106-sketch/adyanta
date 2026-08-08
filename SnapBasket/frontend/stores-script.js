@@ -4,7 +4,7 @@ let currentCategory = 'All';
 
 const API_BASE = (typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) 
     ? import.meta.env.VITE_API_URL 
-    : (typeof window !== 'undefined' && window.location && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:3000' : 'https://adyanta.onrender.com');
+    : (typeof window !== 'undefined' && window.location && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '' : 'https://adyanta.onrender.com');
 
 // Cookie Helper
 function getCookie(name) {
@@ -17,7 +17,13 @@ function getCookie(name) {
 document.addEventListener("DOMContentLoaded", async () => {
     try {
         console.log("Loading Shops...");
-        const res = await fetch(API_BASE + '/api/shops');
+        const lat = localStorage.getItem('user_latitude');
+        const lng = localStorage.getItem('user_longitude');
+        let url = API_BASE + '/api/shops';
+        if (lat && lng) {
+            url += `?lat=${lat}&lng=${lng}`;
+        }
+        const res = await fetch(url);
         if (res.ok) {
             shops = await res.json();
             // Handle URL category parameters
@@ -149,6 +155,13 @@ function setupFilters() {
         });
     }
 
+    const sortSelect = document.getElementById('storeSortSelect');
+    if (sortSelect) {
+        sortSelect.addEventListener('change', () => {
+            filterAndSearchShops();
+        });
+    }
+
     const tabBtns = document.querySelectorAll('.filter-tab-btn');
     tabBtns.forEach(btn => {
         btn.addEventListener('click', () => {
@@ -174,6 +187,24 @@ function filterAndSearchShops() {
 
         return matchesCategory && matchesQuery;
     });
+
+    // Sort shops
+    const sortVal = document.getElementById('storeSortSelect') ? document.getElementById('storeSortSelect').value : 'distance';
+    if (sortVal === 'distance') {
+        filteredShops.sort((a, b) => {
+            const distA = a.distance_km !== null ? a.distance_km : 9999;
+            const distB = b.distance_km !== null ? b.distance_km : 9999;
+            return distA - distB;
+        });
+    } else if (sortVal === 'delivery_time') {
+        const getMins = (t) => parseInt((t || '').replace(/[^0-9]/g, '')) || 30;
+        filteredShops.sort((a, b) => getMins(a.delivery_time) - getMins(b.delivery_time));
+    } else if (sortVal === 'rating') {
+        filteredShops.sort((a, b) => parseFloat(b.rating || 0) - parseFloat(a.rating || 0));
+    } else if (sortVal === 'delivery_charges') {
+        const getFee = (sh) => sh.distance_km !== null ? (sh.base_delivery_charge || 20) + (sh.delivery_charge_per_km || 10) * sh.distance_km : 20;
+        filteredShops.sort((a, b) => getFee(a) - getFee(b));
+    }
 
     renderShops();
 }
@@ -211,6 +242,8 @@ function renderShops() {
         const rating = shop.rating || '4.5';
         const delivery = shop.delivery_time || '15-30 mins';
         const desc = shop.description || 'Premium multi-vendor shop.';
+        const distanceStr = shop.distance_km !== null ? `<span class="store-distance" style="background:#E0F2FE; color:#0369A1; padding:2px 8px; border-radius:12px; font-size:0.72rem; font-weight:700;"><i class="ph ph-map-pin" style="vertical-align:middle;"></i> ${shop.distance_km} km</span>` : '';
+        const deliveryFee = shop.distance_km !== null ? (shop.base_delivery_charge || 20) + (shop.delivery_charge_per_km || 10) * shop.distance_km : 20;
 
         return `
             <div class="store-card" onclick="enterStore(${shop.id})">
@@ -218,16 +251,20 @@ function renderShops() {
                     <img class="store-logo" src="${logo}" alt="${shop.name}">
                     <div class="store-title-area">
                         <h3 class="store-name">${shop.name}</h3>
-                        <span class="store-category">
-                            ${getShopCategoryIcon(shop.category)}
-                            <span>${shop.category || 'Grocery'}</span>
-                        </span>
+                        <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap; margin-top:0.25rem;">
+                            <span class="store-category">
+                                ${getShopCategoryIcon(shop.category)}
+                                <span>${shop.category || 'Grocery'}</span>
+                            </span>
+                            ${distanceStr}
+                        </div>
                     </div>
                 </div>
                 <p class="store-desc">${desc}</p>
                 <div class="store-meta">
                     <span class="store-rating"><i class="ph-fill ph-star"></i> ${rating}</span>
                     <span class="store-delivery"><i class="ph ph-clock"></i> ${delivery}</span>
+                    <span class="store-delivery-fee" style="font-weight:700; color:var(--text-main); font-size:0.8rem;"><i class="ph ph-truck"></i> Delivery: ₹${Math.round(deliveryFee)}</span>
                 </div>
                 <div class="store-arrow">
                     <i class="ph-bold ph-arrow-right"></i>
@@ -259,9 +296,7 @@ function setupStoresAIChatbot() {
     if (!bubble || !widget) return;
 
     const activeShopId = localStorage.getItem('active_shop_id') ? parseInt(localStorage.getItem('active_shop_id'), 10) : null;
-    const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-        ? `http://${window.location.hostname}:3000`
-        : '';
+    const API_BASE = '';
 
     bubble.onclick = (e) => {
         if (e) e.preventDefault();

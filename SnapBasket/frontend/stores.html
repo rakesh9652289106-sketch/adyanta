@@ -281,11 +281,19 @@
                 <h1>Partner Stores</h1>
                 <p>Order fresh products directly from local multi-vendor stores with manual customer service options.</p>
                 
-                <!-- Search bar -->
+                <!-- Search & Sort bar -->
                 <div class="search-filter-bar">
                     <div class="search-input-wrapper">
                         <i class="ph ph-magnifying-glass"></i>
                         <input type="text" id="storeSearchInput" placeholder="Search stores by name, category or description...">
+                    </div>
+                    <div class="sort-select-wrapper" style="position: relative; width: 200px;">
+                        <select id="storeSortSelect" class="form-control" style="height: 48px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 0.95rem; font-weight: 600; padding: 0 1rem; width: 100%; background: var(--card-bg); color: var(--text-main);">
+                            <option value="distance">📍 Near Me (Distance)</option>
+                            <option value="delivery_time">⚡ Fastest Delivery</option>
+                            <option value="rating">⭐️ Top Rated</option>
+                            <option value="delivery_charges">💰 Lowest Delivery Fee</option>
+                        </select>
                     </div>
                 </div>
 

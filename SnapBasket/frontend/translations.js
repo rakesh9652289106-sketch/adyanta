@@ -736,6 +736,205 @@ function changeLanguage(lang) {
     applyTranslations(lang);
 }
 
+// Open language modal on any page dynamically
+function openLanguageModal() {
+    let existing = document.getElementById('globalLanguageModalOverlay');
+    if (existing) existing.remove();
+
+    const currentLang = localStorage.getItem('language') || 'en';
+    const apiBase = window.API_BASE || '';
+
+    const overlay = document.createElement('div');
+    overlay.id = 'globalLanguageModalOverlay';
+    overlay.style.cssText = `
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.75);
+        backdrop-filter: blur(8px);
+        z-index: 999999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    `;
+
+    const card = document.createElement('div');
+    card.style.cssText = `
+        background: #ffffff;
+        color: #0f172a;
+        width: 100%;
+        max-width: 480px;
+        border-radius: 24px;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        overflow: hidden;
+        transform: scale(0.9);
+        transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        padding: 1.75rem;
+        font-family: 'Inter', sans-serif;
+    `;
+
+    const header = document.createElement('div');
+    header.style.cssText = `
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+    `;
+    header.innerHTML = `
+        <h3 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: #0F172A; display: flex; align-items: center; gap: 0.5rem;"><i class="ph ph-translate" style="color:#10B981;"></i> Select Language</h3>
+        <button id="closeGlobalLangModal" style="background: #F1F5F9; border: none; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #64748B; font-weight: 700; font-size: 1.2rem;">&times;</button>
+    `;
+    card.appendChild(header);
+
+    const langGrid = document.createElement('div');
+    langGrid.style.cssText = `
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.75rem;
+        max-height: 320px;
+        overflow-y: auto;
+        padding-right: 4px;
+    `;
+
+    const languagesList = [
+        { code: 'en', name: 'English' },
+        { code: 'hi', name: 'Hindi (हिन्दी)' },
+        { code: 'te', name: 'Telugu (తెలుగు)' },
+        { code: 'ta', name: 'Tamil (தமிழ்)' },
+        { code: 'kn', name: 'Kannada (ಕನ್ನಡ)' },
+        { code: 'gu', name: 'Gujarati (ગુજરાતી)' },
+        { code: 'ml', name: 'Malayalam (മലയാളം)' },
+        { code: 'bn', name: 'Bengali (বাংলা)' },
+        { code: 'mr', name: 'Marathi (मराठी)' },
+        { code: 'ur', name: 'Urdu (اردو)' },
+        { code: 'or', name: 'Odia (ଓଡ଼ିଆ)' },
+        { code: 'pa', name: 'Punjabi (ਪੰਜਾਬੀ)' },
+        { code: 'as', name: 'Assamese (অસમीয়া)' },
+        { code: 'ks', name: 'Kashmiri (کٲشُر)' },
+        { code: 'ne', name: 'Nepali (नेपाली)' },
+        { code: 'sa', name: 'Sanskrit (संस्कृतम्)' }
+    ];
+
+    languagesList.forEach(l => {
+        const isActive = l.code === currentLang;
+        const label = document.createElement('label');
+        label.style.cssText = `
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.8rem 1rem;
+            border: 2px solid ${isActive ? '#10B981' : '#E2E8F0'};
+            background: ${isActive ? '#ECFDF5' : '#FFFFFF'};
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        `;
+        label.innerHTML = `
+            <span style="color: ${isActive ? '#047857' : '#334155'}">${l.name}</span>
+            <input type="radio" name="globalLang" value="${l.code}" ${isActive ? 'checked' : ''} style="accent-color: #10B981; width: 16px; height: 16px; cursor: pointer;">
+        `;
+        
+        label.querySelector('input').addEventListener('change', () => {
+            card.querySelectorAll('label').forEach(lbl => {
+                lbl.style.borderColor = '#E2E8F0';
+                lbl.style.background = '#FFFFFF';
+                lbl.querySelector('span').style.color = '#334155';
+            });
+            label.style.borderColor = '#10B981';
+            label.style.background = '#ECFDF5';
+            label.querySelector('span').style.color = '#047857';
+        });
+
+        langGrid.appendChild(label);
+    });
+    card.appendChild(langGrid);
+
+    const applyBtn = document.createElement('button');
+    applyBtn.innerText = 'Apply Language';
+    applyBtn.style.cssText = `
+        margin-top: 1.5rem;
+        width: 100%;
+        padding: 0.75rem;
+        background: #10B981;
+        color: #ffffff;
+        border: none;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 0.95rem;
+        cursor: pointer;
+        transition: background 0.2s;
+        box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.2);
+    `;
+    applyBtn.onmouseover = () => applyBtn.style.background = '#059669';
+    applyBtn.onmouseout = () => applyBtn.style.background = '#10B981';
+    
+    applyBtn.onclick = () => {
+        const checkedInput = card.querySelector('input[name=globalLang]:checked');
+        if (checkedInput) {
+            const selectedLang = checkedInput.value;
+            changeLanguage(selectedLang);
+            
+            fetch(apiBase + '/api/user/settings', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ language: selectedLang })
+            }).catch(err => console.warn(err));
+
+            if (window.Toast) {
+                window.Toast.show('Language preference updated!', 'success');
+            }
+            
+            overlay.style.opacity = '0';
+            card.style.transform = 'scale(0.9)';
+            setTimeout(() => {
+                overlay.remove();
+                location.reload();
+            }, 250);
+        }
+    };
+    card.appendChild(applyBtn);
+
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    setTimeout(() => {
+        overlay.style.opacity = '1';
+        card.style.transform = 'scale(1)';
+    }, 10);
+
+    const closeFn = () => {
+        overlay.style.opacity = '0';
+        card.style.transform = 'scale(0.9)';
+        setTimeout(() => overlay.remove(), 250);
+    };
+    overlay.querySelector('#closeGlobalLangModal').onclick = closeFn;
+    overlay.onclick = (e) => { if (e.target === overlay) closeFn(); };
+}
+
 // Global exposure
 window.changeLanguage = changeLanguage;
 window.applyTranslations = applyTranslations;
+window.openLanguageModal = openLanguageModal;
+
+// Auto-initialize translations on page load
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        const savedLang = localStorage.getItem('language') || 'en';
+        applyTranslations(savedLang);
+        document.getElementById('nav-language')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            openLanguageModal();
+        });
+    });
+} else {
+    const savedLang = localStorage.getItem('language') || 'en';
+    applyTranslations(savedLang);
+    document.getElementById('nav-language')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        openLanguageModal();
+    });
+}

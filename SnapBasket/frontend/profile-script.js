@@ -1,6 +1,13 @@
 const API_BASE = (typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) 
     ? import.meta.env.VITE_API_URL 
-    : (typeof window !== 'undefined' && window.location && window.location.port === '5173' ? 'http://localhost:3000' : 'https://adyanta.onrender.com');
+    : (typeof window !== 'undefined' && window.location && (
+        window.location.hostname === 'localhost' || 
+        window.location.hostname === '127.0.0.1' || 
+        window.location.hostname.startsWith('192.168.') || 
+        window.location.hostname.startsWith('10.') || 
+        window.location.hostname.startsWith('172.') || 
+        window.location.hostname.endsWith('.local')
+      ) ? '' : 'https://adyanta.onrender.com');
 
 // Global Exports for HTML Event Handlers
 window.reorder = (itemsJson) => {
@@ -25,7 +32,7 @@ window.toggleEditMode = (edit) => {
     }
 };
 
-document.addEventListener("DOMContentLoaded", async () => {
+async function initProfile() {
     const username = getCookie('username');
 
     if (!username) {
@@ -35,7 +42,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     initDashboard();
-});
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener("DOMContentLoaded", initProfile);
+} else {
+    initProfile();
+}
 
 function initDashboard() {
     setupTabs();
@@ -217,6 +230,35 @@ async function fetchOrders() {
                         </div>
                     ` : ''}
 
+                    <!-- Delivery OTP Badge for Active Orders -->
+                    ${order.delivery_otp && status !== 'delivered' && status !== 'cancelled' ? `
+                        <div style="background: #EFF6FF; border: 1px solid #BFDBFE; color: #1E40AF; padding: 0.6rem 1rem; border-radius: 10px; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 0.85rem; font-weight: 700; display: flex; align-items: center; gap: 0.4rem;">
+                                <i class="ph ph-shield-check" style="font-size: 1.1rem; color: #2563EB;"></i> Delivery OTP for Rider: <strong style="font-size: 1.1rem; letter-spacing: 2px; color: #1D4ED8;">${order.delivery_otp}</strong>
+                            </span>
+                            <span style="font-size: 0.72rem; color: #3B82F6; font-weight: 600;">Share at door</span>
+                        </div>
+                    ` : ''}
+
+                    <!-- Order Action & Evidence Bar -->
+                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem;">
+                        ${order.packing_photo ? `
+                            <button type="button" onclick="viewCustomerEvidence(${order.id})" style="background: #ECFDF5; color: #065F46; border: 1px solid #A7F3D0; padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">
+                                <i class="ph ph-camera"></i> View Vendor Pack Photo ${order.is_tamper_sealed ? '🔒 Sealed' : ''}
+                            </button>
+                        ` : ''}
+                        
+                        ${(status !== 'delivered' && status !== 'cancelled') ? `
+                            <button type="button" onclick="openOrderTrackingModal(${order.id})" style="background: #EFF6FF; color: #1E40AF; border: 1px solid #BFDBFE; padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">
+                                <i class="ph ph-map-trifold"></i> Live Track Delivery
+                            </button>
+                        ` : ''}
+                        
+                        <button type="button" onclick="openCustomerDisputeModal(${order.id})" style="background: #FEF2F2; color: #991B1B; border: 1px solid #FECACA; padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">
+                            <i class="ph ph-warning-circle"></i> Report Issue / Discrepancy
+                        </button>
+                    </div>
+
                     <!-- Visual Timeline -->
                     <div class="order-timeline">
                         ${steps.map((step, idx) => `
@@ -239,34 +281,91 @@ async function fetchOrders() {
 }
 
 // 4. Addresses Tab
+let cachedAddressesList = [];
+
 async function fetchAddresses() {
     const grid = document.getElementById('addressGrid');
     try {
         const res = await fetch(API_BASE + '/api/user/addresses', { credentials: 'include' });
         const addresses = await res.json();
+        cachedAddressesList = addresses || [];
+        
+        // Cache addresses locally for offline support
+        localStorage.setItem('cached_addresses', JSON.stringify(cachedAddressesList));
 
-        if (!Array.isArray(addresses) || !addresses.length) {
+        renderAddressesHtml(cachedAddressesList);
+    } catch (e) { 
+        console.error("Address fetch failed. Loading offline cache...", e);
+        const cached = localStorage.getItem('cached_addresses');
+        if (cached) {
+            cachedAddressesList = JSON.parse(cached);
+            renderAddressesHtml(cachedAddressesList);
+            Toast.show("Loaded offline address cache.", "info");
+        } else {
             grid.innerHTML = '<p style="grid-column: 1/-1; text-align:center; padding:2rem; color:var(--text-soft);">No saved addresses yet.</p>';
-            return;
         }
+    }
+}
 
-        grid.innerHTML = addresses.map(addr => `
-            <div class="address-card ${addr.is_default ? 'default' : ''}">
-                ${addr.is_default ? '<span class="address-badge">DEFAULT</span>' : ''}
-                <div style="display:flex; gap:0.75rem; align-items:center; margin-bottom:0.75rem;">
-                    <i class="ph ph-${addr.label === 'Home' ? 'house' : (addr.label === 'Work' ? 'briefcase' : 'map-pin')}" style="color:var(--primary); font-size:1.25rem;"></i>
-                    <strong style="font-size:1.1rem;">${addr.label}</strong>
+function renderAddressesHtml(addresses) {
+    const grid = document.getElementById('addressGrid');
+    if (!grid) return;
+
+    if (!Array.isArray(addresses) || !addresses.length) {
+        grid.innerHTML = '<p style="grid-column: 1/-1; text-align:center; padding:2rem; color:var(--text-soft);">No saved addresses yet.</p>';
+        return;
+    }
+
+    grid.innerHTML = addresses.map((addr, index) => {
+        const favoriteIcon = addr.is_favorite ? 'ph-fill ph-star' : 'ph ph-star';
+        const favoriteColor = addr.is_favorite ? '#EAB308' : 'var(--text-soft)';
+        
+        let detailsHtml = '';
+        if (addr.apartment_name) detailsHtml += `<span>${addr.apartment_name}</span>`;
+        if (addr.floor_number) detailsHtml += `<span>, ${addr.floor_number}</span>`;
+        if (addr.landmark) detailsHtml += `<p style="font-size:0.85rem; color:var(--text-soft); margin-top:0.25rem;"><i class="ph ph-map-trifold"></i> Landmark: ${addr.landmark}</p>`;
+        if (addr.delivery_instructions && addr.delivery_instructions !== 'None') detailsHtml += `<p style="font-size:0.82rem; color:#4F46E5; margin-top:0.25rem; font-weight:600;"><i class="ph ph-bell"></i> Note: ${addr.delivery_instructions}</p>`;
+        if (addr.phone_number) detailsHtml += `<p style="font-size:0.85rem; color:var(--text-main); margin-top:0.25rem;"><i class="ph ph-phone"></i> ${addr.contact_person || 'Receiver'}: ${addr.phone_number}</p>`;
+        
+        const dragHandle = `
+            <div style="display:flex; flex-direction:column; gap:0.25rem;">
+                ${index > 0 ? `<button onclick="moveAddress(${addr.id}, -1)" class="reorder-btn" title="Move Up"><i class="ph-bold ph-caret-up"></i></button>` : '<div style="height:20px;width:20px;"></div>'}
+                ${index < addresses.length - 1 ? `<button onclick="moveAddress(${addr.id}, 1)" class="reorder-btn" title="Move Down"><i class="ph-bold ph-caret-down"></i></button>` : '<div style="height:20px;width:20px;"></div>'}
+            </div>
+        `;
+
+        return `
+            <div class="address-card ${addr.is_default ? 'default' : ''}" style="position:relative; display:flex; gap:1rem;">
+                <div style="flex:1;">
+                    ${addr.is_default ? '<span class="address-badge">DEFAULT</span>' : ''}
+                    ${addr.is_shared ? '<span class="address-badge" style="background:#EEF2F6; color:#475569; margin-left:5px;">FAMILY SHARED</span>' : ''}
+                    <div style="display:flex; gap:0.75rem; align-items:center; margin-bottom:0.75rem;">
+                        <i class="ph ph-${addr.label === 'Home' ? 'house' : (addr.label === 'Office' ? 'briefcase' : (addr.label === 'College' ? 'graduation-cap' : 'map-pin'))}" style="color:var(--primary); font-size:1.25rem;"></i>
+                        <strong style="font-size:1.1rem;">${addr.label}</strong>
+                        
+                        <button onclick="toggleFavoriteAddress(${addr.id}, ${addr.is_favorite ? 0 : 1})" class="btn-text" style="margin-left:auto; background:none; border:none; cursor:pointer; padding:0; font-size:1.2rem; color:${favoriteColor};">
+                            <i class="${favoriteIcon}"></i>
+                        </button>
+                    </div>
+                    <p style="font-size:0.95rem; color:var(--text-main); line-height:1.4; margin-bottom:0.25rem;">${addr.address_line}</p>
+                    <p style="font-size:0.9rem; color:var(--text-soft); font-weight:600;">${detailsHtml}</p>
+                    <p style="font-size:0.9rem; color:var(--text-soft); margin-top:0.25rem;">${addr.city} - ${addr.pincode}</p>
+                    
+                    ${addr.photo_url ? `<div style="margin-top:0.75rem;"><img src="${addr.photo_url}" style="width:60px; height:60px; border-radius:6px; object-fit:cover; border:1px solid var(--border);" alt="Entrance Photo" onclick="window.open('${addr.photo_url}', '_blank')"></div>` : ''}
+
+                    <div style="margin-top:1.25rem; display:flex; gap:1rem;">
+                        <button class="btn-text" onclick="editAddress(${addr.id})" style="color:var(--primary); border:none; padding:0; background:none; cursor:pointer; font-weight:700; font-size:0.85rem;"><i class="ph ph-pencil-simple"></i> EDIT</button>
+                        <button class="btn-text" onclick="deleteAddress(${addr.id})" style="color:#EF4444; border:none; padding:0; background:none; cursor:pointer; font-weight:700; font-size:0.85rem;"><i class="ph ph-trash"></i> DELETE</button>
+                        ${!addr.is_default ? `<button onclick="setDefaultAddress(${addr.id})" class="btn-text" style="color:var(--primary); font-weight:700; font-size:0.85rem; border:none; padding:0; background:none; cursor:pointer;"><i class="ph ph-check-circle"></i> SET AS DEFAULT</button>` : ''}
+                    </div>
                 </div>
-                <p style="font-size:0.95rem; color:var(--text-main); line-height:1.4; margin-bottom:0.5rem;">${addr.address_line}</p>
-                <p style="font-size:0.9rem; color:var(--text-soft);">${addr.city} - ${addr.pincode}</p>
-                <div style="margin-top:1.25rem; display:flex; gap:1rem;">
-                    <button class="btn-text" onclick="deleteAddress(${addr.id})" style="color:#EF4444; border:none; padding:0; background:none; cursor:pointer; font-weight:600; font-size:0.85rem;"><i class="ph ph-trash"></i> DELETE</button>
-                    ${!addr.is_default ? `<button onclick="setDefaultAddress(${addr.id})" class="btn-text" style="color:var(--primary); font-weight:600; font-size:0.85rem; border:none; padding:0; background:none; cursor:pointer;"><i class="ph ph-check-circle"></i> SET AS DEFAULT</button>` : ''}
+                <div style="display:flex; align-items:center;">
+                    ${dragHandle}
                 </div>
             </div>
-        `).join('');
-        reRenderIcons();
-    } catch (e) { console.error(e); }
+        `;
+    }).join('');
+    reRenderIcons();
 }
 
 async function deleteAddress(id) {
@@ -276,6 +375,46 @@ async function deleteAddress(id) {
         Toast.show("Address removed", "info");
         fetchAddresses();
         fetchOverview();
+    } catch (e) { console.error(e); }
+}
+
+async function toggleFavoriteAddress(id, isFavorite) {
+    try {
+        const res = await fetch(`${API_BASE}/api/user/addresses/${id}/favorite`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ is_favorite: isFavorite }),
+            credentials: 'include'
+        });
+        if (res.ok) {
+            Toast.show(isFavorite ? "Added to favorites ⭐" : "Removed from favorites", "success");
+            fetchAddresses();
+        }
+    } catch (e) { console.error(e); }
+}
+
+async function moveAddress(id, direction) {
+    const idx = cachedAddressesList.findIndex(a => a.id === id);
+    if (idx === -1) return;
+    const newIdx = idx + direction;
+    if (newIdx < 0 || newIdx >= cachedAddressesList.length) return;
+
+    // Swap locally
+    const temp = cachedAddressesList[idx];
+    cachedAddressesList[idx] = cachedAddressesList[newIdx];
+    cachedAddressesList[newIdx] = temp;
+
+    const orderedIds = cachedAddressesList.map(a => a.id);
+    try {
+        const res = await fetch(`${API_BASE}/api/user/addresses/reorder`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ order: orderedIds }),
+            credentials: 'include'
+        });
+        if (res.ok) {
+            fetchAddresses();
+        }
     } catch (e) { console.error(e); }
 }
 
@@ -460,16 +599,118 @@ function setupForms() {
         } catch (e) { console.error(e); }
     });
 
+    // Pincode to City Autofill Mapping
+    const pinEl = document.getElementById('addrPincode');
+    const cityEl = document.getElementById('addrCity');
+    if (pinEl && cityEl) {
+        const updateCityFromPincode = async () => {
+            const pinVal = pinEl.value.trim();
+            if (pinVal.length === 6) {
+                try {
+                    const res = await fetch(`${API_BASE}/api/settings?t=` + Date.now(), { cache: 'no-store' });
+                    if (res.ok) {
+                        const settings = await res.json();
+                        if (settings && settings.allowed_pincodes) {
+                            const allowedItems = settings.allowed_pincodes.split(',').map(p => p.trim()).filter(p => p.length > 0);
+                            const match = allowedItems.find(item => item.split('-')[0].trim() === pinVal);
+                            if (match) {
+                                const parts = match.split('-');
+                                if (parts[1]) {
+                                    cityEl.value = parts[1].trim();
+                                }
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error("Autofill check failed", e);
+                }
+            }
+        };
+        pinEl.addEventListener('input', updateCityFromPincode);
+        pinEl.addEventListener('change', updateCityFromPincode);
+    }
+
+    // Detect My Coordinates Button
+    const detectBtn = document.getElementById('getCurrentLocationBtn');
+    if (detectBtn) {
+        detectBtn.addEventListener('click', () => {
+            if (!navigator.geolocation) {
+                return Toast.show("Geolocation not supported", "error");
+            }
+            detectBtn.disabled = true;
+            detectBtn.innerHTML = '<i class="ph ph-spinner animate-spin"></i> Detecting...';
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                const lat = pos.coords.latitude;
+                const lng = pos.coords.longitude;
+                document.getElementById('addrLat').value = lat;
+                document.getElementById('addrLng').value = lng;
+                
+                initMapAtCoords(lat, lng);
+
+                try {
+                    const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`, {
+                        headers: { 'Accept-Language': 'en' }
+                    });
+                    const data = await response.json();
+                    if (data.address) {
+                        const building = data.address.building || data.address.amenity || data.address.house_number || '';
+                        const road = data.address.road || '';
+                        const suburb = data.address.suburb || data.address.neighbourhood || '';
+                        const city = data.address.city || data.address.town || data.address.village || '';
+                        const pincode = data.address.postcode || '';
+                        
+                        let addrLine = '';
+                        if (building) addrLine += building + ', ';
+                        if (road) addrLine += road + ', ';
+                        if (suburb) addrLine += suburb;
+                        addrLine = addrLine.replace(/,\s*$/, "");
+                        
+                        if (addrLine) document.getElementById('addrLine').value = addrLine;
+                        if (city) document.getElementById('addrCity').value = city;
+                        if (pincode) {
+                            document.getElementById('addrPincode').value = pincode;
+                            document.getElementById('addrPincode').dispatchEvent(new Event('input'));
+                        }
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+                detectBtn.disabled = false;
+                detectBtn.innerHTML = '<i class="ph ph-gps"></i> Detect My Coordinates';
+            }, (err) => {
+                console.error(err);
+                Toast.show("Failed to get geolocation", "error");
+                detectBtn.disabled = false;
+                detectBtn.innerHTML = '<i class="ph ph-gps"></i> Detect My Coordinates';
+            });
+        });
+    }
+
     // Address Modal Submit
     const aForm = document.getElementById('addressForm');
     aForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+        const id = document.getElementById('addressIdInput').value;
         const data = {
             label: aForm.label.value,
             address_line: aForm.address_line.value.trim(),
             city: aForm.city.value.trim(),
             pincode: aForm.pincode.value.trim(),
-            is_default: aForm.is_default.checked ? 1 : 0
+            landmark: aForm.landmark.value.trim(),
+            floor_number: aForm.floor_number.value.trim(),
+            apartment_name: aForm.apartment_name.value.trim(),
+            delivery_instructions: aForm.delivery_instructions.value,
+            contact_person: aForm.contact_person.value.trim(),
+            phone_number: aForm.phone_number.value.trim(),
+            latitude: parseFloat(aForm.latitude.value) || null,
+            longitude: parseFloat(aForm.longitude.value) || null,
+            entrance_latitude: parseFloat(aForm.entrance_latitude.value) || null,
+            entrance_longitude: parseFloat(aForm.entrance_longitude.value) || null,
+            entrance_type: aForm.entrance_type.value,
+            photo_url: aForm.photo_url.value.trim(),
+            is_default: aForm.is_default.checked ? 1 : 0,
+            is_favorite: aForm.is_favorite.checked ? 1 : 0,
+            is_shared: aForm.is_shared.checked ? 1 : 0
         };
 
         if (!data.address_line || !data.city || !data.pincode) {
@@ -477,8 +718,23 @@ function setupForms() {
         }
 
         try {
-            const res = await fetch(API_BASE + '/api/user/addresses', {
-                method: 'POST',
+            // Pincode restriction validation
+            const settingsRes = await fetch(`${API_BASE}/api/settings?t=` + Date.now(), { cache: 'no-store' });
+            if (settingsRes.ok) {
+                const settings = await settingsRes.json();
+                if (settings && settings.allowed_pincodes && settings.allowed_pincodes.trim().length > 0) {
+                    const allowedArray = settings.allowed_pincodes.split(',').map(p => p.trim()).filter(p => p.length > 0);
+                    if (allowedArray.length > 0 && !allowedArray.includes(data.pincode)) {
+                        return Toast.show(`Delivery not available in your area (Pincode: ${data.pincode}).`, "error");
+                    }
+                }
+            }
+
+            const url = id ? `${API_BASE}/api/user/addresses/${id}` : `${API_BASE}/api/user/addresses`;
+            const method = id ? 'PUT' : 'POST';
+
+            const res = await fetch(url, {
+                method: method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data),
                 credentials: 'include'
@@ -487,7 +743,7 @@ function setupForms() {
             const result = await res.json();
             
             if (res.ok) {
-                Toast.show("Address added successfully!", "success");
+                Toast.show(id ? "Address updated successfully!" : "Address added successfully!", "success");
                 toggleModal('addressModalOverlay', false);
                 aForm.reset();
                 fetchAddresses();
@@ -511,6 +767,125 @@ function setupModals() {
     overlay.onclick = (e) => { if(e.target === overlay) toggleModal('addressModalOverlay', false); };
 }
 
+let googleMapInstance = null;
+let googleMarker = null;
+let googleEntranceMarker = null;
+let showingEntranceMarker = false;
+
+function loadGoogleMapsScript(callback) {
+    if (window.google && window.google.maps) {
+        if (callback) callback();
+        return;
+    }
+    const script = document.createElement('script');
+    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+    const keyParam = apiKey ? `&key=${apiKey}` : '';
+    script.src = `https://maps.googleapis.com/maps/api/js?callback=initProfileMap${keyParam}`;
+    script.async = true;
+    script.defer = true;
+    window.initProfileMap = () => {
+        if (callback) callback();
+    };
+    script.onerror = () => {
+        console.error("Failed to load Google Maps SDK.");
+    };
+    document.head.appendChild(script);
+}
+
+function initMapAtCoords(lat, lng) {
+    const mapDiv = document.getElementById('addressPickerMap');
+    const entranceBtn = document.getElementById('entrancePinBtn');
+    if (!mapDiv) return;
+    mapDiv.style.display = 'block';
+    if (entranceBtn) entranceBtn.style.display = 'block';
+
+    loadGoogleMapsScript(() => {
+        const myLatLng = { lat: parseFloat(lat || 14.4426), lng: parseFloat(lng || 79.9865) };
+        googleMapInstance = new google.maps.Map(mapDiv, {
+            center: myLatLng,
+            zoom: 16,
+            mapTypeControl: false,
+            streetViewControl: false
+        });
+
+        googleMarker = new google.maps.Marker({
+            position: myLatLng,
+            map: googleMapInstance,
+            draggable: true,
+            title: "Drag to set delivery location"
+        });
+
+        googleMarker.addListener('dragend', async () => {
+            const pos = googleMarker.getPosition();
+            document.getElementById('addrLat').value = pos.lat();
+            document.getElementById('addrLng').value = pos.lng();
+            
+            try {
+                const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.lat()}&lon=${pos.lng()}`, {
+                    headers: { 'Accept-Language': 'en' }
+                });
+                const data = await response.json();
+                if (data.address) {
+                    const building = data.address.building || data.address.amenity || data.address.house_number || '';
+                    const road = data.address.road || '';
+                    const suburb = data.address.suburb || data.address.neighbourhood || '';
+                    const city = data.address.city || data.address.town || data.address.village || '';
+                    const pincode = data.address.postcode || '';
+                    
+                    let addrLine = '';
+                    if (building) addrLine += building + ', ';
+                    if (road) addrLine += road + ', ';
+                    if (suburb) addrLine += suburb;
+                    addrLine = addrLine.replace(/,\s*$/, "");
+                    
+                    if (addrLine) document.getElementById('addrLine').value = addrLine;
+                    if (city) document.getElementById('addrCity').value = city;
+                    if (pincode) document.getElementById('addrPincode').value = pincode;
+                }
+            } catch (err) {
+                console.error("Drag reverse geocode error:", err);
+            }
+        });
+    });
+}
+
+window.toggleEntrancePin = function() {
+    if (!googleMapInstance) return;
+    showingEntranceMarker = !showingEntranceMarker;
+    const btn = document.getElementById('entrancePinBtn');
+    if (showingEntranceMarker) {
+        if (btn) btn.innerHTML = '<i class="ph ph-check-circle"></i> Remove Entrance Pin';
+        if (btn) btn.style.borderColor = '#10B981';
+        const center = googleMapInstance.getCenter();
+        googleEntranceMarker = new google.maps.Marker({
+            position: center,
+            map: googleMapInstance,
+            draggable: true,
+            icon: 'http://maps.google.com/mapfiles/ms/icons/green-dot.png',
+            title: "Drag to mark exact gate/lobby entrance"
+        });
+        
+        document.getElementById('addrEntranceLat').value = center.lat();
+        document.getElementById('addrEntranceLng').value = center.lng();
+
+        googleEntranceMarker.addListener('dragend', () => {
+            const pos = googleEntranceMarker.getPosition();
+            document.getElementById('addrEntranceLat').value = pos.lat();
+            document.getElementById('addrEntranceLng').value = pos.lng();
+        });
+        Toast.show("Drag the green pin to mark your gate/lobby entrance", "info");
+    } else {
+        if (btn) btn.innerHTML = '<i class="ph ph-door"></i> Mark Entrance Pin on Map';
+        if (btn) btn.style.borderColor = 'var(--border)';
+        if (googleEntranceMarker) {
+            googleEntranceMarker.setMap(null);
+            googleEntranceMarker = null;
+        }
+        document.getElementById('addrEntranceLat').value = '';
+        document.getElementById('addrEntranceLng').value = '';
+    }
+}
+
 function openAddressModal() {
     toggleModal('addressModalOverlay', true);
 }
@@ -525,6 +900,88 @@ function toggleModal(id, show) {
 window.openAddressModal = function() {
     const el = document.getElementById('addressModalOverlay');
     if (el) el.classList.add('active');
+    
+    document.getElementById('addressModalTitle').innerText = "Add New Address";
+    document.getElementById('addressForm').reset();
+    document.getElementById('addressIdInput').value = '';
+    
+    document.getElementById('addressPickerMap').style.display = 'none';
+    document.getElementById('entrancePinBtn').style.display = 'none';
+    
+    showingEntranceMarker = false;
+    if (googleEntranceMarker) {
+        googleEntranceMarker.setMap(null);
+        googleEntranceMarker = null;
+    }
+    const btn = document.getElementById('entrancePinBtn');
+    if (btn) {
+        btn.innerHTML = '<i class="ph ph-door"></i> Mark Entrance Pin on Map';
+        btn.style.borderColor = 'var(--border)';
+    }
+};
+
+window.editAddress = function(id) {
+    const addr = cachedAddressesList.find(a => a.id === id);
+    if (!addr) return;
+
+    const el = document.getElementById('addressModalOverlay');
+    if (el) el.classList.add('active');
+
+    document.getElementById('addressModalTitle').innerText = "Edit Address";
+    
+    document.getElementById('addressIdInput').value = addr.id;
+    document.getElementById('addrLabel').value = addr.label || 'Home';
+    document.getElementById('addrLine').value = addr.address_line || '';
+    document.getElementById('addrCity').value = addr.city || '';
+    document.getElementById('addrPincode').value = addr.pincode || '';
+    document.getElementById('addrLandmark').value = addr.landmark || '';
+    document.getElementById('addrFloor').value = addr.floor_number || '';
+    document.getElementById('addrApartment').value = addr.apartment_name || '';
+    document.getElementById('addrInstructions').value = addr.delivery_instructions || 'None';
+    document.getElementById('addrContactPerson').value = addr.contact_person || '';
+    document.getElementById('addrPhone').value = addr.phone_number || '';
+    document.getElementById('addrPhoto').value = addr.photo_url || '';
+    document.getElementById('addrEntranceType').value = addr.entrance_type || 'Main Gate';
+    
+    document.getElementById('defAddr').checked = addr.is_default === 1;
+    document.getElementById('favAddr').checked = addr.is_favorite === 1;
+    document.getElementById('sharedAddr').checked = addr.is_shared === 1;
+
+    document.getElementById('addrLat').value = addr.latitude || '';
+    document.getElementById('addrLng').value = addr.longitude || '';
+    document.getElementById('addrEntranceLat').value = addr.entrance_latitude || '';
+    document.getElementById('addrEntranceLng').value = addr.entrance_longitude || '';
+
+    // Load map with the existing address coordinates
+    const lat = addr.latitude || 14.4426;
+    const lng = addr.longitude || 79.9865;
+    initMapAtCoords(lat, lng);
+
+    showingEntranceMarker = false;
+    if (addr.entrance_latitude && addr.entrance_longitude) {
+        showingEntranceMarker = true;
+        const btn = document.getElementById('entrancePinBtn');
+        if (btn) {
+            btn.innerHTML = '<i class="ph ph-check-circle"></i> Remove Entrance Pin';
+            btn.style.borderColor = '#10B981';
+        }
+        setTimeout(() => {
+            if (googleMapInstance) {
+                googleEntranceMarker = new google.maps.Marker({
+                    position: { lat: parseFloat(addr.entrance_latitude), lng: parseFloat(addr.entrance_longitude) },
+                    map: googleMapInstance,
+                    draggable: true,
+                    icon: 'http://maps.google.com/mapfiles/ms/icons/green-dot.png',
+                    title: "Drag to mark exact gate/lobby entrance"
+                });
+                googleEntranceMarker.addListener('dragend', () => {
+                    const pos = googleEntranceMarker.getPosition();
+                    document.getElementById('addrEntranceLat').value = pos.lat();
+                    document.getElementById('addrEntranceLng').value = pos.lng();
+                });
+            }
+        }, 1000);
+    }
 };
 
 window.setDefaultAddress = async (id) => {
@@ -620,8 +1077,273 @@ function setupNavMenu() {
 
 function reRenderIcons() {
     // Phosphor 2.x uses CSS classes, no replacement script needed.
-    // However, if using the JS library version, we check for it.
     if (window.phosphor && typeof window.phosphor.replace === 'function') {
         window.phosphor.replace();
+    }
+}
+
+// ==========================================================================
+// CUSTOMER DISPUTE & EVIDENCE VIEWER SYSTEM
+// ==========================================================================
+
+let activeDisputeOrderId = null;
+let custUnboxingPhotoBase64 = null;
+
+window.openCustomerDisputeModal = function(orderId) {
+    activeDisputeOrderId = orderId;
+    custUnboxingPhotoBase64 = null;
+    document.getElementById('custDisputeModalTitle').innerText = `Report Issue for Order #${orderId}`;
+    document.getElementById('custDisputeDesc').value = '';
+    document.getElementById('custUnboxingPhotoInput').value = '';
+    document.getElementById('custUnboxingPreviewBox').style.display = 'none';
+    document.getElementById('custUnboxingImg').src = '';
+    document.getElementById('custDisputeModal').style.display = 'flex';
+};
+
+window.closeCustDisputeModal = function() {
+    document.getElementById('custDisputeModal').style.display = 'none';
+};
+
+window.handleCustUnboxingPhotoSelected = function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+        custUnboxingPhotoBase64 = evt.target.result;
+        document.getElementById('custUnboxingImg').src = custUnboxingPhotoBase64;
+        document.getElementById('custUnboxingPreviewBox').style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+};
+
+window.submitCustDispute = async function() {
+    if (!activeDisputeOrderId) return;
+    const reasonCode = document.getElementById('custDisputeReason').value;
+    const desc = document.getElementById('custDisputeDesc').value;
+    const submitBtn = document.getElementById('submitCustDisputeBtn');
+
+    submitBtn.disabled = true;
+    submitBtn.innerText = 'Submitting Claim...';
+
+    try {
+        const res = await fetch(`${API_BASE}/api/user/orders/${activeDisputeOrderId}/dispute`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+                reason_code: reasonCode,
+                description: desc,
+                customer_unboxing_photo: custUnboxingPhotoBase64
+            })
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+            alert(`✅ Discrepancy Claim Submitted!\n\nYour claim for Order #${activeDisputeOrderId} has been logged. The vendor's packing evidence photo and checklist have been auto-linked to support.`);
+            closeCustDisputeModal();
+            fetchOrders();
+        } else {
+            alert(data.error || "Failed to submit dispute claim");
+        }
+    } catch(err) {
+        console.error(err);
+        alert("Network error while submitting dispute claim");
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerText = 'Submit Discrepancy Claim';
+    }
+};
+
+window.viewCustomerEvidence = async function(orderId) {
+    const modal = document.getElementById('custEvidenceModal');
+    const body = document.getElementById('custEvidenceModalBody');
+    modal.style.display = 'flex';
+    body.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-soft);">Loading verification evidence...</div>';
+
+    try {
+        const res = await fetch(`${API_BASE}/api/user/orders/${orderId}/evidence`, { credentials: 'include' });
+        const data = await res.json();
+
+        if (!res.ok) {
+            body.innerHTML = `<div style="padding: 2rem; text-align: center; color: #EF4444;">${data.error || 'Failed to load evidence'}</div>`;
+            return;
+        }
+
+        const itemsHtml = (data.packing_checklist || []).map(idx => `<div style="font-size:0.8rem; padding:4px 8px; background:var(--bg-main); border-radius:6px; border:1px solid var(--border);">✔️ Verified Item #${idx + 1}</div>`).join('');
+
+        body.innerHTML = `
+            <div style="display: flex; flex-direction: column; gap: 1rem;">
+                <div style="background: var(--bg-main); padding: 1rem; border-radius: 12px; border: 1px solid var(--border);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <h4 style="margin:0; font-size:0.95rem; color:var(--text-main);"><i class="ph ph-camera" style="color:#10B981;"></i> Vendor Packing Photo</h4>
+                        ${data.is_tamper_sealed ? '<span style="font-size: 0.7rem; background: #DCFCE7; color: #166534; padding: 2px 8px; border-radius: 12px; font-weight: 700;">🔒 Tamper-Proof Sealed</span>' : ''}
+                    </div>
+                    ${data.packing_photo ? `
+                        <div style="border-radius: 10px; overflow: hidden; border: 1px solid var(--border); max-height: 220px;">
+                            <img src="${data.packing_photo}" style="width: 100%; height: 200px; object-fit: cover;">
+                        </div>
+                        <div style="font-size: 0.72rem; color: var(--text-soft); margin-top: 6px; font-family: monospace;">
+                            ${data.packing_geo || ''} | Packed: ${data.packed_at ? new Date(data.packed_at).toLocaleString() : 'N/A'}
+                        </div>
+                    ` : '<div style="padding:1rem; text-align:center; color:var(--text-soft);">No packing photo uploaded</div>'}
+                </div>
+
+                ${data.delivery_otp ? `
+                    <div style="background: #EFF6FF; border: 1px solid #BFDBFE; padding: 0.75rem 1rem; border-radius: 12px; display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size:0.85rem; font-weight:700; color:#1E40AF;">Your Delivery OTP:</span>
+                        <strong style="font-size: 1.3rem; letter-spacing: 2px; color: #1D4ED8;">${data.delivery_otp}</strong>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    } catch(err) {
+        body.innerHTML = `<div style="padding: 2rem; text-align: center; color: #EF4444;">Error loading evidence</div>`;
+    }
+};
+
+window.closeCustEvidenceModal = function() {
+    document.getElementById('custEvidenceModal').style.display = 'none';
+};
+
+let trackingInterval = null;
+let trackingMapInstance = null;
+let trackingStoreMarker = null;
+let trackingCustomerMarker = null;
+let trackingRiderMarker = null;
+let trackingRouteLine = null;
+
+window.openOrderTrackingModal = function(id) {
+    const modal = document.getElementById('orderTrackingModalOverlay');
+    if (modal) modal.classList.add('active');
+
+    // Bind close
+    const closeBtn = document.getElementById('closeOrderTrackingModal');
+    if (closeBtn) {
+        closeBtn.onclick = () => {
+            modal.classList.remove('active');
+            if (trackingInterval) {
+                clearInterval(trackingInterval);
+                trackingInterval = null;
+            }
+            // Clean map instance
+            trackingMapInstance = null;
+        };
+    }
+
+    // Start live tracking loop
+    pollTrackingInfo(id);
+    trackingInterval = setInterval(() => pollTrackingInfo(id), 3000);
+};
+
+async function pollTrackingInfo(id) {
+    try {
+        const res = await fetch(`${API_BASE}/api/orders/${id}/tracking`, { credentials: 'include' });
+        if (!res.ok) return;
+        const data = await res.json();
+
+        // Update UI Text
+        document.getElementById('trackingStoreName').innerText = data.shop_name || 'Store';
+        document.getElementById('trackingStatusText').innerText = data.status;
+        document.getElementById('trackingETA').innerText = data.eta_minutes;
+        document.getElementById('trackingWeather').innerText = data.weather_condition;
+        document.getElementById('trackingTraffic').innerText = data.traffic_condition;
+
+        // Weather icon
+        const weatherIcon = document.getElementById('trackingWeatherIcon');
+        if (weatherIcon) {
+            weatherIcon.className = data.weather_condition === 'sunny' ? 'ph-fill ph-sun' : (data.weather_condition === 'rainy' ? 'ph-fill ph-cloud-rain' : 'ph-fill ph-cloud-lightning');
+            weatherIcon.style.color = data.weather_condition === 'sunny' ? '#F59E0B' : '#6B7280';
+        }
+
+        // Traffic icon
+        const trafficIcon = document.getElementById('trackingTrafficIcon');
+        if (trafficIcon) {
+            trafficIcon.className = data.traffic_condition === 'clear' ? 'ph-fill ph-smiley' : (data.traffic_condition === 'moderate' ? 'ph-fill ph-car' : 'ph-fill ph-warning-circle');
+            trafficIcon.style.color = data.traffic_condition === 'clear' ? '#10B981' : (data.traffic_condition === 'moderate' ? '#F59E0B' : '#EF4444');
+        }
+
+        // Info card (entrance & status checks)
+        const infoCard = document.getElementById('trackingInfoCard');
+        if (infoCard) {
+            if (data.status === 'out_for_delivery' || data.status === 'delivered') {
+                infoCard.style.display = 'flex';
+                const entranceText = document.getElementById('trackingEntranceType');
+                if (entranceText) entranceText.innerText = data.entrance_type || 'Main Gate';
+            } else {
+                infoCard.style.display = 'none';
+            }
+        }
+
+        // Draw Map
+        const mapDiv = document.getElementById('trackingMap');
+        if (mapDiv) {
+            loadGoogleMapsScript(() => {
+                const storeLatLng = { lat: parseFloat(data.shop_latitude || 14.4426), lng: parseFloat(data.shop_longitude || 79.9865) };
+                const customerLatLng = { lat: parseFloat(data.delivery_lat || 14.4455), lng: parseFloat(data.delivery_lng || 79.9822) };
+                const riderLatLng = { lat: parseFloat(data.delivery_partner_lat || storeLatLng.lat), lng: parseFloat(data.delivery_partner_lng || storeLatLng.lng) };
+
+                // Initialize Map once
+                if (!trackingMapInstance) {
+                    trackingMapInstance = new google.maps.Map(mapDiv, {
+                        center: riderLatLng,
+                        zoom: 15,
+                        mapTypeControl: false,
+                        streetViewControl: false
+                    });
+
+                    // Store Marker
+                    trackingStoreMarker = new google.maps.Marker({
+                        position: storeLatLng,
+                        map: trackingMapInstance,
+                        icon: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png',
+                        title: data.shop_name
+                    });
+
+                    // Customer Marker
+                    trackingCustomerMarker = new google.maps.Marker({
+                        position: customerLatLng,
+                        map: trackingMapInstance,
+                        icon: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+                        title: "Your Location"
+                    });
+
+                    // Rider Marker
+                    trackingRiderMarker = new google.maps.Marker({
+                        position: riderLatLng,
+                        map: trackingMapInstance,
+                        icon: 'http://maps.google.com/mapfiles/ms/icons/cycling.png',
+                        title: "Delivery Partner"
+                    });
+
+                    // Draw Route Polyline
+                    const routeCoordinates = data.route_coordinates || [storeLatLng, customerLatLng];
+                    trackingRouteLine = new google.maps.Polyline({
+                        path: routeCoordinates,
+                        geodesic: true,
+                        strokeColor: '#4F46E5',
+                        strokeOpacity: 0.8,
+                        strokeWeight: 4,
+                        map: trackingMapInstance
+                    });
+                } else {
+                    // Update Rider position dynamically
+                    if (trackingRiderMarker) trackingRiderMarker.setPosition(riderLatLng);
+                    trackingMapInstance.setCenter(riderLatLng);
+                }
+
+                // If delivered, stop tracking and reload order list
+                if (data.status === 'delivered') {
+                    if (trackingInterval) {
+                        clearInterval(trackingInterval);
+                        trackingInterval = null;
+                    }
+                    Toast.show("🎉 Your order has been delivered!", "success");
+                    fetchOrders();
+                }
+            });
+        }
+    } catch (e) {
+        console.error("Live tracking polling error:", e);
     }
 }

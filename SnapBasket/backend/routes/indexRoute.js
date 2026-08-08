@@ -2,6 +2,19 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../db');
 
+function getDistance(lat1, lon1, lat2, lon2) {
+    if (!lat1 || !lon1 || !lat2 || !lon2) return null;
+    const R = 6371; // Radius of the earth in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c; // Distance in km
+}
+
 // Promise Helpers for SQLite
 const queryGet = (sql, params = []) => new Promise((resolve, reject) => {
     db.get(sql, params, (err, row) => err ? reject(err) : resolve(row));
@@ -200,7 +213,7 @@ router.get('/user-info', async (req, res) => {
 
 router.post('/orders', async (req, res) => {
     const userId = req.cookies.user_id || null;
-    let { items, paymentMethod, address, couponId, deliveryType, useCoins } = req.body;
+    let { items, paymentMethod, address, couponId, deliveryType, useCoins, address_id, delivery_lat, delivery_lng, traffic_condition, weather_condition } = req.body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
         return res.status(400).json({ error: "Cart is empty." });
@@ -300,10 +313,38 @@ router.post('/orders', async (req, res) => {
             
             totalCoinsEarned += shopCoinsEarned;
 
+            // Get shop coordinates to set initial partner position and calculate ETA
+            const shopObj = await queryGet("SELECT latitude, longitude FROM shops WHERE id = ?", [sId]);
+            const shopLat = (shopObj && shopObj.latitude) || 14.4426;
+            const shopLng = (shopObj && shopObj.longitude) || 79.9865;
+
+            const clientLat = parseFloat(delivery_lat) || 14.4455;
+            const clientLng = parseFloat(delivery_lng) || 79.9822;
+
+            const dist = getDistance(shopLat, shopLng, clientLat, clientLng) || 1.5;
+            const eta = Math.round(dist * 5) + 5; // ~5 mins per km + 5 mins prep time
+
+            const trafficOptions = ["clear", "moderate", "heavy"];
+            const weatherOptions = ["sunny", "rainy", "stormy"];
+            const traffic = traffic_condition || trafficOptions[Math.floor(Math.random() * trafficOptions.length)];
+            const weather = weather_condition || weatherOptions[Math.floor(Math.random() * weatherOptions.length)];
+
+            // Create initial winding route coordinates JSON
+            const routePoints = [
+                { lat: shopLat, lng: shopLng },
+                { lat: shopLat + (clientLat - shopLat) * 0.25 + 0.0012, lng: shopLng + (clientLng - shopLng) * 0.18 },
+                { lat: shopLat + (clientLat - shopLat) * 0.5 - 0.0008, lng: shopLng + (clientLng - shopLng) * 0.55 },
+                { lat: shopLat + (clientLat - shopLat) * 0.75 + 0.0006, lng: shopLng + (clientLng - shopLng) * 0.82 },
+                { lat: clientLat, lng: clientLng }
+            ];
+
             const itemsJsonStr = JSON.stringify(shopItems);
             const result = await queryRun(
-                `INSERT INTO orders (user_id, total, items, payment_method, address, status, discount_amount, coupon_id, delivery_type, coins_used, coins_earned, shop_id) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                `INSERT INTO orders (
+                    user_id, total, items, payment_method, address, status, discount_amount, coupon_id,
+                    delivery_type, coins_used, coins_earned, shop_id, address_id, delivery_lat, delivery_lng,
+                    delivery_partner_lat, delivery_partner_lng, eta_minutes, traffic_condition, weather_condition, route_coordinates
+                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     userId, 
                     Math.round(shopFinalTotal), 
@@ -316,11 +357,50 @@ router.post('/orders', async (req, res) => {
                     deliveryType || 'Home Delivery', 
                     shopCoinsUsed, 
                     shopCoinsEarned,
-                    Number(sId)
+                    Number(sId),
+                    address_id || null,
+                    clientLat,
+                    clientLng,
+                    shopLat,
+                    shopLng,
+                    eta,
+                    traffic,
+                    weather,
+                    JSON.stringify(routePoints)
                 ]
             );
 
-            subOrderIds.push(result.lastID);
+            const insertedOrderId = result.lastID;
+
+            // Increment vendor pending balance on order placement
+            try {
+                const rateRow = await queryGet("SELECT commission_rate FROM shops WHERE id = ?", [sId]);
+                const commissionRate = (rateRow && rateRow.commission_rate !== undefined) ? rateRow.commission_rate : 5;
+                const vendorEarnings = Math.round(shopFinalTotal * (1 - commissionRate / 100));
+
+                // Ensure wallet exists
+                let wallet = await queryGet("SELECT id FROM vendor_wallets WHERE shop_id = ?", [sId]);
+                if (!wallet) {
+                    await queryRun("INSERT INTO vendor_wallets (shop_id, balance, revenue, pending_balance, total_balance, available_balance) VALUES (?, 0, 0, 0, 0, 0)", [sId]);
+                }
+
+                // Update pending balance and revenue (accumulated store gross sales)
+                await queryRun(
+                    "UPDATE vendor_wallets SET pending_balance = pending_balance + ?, revenue = revenue + ? WHERE shop_id = ?",
+                    [vendorEarnings, Math.round(shopFinalTotal), sId]
+                );
+
+                // Create wallet transaction log
+                await queryRun(
+                    `INSERT INTO wallet_transactions (shop_id, order_id, type, amount, category, description) 
+                     VALUES (?, ?, 'credit', ?, 'order_sale', ?)`,
+                    [sId, insertedOrderId, vendorEarnings, 'order_sale', `Order #${insertedOrderId} placed (${paymentMethod}). Earnings added to pending.`]
+                );
+            } catch (walletErr) {
+                console.error("Failed to update vendor wallet on order placement:", walletErr.message);
+            }
+
+            subOrderIds.push(insertedOrderId);
             createdOrdersCount++;
         }
 
@@ -397,7 +477,7 @@ router.get('/notifications/history', async (req, res) => {
 
 // 1. Browse active marketplace shops
 router.get('/shops', async (req, res) => {
-    const { search, category } = req.query;
+    const { search, category, lat, lng } = req.query;
     try {
         let sql = "SELECT * FROM shops WHERE status = 'active' AND (is_active_store IS NULL OR is_active_store != 0)";
         let params = [];
@@ -419,6 +499,19 @@ router.get('/shops', async (req, res) => {
             );
         }
 
+        const clientLat = parseFloat(lat);
+        const clientLng = parseFloat(lng);
+        filtered = filtered.map(sh => {
+            let dist = null;
+            if (!isNaN(clientLat) && !isNaN(clientLng) && sh.latitude && sh.longitude) {
+                dist = getDistance(clientLat, clientLng, sh.latitude, sh.longitude);
+            }
+            return {
+                ...sh,
+                distance_km: dist !== null ? parseFloat(dist.toFixed(2)) : null
+            };
+        });
+
         res.json(filtered);
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -433,8 +526,22 @@ router.get('/shops/:id', async (req, res) => {
         if (!shop) return res.status(404).json({ error: "Shop not found." });
 
         let products = await queryAll("SELECT p.*, s.name as shop_name FROM products p LEFT JOIN shops s ON p.shop_id = s.id WHERE p.shop_id = ? AND p.is_available = 1", [id]);
-        if (products && shop) {
-            products = products.map(p => ({ ...p, shop_name: p.shop_name || shop.name }));
+        if (products) {
+            products = products.map(p => {
+                let parsedVariants = [];
+                if (p.variants) {
+                    try {
+                        parsedVariants = typeof p.variants === 'string' ? JSON.parse(p.variants) : p.variants;
+                    } catch(e) {
+                        parsedVariants = [];
+                    }
+                }
+                return { 
+                    ...p, 
+                    shop_name: p.shop_name || (shop ? shop.name : ''),
+                    variants: Array.isArray(parsedVariants) ? parsedVariants : [] 
+                };
+            });
         }
         res.json({ shop, products: products || [] });
     } catch (e) {
@@ -460,7 +567,7 @@ router.get('/features', async (req, res) => {
 router.post('/support/store-chat/send', async (req, res) => {
     try {
         const { shop_id, message, session_id, user_name } = req.body;
-        if (!shop_id || !message) {
+        if (shop_id === undefined || shop_id === null || shop_id === '' || !message) {
             return res.status(400).json({ error: "Missing shop_id or message." });
         }
 
@@ -488,7 +595,7 @@ router.post('/support/store-chat/send', async (req, res) => {
 router.get('/support/store-chat/history', async (req, res) => {
     try {
         const { shop_id, session_id, user_id } = req.query;
-        if (!shop_id) {
+        if (shop_id === undefined || shop_id === null || shop_id === '') {
             return res.status(400).json({ error: "Missing shop_id." });
         }
 
@@ -520,6 +627,99 @@ router.get('/support/store-chat/history', async (req, res) => {
         }
 
         res.json(messages || []);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.get('/orders/:id/tracking', async (req, res) => {
+    try {
+        const order = await queryGet("SELECT * FROM orders WHERE id = ?", [req.params.id]);
+        if (!order) return res.status(404).json({ error: "Order not found." });
+
+        const shop = await queryGet("SELECT name, logo, latitude, longitude FROM shops WHERE id = ?", [order.shop_id]);
+        if (!shop) return res.status(404).json({ error: "Shop not found." });
+
+        // Calculate progress based on order creation time
+        const createdAt = new Date(order.created_at + ' UTC').getTime(); 
+        const elapsedSecs = (Date.now() - createdAt) / 1000;
+
+        let status = order.status;
+        let lat = order.delivery_partner_lat;
+        let lng = order.delivery_partner_lng;
+        let eta = order.eta_minutes;
+
+        const routePoints = order.route_coordinates ? JSON.parse(order.route_coordinates) : [];
+
+        // Live order tracking simulation
+        if (status !== 'delivered' && status !== 'cancelled') {
+            if (elapsedSecs < 10) {
+                status = 'pending';
+                if (routePoints.length > 0) {
+                    lat = routePoints[0].lat;
+                    lng = routePoints[0].lng;
+                }
+            } else if (elapsedSecs < 20) {
+                status = 'packed';
+                if (routePoints.length > 0) {
+                    lat = routePoints[0].lat;
+                    lng = routePoints[0].lng;
+                }
+            } else if (elapsedSecs < 60) {
+                status = 'out_for_delivery';
+                const transitSecs = elapsedSecs - 20; 
+                const progress = Math.min(transitSecs / 40, 0.98); 
+
+                if (routePoints.length > 1) {
+                    const totalSegments = routePoints.length - 1;
+                    const segmentIdx = Math.floor(progress * totalSegments);
+                    const segmentProgress = (progress * totalSegments) - segmentIdx;
+                    const p1 = routePoints[segmentIdx];
+                    const p2 = routePoints[segmentIdx + 1];
+
+                    lat = p1.lat + (p2.lat - p1.lat) * segmentProgress;
+                    lng = p1.lng + (p2.lng - p1.lng) * segmentProgress;
+                }
+                eta = Math.max(1, Math.round(order.eta_minutes * (1 - progress)));
+            } else {
+                status = 'delivered';
+                if (routePoints.length > 0) {
+                    lat = routePoints[routePoints.length - 1].lat;
+                    lng = routePoints[routePoints.length - 1].lng;
+                }
+                eta = 0;
+                await queryRun("UPDATE orders SET status = 'delivered', delivery_partner_lat = ?, delivery_partner_lng = ?, eta_minutes = 0 WHERE id = ?", [lat, lng, order.id]);
+            }
+        } else {
+            eta = 0;
+            if (routePoints.length > 0) {
+                lat = routePoints[routePoints.length - 1].lat;
+                lng = routePoints[routePoints.length - 1].lng;
+            }
+        }
+
+        res.json({
+            id: order.id,
+            status: status,
+            total: order.total,
+            delivery_type: order.delivery_type,
+            address: order.address,
+            eta_minutes: eta,
+            traffic_condition: order.traffic_condition || 'clear',
+            weather_condition: order.weather_condition || 'sunny',
+            delivery_lat: order.delivery_lat,
+            delivery_lng: order.delivery_lng,
+            delivery_partner_lat: lat,
+            delivery_partner_lng: lng,
+            route_coordinates: routePoints,
+            shop_name: shop.name,
+            shop_logo: shop.logo,
+            shop_latitude: shop.latitude,
+            shop_longitude: shop.longitude,
+            entrance_pin: order.entrance_pin || null,
+            packing_photo: order.packing_photo || null,
+            is_tamper_sealed: order.is_tamper_sealed || 0
+        });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }

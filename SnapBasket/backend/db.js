@@ -99,8 +99,19 @@ function initDb() {
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             registered_shop TEXT,
             is_active_store INTEGER DEFAULT 1,
-            show_special_offers INTEGER DEFAULT 1
+            show_special_offers INTEGER DEFAULT 1,
+            latitude REAL,
+            longitude REAL,
+            delivery_radius_km REAL DEFAULT 5.0,
+            delivery_charge_per_km REAL DEFAULT 10.0,
+            base_delivery_charge REAL DEFAULT 20.0
         )`);
+
+        db.run("ALTER TABLE shops ADD COLUMN latitude REAL", (err) => {});
+        db.run("ALTER TABLE shops ADD COLUMN longitude REAL", (err) => {});
+        db.run("ALTER TABLE shops ADD COLUMN delivery_radius_km REAL DEFAULT 5.0", (err) => {});
+        db.run("ALTER TABLE shops ADD COLUMN delivery_charge_per_km REAL DEFAULT 10.0", (err) => {});
+        db.run("ALTER TABLE shops ADD COLUMN base_delivery_charge REAL DEFAULT 20.0", (err) => {});
 
         // Create Vendor Wallets Table
         db.run(`CREATE TABLE IF NOT EXISTS vendor_wallets (
@@ -108,6 +119,18 @@ function initDb() {
             shop_id INTEGER UNIQUE,
             balance INTEGER DEFAULT 0,
             revenue INTEGER DEFAULT 0,
+            total_balance INTEGER DEFAULT 0,
+            pending_balance INTEGER DEFAULT 0,
+            available_balance INTEGER DEFAULT 0,
+            withdrawal_mode TEXT DEFAULT 'auto',
+            payout_threshold INTEGER DEFAULT 1000,
+            return_hold_hours INTEGER DEFAULT 24,
+            bank_name TEXT,
+            bank_account TEXT,
+            bank_ifsc TEXT,
+            bank_holder_name TEXT,
+            upi_id TEXT,
+            upi_verified INTEGER DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )`);
 
@@ -153,18 +176,40 @@ function initDb() {
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             registered_shop TEXT,
             is_active_store INTEGER DEFAULT 1,
-            show_special_offers INTEGER DEFAULT 1
+            show_special_offers INTEGER DEFAULT 1,
+            latitude REAL,
+            longitude REAL,
+            delivery_radius_km REAL DEFAULT 5.0,
+            delivery_charge_per_km REAL DEFAULT 10.0,
+            base_delivery_charge REAL DEFAULT 20.0
         )`);
 
         db.run("ALTER TABLE shops ADD COLUMN registered_shop TEXT", (err) => {});
         db.run("ALTER TABLE shops ADD COLUMN is_active_store INTEGER DEFAULT 1", (err) => {});
         db.run("ALTER TABLE shops ADD COLUMN show_special_offers INTEGER DEFAULT 1", (err) => {});
+        db.run("ALTER TABLE shops ADD COLUMN latitude REAL", (err) => {});
+        db.run("ALTER TABLE shops ADD COLUMN longitude REAL", (err) => {});
+        db.run("ALTER TABLE shops ADD COLUMN delivery_radius_km REAL DEFAULT 5.0", (err) => {});
+        db.run("ALTER TABLE shops ADD COLUMN delivery_charge_per_km REAL DEFAULT 10.0", (err) => {});
+        db.run("ALTER TABLE shops ADD COLUMN base_delivery_charge REAL DEFAULT 20.0", (err) => {});
 
         db.run(`CREATE TABLE IF NOT EXISTS vendor_wallets (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             shop_id INTEGER UNIQUE,
             balance INTEGER DEFAULT 0,
             revenue INTEGER DEFAULT 0,
+            total_balance INTEGER DEFAULT 0,
+            pending_balance INTEGER DEFAULT 0,
+            available_balance INTEGER DEFAULT 0,
+            withdrawal_mode TEXT DEFAULT 'auto',
+            payout_threshold INTEGER DEFAULT 1000,
+            return_hold_hours INTEGER DEFAULT 24,
+            bank_name TEXT,
+            bank_account TEXT,
+            bank_ifsc TEXT,
+            bank_holder_name TEXT,
+            upi_id TEXT,
+            upi_verified INTEGER DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )`);
 
@@ -624,7 +669,21 @@ function initDb() {
             address TEXT,
             status TEXT DEFAULT 'pending',
             shop_id INTEGER,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            coupon_id INTEGER,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            address_id INTEGER,
+            delivery_lat REAL,
+            delivery_lng REAL,
+            delivery_partner_lat REAL,
+            delivery_partner_lng REAL,
+            eta_minutes INTEGER,
+            traffic_condition TEXT,
+            weather_condition TEXT,
+            route_coordinates TEXT,
+            wallet_status TEXT DEFAULT 'pending',
+            hold_until DATETIME DEFAULT NULL,
+            cod_collected INTEGER DEFAULT 0,
+            returned_or_replaced TEXT DEFAULT NULL
         )`);
 
         // Migration: Add status and payment_status columns if they don't exist
@@ -633,9 +692,102 @@ function initDb() {
         db.run("ALTER TABLE orders ADD COLUMN discount_amount INTEGER DEFAULT 0", (err) => {});
         db.run("ALTER TABLE orders ADD COLUMN delivery_type TEXT DEFAULT 'Home Delivery'", (err) => {});
         db.run("ALTER TABLE orders ADD COLUMN shop_id INTEGER", (err) => {});
+        db.run("ALTER TABLE orders ADD COLUMN coupon_id INTEGER", (err) => {});
+        db.run("ALTER TABLE orders ADD COLUMN packing_photo TEXT", (err) => {});
+        db.run("ALTER TABLE orders ADD COLUMN packing_checklist TEXT", (err) => {});
+        db.run("ALTER TABLE orders ADD COLUMN is_tamper_sealed INTEGER DEFAULT 0", (err) => {});
+        db.run("ALTER TABLE orders ADD COLUMN packing_geo TEXT", (err) => {});
+        db.run("ALTER TABLE orders ADD COLUMN packed_at DATETIME", (err) => {});
+        db.run("ALTER TABLE orders ADD COLUMN address_id INTEGER", (err) => {});
+        db.run("ALTER TABLE orders ADD COLUMN delivery_lat REAL", (err) => {});
+        db.run("ALTER TABLE orders ADD COLUMN delivery_lng REAL", (err) => {});
+        db.run("ALTER TABLE orders ADD COLUMN delivery_partner_lat REAL", (err) => {});
+        db.run("ALTER TABLE orders ADD COLUMN delivery_partner_lng REAL", (err) => {});
+        db.run("ALTER TABLE orders ADD COLUMN eta_minutes INTEGER", (err) => {});
+        db.run("ALTER TABLE orders ADD COLUMN traffic_condition TEXT", (err) => {});
+        db.run("ALTER TABLE orders ADD COLUMN weather_condition TEXT", (err) => {});
+        db.run("ALTER TABLE orders ADD COLUMN route_coordinates TEXT", (err) => {});
+        db.run("ALTER TABLE orders ADD COLUMN pickup_otp TEXT", (err) => {});
+        db.run("ALTER TABLE orders ADD COLUMN delivery_otp TEXT", (err) => {});
+        db.run("ALTER TABLE orders ADD COLUMN delivery_proof_photo TEXT", (err) => {});
+        db.run("ALTER TABLE orders ADD COLUMN picked_up_at DATETIME", (err) => {});
+        db.run("ALTER TABLE orders ADD COLUMN delivered_at DATETIME", (err) => {});
+
         db.run("ALTER TABLE users ADD COLUMN created_at DATETIME", (err) => {
             if (!err) db.run("UPDATE users SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL");
         });
+
+        // Create Order Disputes / Evidence Table
+        db.run(`CREATE TABLE IF NOT EXISTS order_disputes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            shop_id INTEGER NOT NULL,
+            reason_code TEXT NOT NULL,
+            description TEXT,
+            customer_unboxing_photo TEXT,
+            status TEXT DEFAULT 'open',
+            resolution_notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            resolved_at DATETIME
+        )`);
+
+        // WALLET MIGRATIONS & NEW TABLES
+        const walletAlters = [
+            "ALTER TABLE vendor_wallets ADD COLUMN total_balance INTEGER DEFAULT 0",
+            "ALTER TABLE vendor_wallets ADD COLUMN pending_balance INTEGER DEFAULT 0",
+            "ALTER TABLE vendor_wallets ADD COLUMN available_balance INTEGER DEFAULT 0",
+            "ALTER TABLE vendor_wallets ADD COLUMN withdrawal_mode TEXT DEFAULT 'auto'",
+            "ALTER TABLE vendor_wallets ADD COLUMN payout_threshold INTEGER DEFAULT 1000",
+            "ALTER TABLE vendor_wallets ADD COLUMN return_hold_hours INTEGER DEFAULT 24",
+            "ALTER TABLE vendor_wallets ADD COLUMN bank_name TEXT",
+            "ALTER TABLE vendor_wallets ADD COLUMN bank_account TEXT",
+            "ALTER TABLE vendor_wallets ADD COLUMN bank_ifsc TEXT",
+            "ALTER TABLE vendor_wallets ADD COLUMN bank_holder_name TEXT",
+            "ALTER TABLE vendor_wallets ADD COLUMN upi_id TEXT",
+            "ALTER TABLE vendor_wallets ADD COLUMN upi_verified INTEGER DEFAULT 0",
+            "ALTER TABLE orders ADD COLUMN wallet_status TEXT DEFAULT 'pending'",
+            "ALTER TABLE orders ADD COLUMN hold_until DATETIME",
+            "ALTER TABLE orders ADD COLUMN cod_collected INTEGER DEFAULT 0",
+            "ALTER TABLE orders ADD COLUMN returned_or_replaced TEXT",
+            "ALTER TABLE notifications ADD COLUMN target_shop_id INTEGER"
+        ];
+        walletAlters.forEach(query => db.run(query, (err) => {}));
+
+        db.run(`CREATE TABLE IF NOT EXISTS wallet_transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            shop_id INTEGER,
+            order_id INTEGER,
+            type TEXT,
+            amount INTEGER,
+            category TEXT,
+            description TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )`);
+
+        db.run(`CREATE TABLE IF NOT EXISTS settlement_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            shop_id INTEGER,
+            amount INTEGER,
+            bank_utr TEXT,
+            payment_mode TEXT,
+            status TEXT,
+            failure_reason TEXT,
+            admin_name TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )`);
+
+        db.run(`CREATE TABLE IF NOT EXISTS vendor_returns_replacements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            shop_id INTEGER,
+            order_id INTEGER,
+            type TEXT,
+            reason TEXT,
+            amount INTEGER,
+            status TEXT DEFAULT 'pending',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            resolved_at DATETIME
+        )`);
 
 
 
@@ -692,8 +844,39 @@ function initDb() {
             city TEXT,
             pincode TEXT,
             is_default INTEGER DEFAULT 0,
+            landmark TEXT,
+            floor_number TEXT,
+            apartment_name TEXT,
+            delivery_instructions TEXT,
+            contact_person TEXT,
+            phone_number TEXT,
+            latitude REAL,
+            longitude REAL,
+            entrance_latitude REAL,
+            entrance_longitude REAL,
+            entrance_type TEXT,
+            photo_url TEXT,
+            is_favorite INTEGER DEFAULT 0,
+            is_shared INTEGER DEFAULT 0,
+            sort_order INTEGER DEFAULT 0,
             FOREIGN KEY (user_id) REFERENCES users(id)
         )`);
+
+        db.run("ALTER TABLE addresses ADD COLUMN landmark TEXT", (err) => {});
+        db.run("ALTER TABLE addresses ADD COLUMN floor_number TEXT", (err) => {});
+        db.run("ALTER TABLE addresses ADD COLUMN apartment_name TEXT", (err) => {});
+        db.run("ALTER TABLE addresses ADD COLUMN delivery_instructions TEXT", (err) => {});
+        db.run("ALTER TABLE addresses ADD COLUMN contact_person TEXT", (err) => {});
+        db.run("ALTER TABLE addresses ADD COLUMN phone_number TEXT", (err) => {});
+        db.run("ALTER TABLE addresses ADD COLUMN latitude REAL", (err) => {});
+        db.run("ALTER TABLE addresses ADD COLUMN longitude REAL", (err) => {});
+        db.run("ALTER TABLE addresses ADD COLUMN entrance_latitude REAL", (err) => {});
+        db.run("ALTER TABLE addresses ADD COLUMN entrance_longitude REAL", (err) => {});
+        db.run("ALTER TABLE addresses ADD COLUMN entrance_type TEXT", (err) => {});
+        db.run("ALTER TABLE addresses ADD COLUMN photo_url TEXT", (err) => {});
+        db.run("ALTER TABLE addresses ADD COLUMN is_favorite INTEGER DEFAULT 0", (err) => {});
+        db.run("ALTER TABLE addresses ADD COLUMN is_shared INTEGER DEFAULT 0", (err) => {});
+        db.run("ALTER TABLE addresses ADD COLUMN sort_order INTEGER DEFAULT 0", (err) => {});
 
         // Create Coupons Table
         db.run(`CREATE TABLE IF NOT EXISTS coupons (
@@ -898,13 +1081,46 @@ function initDb() {
 
         // Seed Promo Banners
         const defaultPromo = [
-            { img: 'assets/promo_1.png', link: '#' },
-            { img: 'assets/promo_2.png', link: '#' },
-            { img: 'assets/promo_3.png', link: '#' }
+            { img: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=1200', link: '#' },
+            { img: 'https://images.unsplash.com/photo-1613478223719-2ab802602423?w=1200', link: '#' },
+            { img: 'https://images.unsplash.com/photo-1586816001966-79b736744398?w=1200', link: '#' }
         ];
         const insertPromo = db.prepare('INSERT INTO promo_banners (imageUrl, linkUrl, displayOrder) VALUES (?, ?, ?)');
         defaultPromo.forEach((p, index) => insertPromo.run(p.img, p.link, index + 1));
         insertPromo.finalize();
+
+        // Update all shops with mock coordinates and delivery values
+        db.serialize(() => {
+            const coords = [
+                { id: 1, lat: 14.4455, lng: 79.9822 }, // ~0.6km
+                { id: 2, lat: 14.4501, lng: 79.9890 }, // ~1.1km
+                { id: 3, lat: 14.4390, lng: 79.9790 }, // ~1.0km
+                { id: 4, lat: 14.4320, lng: 79.9920 }, // ~1.5km
+                { id: 5, lat: 14.4480, lng: 79.9980 }, // ~1.8km
+                { id: 6, lat: 14.4580, lng: 79.9800 }, // ~2.2km
+                { id: 7, lat: 14.4280, lng: 79.9720 }, // ~2.5km
+                { id: 8, lat: 14.4350, lng: 80.0050 }, // ~2.4km
+                { id: 9, lat: 14.4650, lng: 79.9950 }, // ~3.0km
+                { id: 10, lat: 14.4200, lng: 79.9850 }, // ~2.5km
+                { id: 11, lat: 14.4150, lng: 79.9980 }, // ~3.3km
+                { id: 12, lat: 14.4750, lng: 79.9750 }, // ~3.8km
+                { id: 13, lat: 14.4520, lng: 79.9620 }, // ~3.0km
+                { id: 14, lat: 14.4850, lng: 80.0100 }, // ~5.4km
+                { id: 15, lat: 14.4410, lng: 79.9830 }, // ~0.4km
+                { id: 16, lat: 14.4495, lng: 79.9860 }, // ~0.8km
+                { id: 17, lat: 14.4365, lng: 79.9805 }, // ~0.9km
+                { id: 18, lat: 14.4335, lng: 79.9930 }, // ~1.6km
+                { id: 19, lat: 14.4475, lng: 79.9965 }, // ~1.7km
+                { id: 20, lat: 14.4590, lng: 79.9810 }, // ~2.3km
+                { id: 21, lat: 14.4270, lng: 79.9710 }  // ~2.6km
+            ];
+            const stmt = db.prepare("UPDATE shops SET latitude = ?, longitude = ?, delivery_radius_km = ?, delivery_charge_per_km = ?, base_delivery_charge = ? WHERE id = ?");
+            coords.forEach(c => {
+                const radius = c.id % 2 === 0 ? 4.0 : 6.0;
+                stmt.run(c.lat, c.lng, radius, 10.0, 20.0, c.id);
+            });
+            stmt.finalize();
+        });
 
         // Seed rich data for Admin Panel Preview
         const now = new Date().toISOString().replace('T', ' ').split('.')[0];
@@ -917,10 +1133,22 @@ function initDb() {
             [1, 150, '[{"id":2,"name":"Fresh Red Apples","price":150,"quantity":1}]', 'Card', '456 Fruit Lane, Mumbai', 'delivered', yesterday]
         );
         db.run("INSERT INTO support_messages (name, email, subject, message, status, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-            ['Rakesh Kumar', 'rakesh@example.com', 'Delivery Delay', 'My order #1 is taking longer than expected.', 'unread', now]
+            [ 'Rakesh Kumar', 'rakesh@example.com', 'Delivery Delay', 'My order #1 is taking longer than expected.', 'unread', now]
         );
         db.run("INSERT INTO notifications (message, is_important, created_at) VALUES (?, ?, ?)",
             ['Welcome to ADYANTA Storefront! Fresh groceries delivered in minutes.', 1, now]
+        );
+        db.run("INSERT INTO notifications (message, is_important, created_at) VALUES (?, ?, ?)",
+            ['🚨 Delivery Delay: Due to heavy rain, delivery times in Nellore may be extended by 15-20 minutes. We appreciate your patience!', 1, now]
+        );
+        db.run("INSERT INTO notifications (message, is_important, created_at) VALUES (?, ?, ?)",
+            ['⚡ Lightning Sale Live! Get flat 20% OFF on all fresh fruits using code FRUIT20.', 0, new Date(Date.now() - 10 * 60 * 1000).toISOString()]
+        );
+        db.run("INSERT INTO notifications (message, is_important, created_at) VALUES (?, ?, ?)",
+            ['🎁 Wallet Bonus Activated: Check your account to redeem 50 free ADYANTA coins on your next purchase!', 0, new Date(Date.now() - 60 * 60 * 1000).toISOString()]
+        );
+        db.run("INSERT INTO notifications (message, is_important, created_at) VALUES (?, ?, ?)",
+            ['📢 New Store Launched: "Sri Balaji Organic Mart" is now live on ADYANTA! Order organic vegetables directly.', 0, new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString()]
         );
     });
 }

@@ -32,7 +32,18 @@ router.get('/', (req, res) => {
 
     db.all(sql, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(rows || []);
+        const parsedRows = (rows || []).map(r => {
+            let parsedVariants = [];
+            if (r.variants) {
+                try {
+                    parsedVariants = typeof r.variants === 'string' ? JSON.parse(r.variants) : r.variants;
+                } catch(e) {
+                    parsedVariants = [];
+                }
+            }
+            return { ...r, variants: Array.isArray(parsedVariants) ? parsedVariants : [] };
+        });
+        res.json(parsedRows);
     });
 });
 
@@ -53,7 +64,16 @@ router.get('/:id', (req, res) => {
     db.get("SELECT p.*, s.name as shop_name FROM products p LEFT JOIN shops s ON p.shop_id = s.id WHERE p.id = ?", [id], (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!row) return res.status(404).json({ error: "Product not found" });
-        res.json(row);
+        
+        let parsedVariants = [];
+        if (row.variants) {
+            try {
+                parsedVariants = typeof row.variants === 'string' ? JSON.parse(row.variants) : row.variants;
+            } catch(e) {
+                parsedVariants = [];
+            }
+        }
+        res.json({ ...row, variants: Array.isArray(parsedVariants) ? parsedVariants : [] });
     });
 });
 
@@ -82,7 +102,18 @@ router.get('/category/:categoryName', (req, res) => {
     
     db.all(sql, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(rows || []);
+        const parsedRows = (rows || []).map(r => {
+            let parsedVariants = [];
+            if (r.variants) {
+                try {
+                    parsedVariants = typeof r.variants === 'string' ? JSON.parse(r.variants) : r.variants;
+                } catch(e) {
+                    parsedVariants = [];
+                }
+            }
+            return { ...r, variants: Array.isArray(parsedVariants) ? parsedVariants : [] };
+        });
+        res.json(parsedRows);
     });
 });
 

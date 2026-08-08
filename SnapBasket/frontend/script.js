@@ -1,6 +1,24 @@
 const API_BASE = (typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) 
     ? import.meta.env.VITE_API_URL 
-    : (typeof window !== 'undefined' && window.location && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:3000' : 'https://adyanta.onrender.com');
+    : (typeof window !== 'undefined' && window.location && (
+        window.location.hostname === 'localhost' || 
+        window.location.hostname === '127.0.0.1' || 
+        window.location.hostname.startsWith('192.168.') || 
+        window.location.hostname.startsWith('10.') || 
+        window.location.hostname.startsWith('172.') || 
+        window.location.hostname.endsWith('.local')
+      ) ? '' : 'https://adyanta.onrender.com');
+
+window.getCoordsDistance = function(lat1, lon1, lat2, lon2) {
+    const R = 6371; // km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+};
 
 // Supabase Client Initialization (Frontend)
 const SUPABASE_URL = 'https://ghbecipylczrebqcmrvm.supabase.co';
@@ -232,7 +250,7 @@ window.reorder = async function(itemsJson) {
                 } else {
                     // Try to find matching variant in current item data to get latest price
                     let variantInfo = null;
-                    if (currentItem.variants && currentItem.variants.length > 0) {
+                    if (Array.isArray(currentItem.variants) && currentItem.variants.length > 0) {
                         variantInfo = currentItem.variants.find(v => String(v.weight) === String(weight));
                     }
                     
@@ -269,7 +287,7 @@ window.reorder = async function(itemsJson) {
 
 async function setupCustomerService() {
     try {
-        const res = await fetch(API_BASE + '/api/settings');
+        const res = await fetch(API_BASE + '/api/settings?t=' + Date.now(), { cache: 'no-store' });
         const settings = await res.json();
         
         if (settings) {
@@ -593,7 +611,7 @@ function setupNotifications() {
 
 async function fetchDynamicNotification() {
     try {
-        const res = await fetch(API_BASE + '/api/settings');
+        const res = await fetch(API_BASE + '/api/settings?t=' + Date.now(), { cache: 'no-store' });
         const settings = await res.json();
         const marqueeText = settings.marquee_text;
         
@@ -907,7 +925,7 @@ function openFeatureModal(category) {
             title.innerText = "Privacy Center";
             content.innerHTML = `<div style="text-align:center; padding:2rem;"><i class="ph ph-spinner-gap ph-spin" style="font-size:2rem; color:var(--primary);"></i></div>`;
             
-            fetch(API_BASE + '/api/settings').then(r => r.json()).then(s => {
+            fetch(API_BASE + '/api/settings?t=' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(s => {
                 const policy = s.privacy_policy || "At ADYANTA, we are committed to protecting your personal data. Your shopping history and payment information are encrypted and never shared with third parties.";
                 content.innerHTML = `
                     <div style="color: var(--text-soft); font-size: 0.9rem; line-height: 1.6;">
@@ -1009,12 +1027,51 @@ window.changeLanguage = (lang, syncToServer = false) => {
 // Start polling for dynamic notification marquee
 setInterval(fetchDynamicNotification, 30000);
 
+function getCoordsDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371; // km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+}
+
 function setupLocation() {
     const locSelector = document.querySelector('.location-selector');
     const locModal = document.getElementById('locationModal');
     const closeLocBtn = document.getElementById('closeLocationBtn');
     const saveLocBtn = document.getElementById('saveLocationBtn');
     const pincodeInput = document.getElementById('pincodeInput');
+    const detectLocBtn = document.getElementById('detectLocationBtn');
+
+    const onboardingModal = document.getElementById('locationPermissionOnboardingModal');
+    const allowBtn = document.getElementById('onboardingAllowLocationBtn');
+    const denyBtn = document.getElementById('onboardingDenyLocationBtn');
+
+    // Onboarding modal check
+    if (onboardingModal && !localStorage.getItem('firstLaunchLocationRequested')) {
+        setTimeout(() => {
+            onboardingModal.style.display = 'flex';
+        }, 1500);
+    }
+
+    if (allowBtn) {
+        allowBtn.addEventListener('click', () => {
+            localStorage.setItem('firstLaunchLocationRequested', 'true');
+            if (onboardingModal) onboardingModal.style.display = 'none';
+            triggerGeolocationAuto();
+        });
+    }
+
+    if (denyBtn) {
+        denyBtn.addEventListener('click', () => {
+            localStorage.setItem('firstLaunchLocationRequested', 'true');
+            if (onboardingModal) onboardingModal.style.display = 'none';
+            if (locModal) locModal.classList.add('active');
+        });
+    }
 
     // Check for saved location on load
     const savedPin = localStorage.getItem('userPincode');
@@ -1035,6 +1092,113 @@ function setupLocation() {
         });
     }
 
+    if (detectLocBtn) {
+        detectLocBtn.addEventListener('click', () => {
+            triggerGeolocationAuto();
+        });
+    }
+
+    async function triggerGeolocationAuto() {
+        if (!navigator.geolocation) {
+            Toast.show("Geolocation is not supported by your browser.", "error");
+            return;
+        }
+
+        const originalText = detectLocBtn ? detectLocBtn.innerHTML : '';
+        if (detectLocBtn) {
+            detectLocBtn.disabled = true;
+            detectLocBtn.innerHTML = '<i class="ph ph-spinner animate-spin"></i> Detecting Location...';
+        }
+
+        navigator.geolocation.getCurrentPosition(async (pos) => {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            
+            // Save current coords in local storage for store distance sorts
+            localStorage.setItem('user_latitude', lat);
+            localStorage.setItem('user_longitude', lng);
+
+            try {
+                // Reverse geocode via free Nominatim API
+                const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`, {
+                    headers: { 'Accept-Language': 'en' }
+                });
+                const data = await response.json();
+                const pin = data.address ? data.address.postcode : null;
+
+                if (pin && pin.length === 6 && !isNaN(pin)) {
+                    if (pincodeInput) pincodeInput.value = pin;
+                    
+                    // Verify restriction
+                    const res = await fetch(API_BASE + '/api/settings?t=' + Date.now(), { cache: 'no-store' });
+                    const settings = await res.json();
+                    
+                    if (settings && settings.pincode_restriction_active === 1 && settings.allowed_pincodes && settings.allowed_pincodes.trim().length > 0) {
+                        const allowedArray = settings.allowed_pincodes.split(',').map(p => p.trim().split('-')[0].trim()).filter(p => p.length > 0);
+                        if (allowedArray.length > 0 && !allowedArray.includes(pin)) {
+                            Toast.show(`Location detected: ${pin}. Delivery not available in this area.`, "error");
+                            resetDetectBtn();
+                            return;
+                        }
+                    }
+
+                    localStorage.setItem('userPincode', pin);
+                    if (locSelector) {
+                        const strong = locSelector.querySelector('strong');
+                        if (strong) strong.innerHTML = `Nellore ${pin} <i class="ph ph-caret-down"></i>`;
+                    }
+                    if (locModal) locModal.classList.remove('active');
+                    Toast.show(`Location detected & updated to ${pin}`, 'success');
+
+                    // Run Geofencing Check
+                    checkGeofencing(lat, lng);
+                } else {
+                    Toast.show("Could not accurately extract pincode. Please enter manually.", "warning");
+                }
+            } catch (err) {
+                console.error(err);
+                Toast.show("Failed to reverse-geocode coordinates.", "error");
+            }
+            resetDetectBtn();
+        }, (err) => {
+            console.error(err);
+            Toast.show("Location permission denied or unavailable. Selecting manually.", "warning");
+            if (locModal) locModal.classList.add('active');
+            resetDetectBtn();
+        }, { enableHighAccuracy: true, timeout: 8000 });
+
+        function resetDetectBtn() {
+            if (detectLocBtn) {
+                detectLocBtn.disabled = false;
+                detectLocBtn.innerHTML = originalText;
+            }
+        }
+    }
+
+    // Geofencing Check
+    async function checkGeofencing(lat, lng) {
+        try {
+            const res = await fetch(API_BASE + '/api/user/addresses', { credentials: 'include' });
+            if (!res.ok) return;
+            const addresses = await res.json();
+            
+            // Check if any address is near the detected coordinate (within 200m)
+            for (const addr of addresses) {
+                if (addr.latitude && addr.longitude) {
+                    const dist = getCoordsDistance(lat, lng, addr.latitude, addr.longitude);
+                    if (dist <= 0.2) { // 200 meters
+                        setTimeout(() => {
+                            Toast.show(`📍 You are near your saved location "${addr.label}". Deliver your order here?`, "info", 5000);
+                        }, 2000);
+                        break;
+                    }
+                }
+            }
+        } catch (e) {
+            console.error("Geofencing check error:", e);
+        }
+    }
+
     if (saveLocBtn) {
         saveLocBtn.addEventListener('click', async () => {
             const pin = pincodeInput.value.trim();
@@ -1045,12 +1209,12 @@ function setupLocation() {
                     saveLocBtnElem.innerText = "Verifying...";
                     saveLocBtnElem.disabled = true;
 
-                    const res = await fetch(API_BASE + '/api/settings');
+                    const res = await fetch(API_BASE + '/api/settings?t=' + Date.now(), { cache: 'no-store' });
                     const settings = await res.json();
                     
-                    if (settings && settings.pincode_restriction_active === 1 && settings.allowed_pincodes) {
-                        const allowedArray = settings.allowed_pincodes.split(',').map(p => p.trim());
-                        if (!allowedArray.includes(pin)) {
+                    if (settings && settings.pincode_restriction_active === 1 && settings.allowed_pincodes && settings.allowed_pincodes.trim().length > 0) {
+                        const allowedArray = settings.allowed_pincodes.split(',').map(p => p.trim().split('-')[0].trim()).filter(p => p.length > 0);
+                        if (allowedArray.length > 0 && !allowedArray.includes(pin)) {
                             Toast.show(`Delivery not available in your area (Pincode: ${pin}).`, "error");
                             saveLocBtnElem.innerText = originalText;
                             saveLocBtnElem.disabled = false;
@@ -2150,7 +2314,159 @@ async function setupCartInteractions() {
             const phone = getCookie('username');
             if (name) document.getElementById('checkoutName').value = decodeURIComponent(name);
             if (phone) document.getElementById('checkoutPhone').value = phone;
+
+            loadSavedAddressesForCheckout();
         };
+    }
+
+    let fetchedAddressesList = [];
+    async function loadSavedAddressesForCheckout() {
+        const select = document.getElementById('checkoutSavedAddressSelect');
+        if (!select) return;
+        select.innerHTML = '<option value="">-- Or enter address manually --</option>';
+        
+        try {
+            const res = await fetch(API_BASE + '/api/user/addresses', { credentials: 'include' });
+            if (res.ok) {
+                fetchedAddressesList = await res.json();
+                fetchedAddressesList.forEach(addr => {
+                    const defaultText = addr.is_default ? ' [Default]' : '';
+                    const label = `${addr.label}${defaultText} - ${addr.address_line}`;
+                    select.innerHTML += `<option value="${addr.id}">${label}</option>`;
+                });
+            }
+        } catch (e) {
+            console.error("Failed loading saved addresses in checkout:", e);
+        }
+    }
+
+    document.getElementById('checkoutSavedAddressSelect')?.addEventListener('change', async (e) => {
+        const val = e.target.value;
+        if (!val) {
+            document.getElementById('checkoutHouse').value = '';
+            document.getElementById('checkoutStreet').value = '';
+            document.getElementById('checkoutPincode').value = '';
+            window.checkoutAddressId = null;
+            window.checkoutAddressLat = null;
+            window.checkoutAddressLng = null;
+            return;
+        }
+        const addr = fetchedAddressesList.find(a => a.id == val);
+        if (addr) {
+            document.getElementById('checkoutHouse').value = (addr.apartment_name || '') + (addr.floor_number ? ', ' + addr.floor_number : '');
+            document.getElementById('checkoutStreet').value = addr.address_line + (addr.landmark ? ', Landmark: ' + addr.landmark : '');
+            document.getElementById('checkoutPincode').value = addr.pincode || '';
+            
+            if (addr.contact_person) document.getElementById('checkoutName').value = addr.contact_person;
+            if (addr.phone_number) document.getElementById('checkoutPhone').value = addr.phone_number;
+
+            window.checkoutAddressId = addr.id;
+            window.checkoutAddressLat = addr.latitude;
+            window.checkoutAddressLng = addr.longitude;
+
+            // Radius limit checks
+            const shopId = localStorage.getItem('active_shop_id') || 1;
+            try {
+                const shopRes = await fetch(API_BASE + '/api/shops/' + shopId);
+                if (shopRes.ok) {
+                    const shop = await shopRes.json();
+                    if (shop.latitude && shop.longitude && addr.latitude && addr.longitude) {
+                        const dist = window.getCoordsDistance(addr.latitude, addr.longitude, shop.latitude, shop.longitude);
+                        const radius = shop.delivery_radius_km || 5.0;
+                        if (dist > radius) {
+                            Toast.show(`⚠️ Address outside delivery zone! Distance: ${dist.toFixed(1)} km, Max: ${radius} km.`, "warning", 6000);
+                        } else {
+                            Toast.show(`✅ Within delivery zone! Store distance: ${dist.toFixed(1)} km.`, "success");
+                        }
+                    }
+                }
+            } catch(err) {
+                console.error("Shop distance check error:", err);
+            }
+        }
+    });
+
+    let checkoutMapInstance = null;
+    let checkoutMarker = null;
+    
+    document.getElementById('checkoutOpenMapPickerBtn')?.addEventListener('click', () => {
+        const mapDiv = document.getElementById('checkoutMapContainer');
+        if (!mapDiv) return;
+        
+        if (mapDiv.style.display === 'block') {
+            mapDiv.style.display = 'none';
+            return;
+        }
+        
+        mapDiv.style.display = 'block';
+        
+        if (typeof window.google === 'undefined' || typeof window.google.maps === 'undefined') {
+            const script = document.createElement('script');
+            const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+            const keyParam = apiKey ? `&key=${apiKey}` : '';
+            script.src = `https://maps.googleapis.com/maps/api/js?callback=initCheckoutMap${keyParam}`;
+            script.async = true;
+            script.defer = true;
+            window.initCheckoutMap = () => {
+                renderCheckoutMapPicker();
+            };
+            document.head.appendChild(script);
+        } else {
+            renderCheckoutMapPicker();
+        }
+    });
+
+    function renderCheckoutMapPicker() {
+        const mapDiv = document.getElementById('checkoutMapContainer');
+        const lat = parseFloat(window.checkoutAddressLat || localStorage.getItem('user_latitude') || 14.4426);
+        const lng = parseFloat(window.checkoutAddressLng || localStorage.getItem('user_longitude') || 79.9865);
+        
+        const myLatLng = { lat, lng };
+        checkoutMapInstance = new google.maps.Map(mapDiv, {
+            center: myLatLng,
+            zoom: 16,
+            mapTypeControl: false,
+            streetViewControl: false
+        });
+
+        checkoutMarker = new google.maps.Marker({
+            position: myLatLng,
+            map: checkoutMapInstance,
+            draggable: true,
+            title: "Drag to delivery point"
+        });
+
+        checkoutMarker.addListener('dragend', async () => {
+            const pos = checkoutMarker.getPosition();
+            window.checkoutAddressLat = pos.lat();
+            window.checkoutAddressLng = pos.lng();
+            
+            try {
+                const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.lat()}&lon=${pos.lng()}`, {
+                    headers: { 'Accept-Language': 'en' }
+                });
+                const data = await response.json();
+                if (data.address) {
+                    const building = data.address.building || data.address.amenity || data.address.house_number || '';
+                    const road = data.address.road || '';
+                    const suburb = data.address.suburb || data.address.neighbourhood || '';
+                    const city = data.address.city || data.address.town || data.address.village || '';
+                    const pincode = data.address.postcode || '';
+                    
+                    let addrLine = '';
+                    if (building) addrLine += building + ', ';
+                    if (road) addrLine += road + ', ';
+                    if (suburb) addrLine += suburb;
+                    addrLine = addrLine.replace(/,\s*$/, "");
+                    
+                    document.getElementById('checkoutHouse').value = building || 'House/Flat';
+                    document.getElementById('checkoutStreet').value = (road || suburb) ? (road + ', ' + suburb) : addrLine;
+                    if (pincode) document.getElementById('checkoutPincode').value = pincode;
+                }
+            } catch (err) {
+                console.error("Checkout drag geocode error:", err);
+            }
+        });
     }
 
     const deliveryNextBtn = document.getElementById('deliveryNextBtn');
@@ -2184,13 +2500,13 @@ async function setupCartInteractions() {
 
             try {
                 // Fetch latest settings for Pincode + Payments
-                const res = await fetch(API_BASE + '/api/settings');
+                const res = await fetch(API_BASE + '/api/settings?t=' + Date.now(), { cache: 'no-store' });
                 const settings = await res.json();
 
                 // Pincode validation
-                if (settings && settings.pincode_restriction_active === 1 && settings.allowed_pincodes) {
-                    const allowedArray = settings.allowed_pincodes.split(',').map(p => p.trim());
-                    if (!allowedArray.includes(pincode)) {
+                if (settings && settings.pincode_restriction_active === 1 && settings.allowed_pincodes && settings.allowed_pincodes.trim().length > 0) {
+                    const allowedArray = settings.allowed_pincodes.split(',').map(p => p.trim().split('-')[0].trim()).filter(p => p.length > 0);
+                    if (allowedArray.length > 0 && !allowedArray.includes(pincode)) {
                         Toast.show(`Delivery not available in your area (Pincode: ${pincode}).`, "error");
                         return;
                     }
@@ -2259,7 +2575,10 @@ async function setupCartInteractions() {
                 items: cart,
                 couponId: window.appliedCoupon ? window.appliedCoupon.id : null,
                 deliveryType: window.selectedDeliveryType,
-                useCoins: document.getElementById('useCoinsToggle')?.checked || false
+                useCoins: document.getElementById('useCoinsToggle')?.checked || false,
+                address_id: window.checkoutAddressId || null,
+                delivery_lat: window.checkoutAddressLat || null,
+                delivery_lng: window.checkoutAddressLng || null
             };
 
             try {
@@ -2770,7 +3089,7 @@ function populateProducts(containerId, items) {
         let btnHtml = '';
         if (!isAvailable) {
             btnHtml = `<span style="color: #EF4444; font-weight: 600; font-size: 0.9rem;">Out of Stock</span>`;
-        } else if (qty > 0 && (!prod.variants || prod.variants.length === 0)) { // Qty buttons only for non-variant
+        } else if (qty > 0 && (!Array.isArray(prod.variants) || prod.variants.length === 0)) { // Qty buttons only for non-variant
             btnHtml = `<div style="display: flex; align-items: center; background: var(--primary); border-radius: var(--radius-sm); overflow: hidden; height: 32px; box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);">
                 <button onclick="gridChangeQty(this, '${safeName}', -1, '${prod.id}')" style="border: none; background: transparent; color: white; padding: 0 10px; cursor: pointer; height: 100%;"><i class="ph ph-minus" style="font-weight: bold"></i></button>
                 <span style="font-size: 0.85rem; padding: 0 8px; font-weight: bold; color: white;">${qty}</span>
@@ -2788,7 +3107,7 @@ function populateProducts(containerId, items) {
                     <img src="${imgurl}" alt="${prod.name}" class="product-img" onerror="this.src='https://images.unsplash.com/photo-1542838132-92c53300491e?w=300&text=Product'">
                 </div>
                 <div class="product-info">
-                    ${prod.variants && prod.variants.length > 0 ? `
+                    ${Array.isArray(prod.variants) && prod.variants.length > 0 ? `
                         <select class="variant-select-inline" onchange="updateVariantPrice(this, '${prod.id}', '${safeName}')">
                             <option data-weight="${prod.weight}" data-price="${prod.price}" data-old-price="${originalprice}" data-img="${imgurl}">${prod.weight}</option>
                             ${prod.variants.map(v => `<option data-weight="${v.weight}" data-price="${v.price}" data-old-price="${v.originalprice || v.originalPrice || v.price}" data-img="${v.imgurl || imgurl}">${v.weight}</option>`).join('')}
@@ -3554,7 +3873,7 @@ function updateCoinsCheckoutWidget() {
     }
     
     // Check settings first to verify system is active
-    fetch(API_BASE + '/api/settings')
+    fetch(API_BASE + '/api/settings?t=' + Date.now(), { cache: 'no-store' })
         .then(r => r.json())
         .then(settings => {
             if (settings && settings.coins_system_active === 1 && window.userCoins > 0) {
@@ -3934,6 +4253,7 @@ function changeLangAndClose(lang) {
         document.getElementById('featureModalOverlay').classList.remove('active');
     }
 }
+window.changeLangAndClose = changeLangAndClose;
 
 async function checkUnreadActivity() {
     try {
@@ -4002,7 +4322,7 @@ async function fetchPromoBanners() {
         promoBannersData = await res.json();
         
         // Also fetch settings for speed
-        const settingsRes = await fetch(API_BASE + '/api/settings');
+        const settingsRes = await fetch(API_BASE + '/api/settings?t=' + Date.now(), { cache: 'no-store' });
         const settings = await settingsRes.json();
         if (settings && settings.banner_speed) {
             bannerSlidingSpeed = settings.banner_speed;
@@ -4492,8 +4812,8 @@ function getChatUserName() {
     return getCookie('full_name') || localStorage.getItem('user_full_name') || 'Guest User';
 }
 
-window.toggleSupportMode = function(mode, shopId, shopName) {
-    const alreadyInStoreMode = (supportMode === 'store' && activeSupportShopId === shopId);
+function toggleSupportMode(mode, shopId, shopName) {
+    const alreadyInSupportMode = ((supportMode === 'store' || supportMode === 'admin') && activeSupportShopId === shopId);
     supportMode = mode;
     activeSupportShopId = shopId;
     if (shopName) currentShopName = shopName;
@@ -4505,7 +4825,7 @@ window.toggleSupportMode = function(mode, shopId, shopName) {
     const input = document.getElementById('chatbotInput');
     const messages = document.getElementById('chatbotMessages');
     
-    if (mode === 'store') {
+    if (mode === 'store' || mode === 'admin') {
         if (messages && !aiChatbotBackupHtml) {
             aiChatbotBackupHtml = messages.innerHTML;
         }
@@ -4518,17 +4838,19 @@ window.toggleSupportMode = function(mode, shopId, shopName) {
             headerIcon.style.color = 'white';
         }
         if (headerTitle) {
-            headerTitle.innerText = `${shopName || 'Store'} Support`;
+            headerTitle.innerText = mode === 'admin' ? 'Adyanta Admin Support' : `${shopName || 'Store'} Support`;
         }
         if (headerStatus) {
-            headerStatus.innerHTML = `<span style="width: 7px; height: 7px; background: #22C55E; border-radius: 50%; display: inline-block;"></span> Vendor Direct Support (Online)`;
+            headerStatus.innerHTML = mode === 'admin' 
+                ? `<span style="width: 7px; height: 7px; background: #22C55E; border-radius: 50%; display: inline-block;"></span> Platform Admin Support (Online)`
+                : `<span style="width: 7px; height: 7px; background: #22C55E; border-radius: 50%; display: inline-block;"></span> Vendor Direct Support (Online)`;
             headerStatus.style.color = 'white';
         }
         if (input) {
-            input.placeholder = `Message ${shopName || 'Store'} Vendor...`;
+            input.placeholder = mode === 'admin' ? 'Message Adyanta Admin...' : `Message ${shopName || 'Store'} Vendor...`;
         }
         
-        if (!alreadyInStoreMode || !historyFetched) {
+        if (!alreadyInSupportMode || !historyFetched) {
             lastMessageCount = 0;
             fetchStoreChatHistory();
             historyFetched = true;
@@ -4562,10 +4884,11 @@ window.toggleSupportMode = function(mode, shopId, shopName) {
         }
     }
 }
+window.toggleSupportMode = toggleSupportMode;
 
 function startStoreChatPolling() {
     stopStoreChatPolling();
-    if (supportMode !== 'store' || !activeSupportShopId) return;
+    if ((supportMode !== 'store' && supportMode !== 'admin') || activeSupportShopId === null || activeSupportShopId === undefined) return;
     
     fetchStoreChatHistory();
     storeChatPollInterval = setInterval(() => {
@@ -4584,7 +4907,7 @@ function stopStoreChatPolling() {
 }
 
 async function fetchStoreChatHistory(silent = false) {
-    if (!activeSupportShopId) return;
+    if (activeSupportShopId === null || activeSupportShopId === undefined) return;
     try {
         const sessId = getChatSessionId();
         const userId = localStorage.getItem('user_id') || '';
@@ -4660,7 +4983,7 @@ function setupAIChatbot() {
             widget.classList.add('active');
             if (input) input.focus();
             if (messages) scrollToBottom(messages);
-            if (supportMode === 'store' && typeof startStoreChatPolling === 'function') {
+            if ((supportMode === 'store' || supportMode === 'admin') && typeof startStoreChatPolling === 'function') {
                 startStoreChatPolling();
             }
         } else {
@@ -4707,6 +5030,19 @@ function setupAIChatbot() {
                 toggleSupportMode('store', activeSupportShopId, currentShopName || 'Shop');
             });
     }
+
+    // Check if redirecting from support page to open admin chat directly
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('open_admin_chat') === 'true') {
+        toggleSupportMode('admin', 0, 'Adyanta Platform Support');
+        widget.classList.add('active');
+        if (input) input.focus();
+        if (typeof startStoreChatPolling === 'function') {
+            startStoreChatPolling();
+        }
+        // Clean URL params to prevent spamming opens
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
 }
 window.setupAIChatbot = setupAIChatbot;
 
@@ -4731,7 +5067,7 @@ function handleChatbotSend() {
     `;
     scrollToBottom(messages);
 
-    if (supportMode === 'store' && activeSupportShopId) {
+    if ((supportMode === 'store' || supportMode === 'admin') && activeSupportShopId !== null && activeSupportShopId !== undefined) {
         const userId = localStorage.getItem('user_id') ? parseInt(localStorage.getItem('user_id'), 10) : null;
         // Send message to the store vendor manual support API
         fetch(API_BASE + '/api/support/store-chat/send', {
@@ -4971,7 +5307,10 @@ window.processMockPayment = async function() {
             items: cart,
             couponId: window.appliedCoupon ? window.appliedCoupon.id : null,
             deliveryType: window.selectedDeliveryType,
-            useCoins: document.getElementById('useCoinsToggle')?.checked || false
+            useCoins: document.getElementById('useCoinsToggle')?.checked || false,
+            address_id: window.checkoutAddressId || null,
+            delivery_lat: window.checkoutAddressLat || null,
+            delivery_lng: window.checkoutAddressLng || null
         };
 
         try {

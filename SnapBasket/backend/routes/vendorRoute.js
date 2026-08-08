@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../db');
+const { handleOrderDelivery, releasePendingBalances, confirmCodCollection } = require('../walletHelper');
 
 // Promise Helpers for SQLite
 const queryGet = (sql, params = []) => new Promise((resolve, reject) => {
@@ -458,6 +459,14 @@ router.patch('/orders/:id', requireVendor, async (req, res) => {
             return res.status(403).json({ error: "Access Denied: Order belongs to another shop." });
         }
 
+        // MANDATORY AUDIT ENFORCEMENT: Block moving to "packed" or "ready_for_pickup" without photo & checklist evidence
+        if ((status === 'packed' || status === 'ready_for_pickup' || status === 'out_for_delivery') && !order.packing_photo) {
+            return res.status(400).json({
+                error: "Mandatory Packing Verification Required! You must complete the item checklist and upload a package photo before marking order as packed.",
+                requires_pack_verification: true
+            });
+        }
+
         const newPaymentStatus = status === 'cancelled' ? 'cancelled' : order.payment_status;
         await queryRun(
             "UPDATE orders SET status = ?, payment_status = ? WHERE id = ?",
@@ -466,24 +475,181 @@ router.patch('/orders/:id', requireVendor, async (req, res) => {
 
         const updatedOrder = await queryGet("SELECT * FROM orders WHERE id = ?", [req.params.id]);
 
-        // If order status changes to "delivered" (or accepted/completed), allocate earnings to vendor wallet!
-        if (status === 'accepted' || status === 'delivered') {
-            const wallet = await queryGet("SELECT * FROM vendor_wallets WHERE shop_id = ?", [shop.id]);
-            if (wallet) {
-                const ratePercent = shop.commission_rate !== undefined ? shop.commission_rate : 5;
-                const commissionRate = ratePercent / 100;
-                const vendorEarnings = Math.round(order.total * (1 - commissionRate));
-                
-                await queryRun(
-                    "UPDATE vendor_wallets SET balance = balance + ?, revenue = revenue + ? WHERE id = ?",
-                    [vendorEarnings, order.total, wallet.id]
-                );
-            }
+        // If order status changes to "delivered", run wallet flow rules
+        if (status === 'delivered') {
+            await handleOrderDelivery(req.params.id);
         }
 
         res.json({ message: `Order status updated to: ${status}`, order: updatedOrder });
     } catch(err) {
         res.status(500).json({ error: err.message });
+    }
+});
+
+// 9b. Mandatory Packed Order Photo & Item Verification Endpoint
+router.post('/orders/:id/pack-verification', requireVendor, async (req, res) => {
+    try {
+        const { packing_photo, checklist, is_tamper_sealed, packing_geo } = req.body;
+        if (!packing_photo) {
+            return res.status(400).json({ error: "Mandatory packing evidence photo is required." });
+        }
+
+        const shop = await getVendorShop(req.vendorId);
+        if (!shop) return res.status(404).json({ error: "Shop profile not found." });
+
+        const order = await queryGet("SELECT * FROM orders WHERE id = ?", [req.params.id]);
+        if (!order || order.shop_id !== shop.id) {
+            return res.status(403).json({ error: "Access Denied: Order belongs to another shop." });
+        }
+
+        // Parse items in order
+        let itemsList = [];
+        try { itemsList = JSON.parse(order.items || '[]'); } catch(e){}
+
+        // Verify item count / checklist matching
+        const verifiedItemIds = Array.isArray(checklist) ? checklist : [];
+        if (itemsList.length > 0 && verifiedItemIds.length < itemsList.length) {
+            return res.status(400).json({
+                error: `Item Mismatch Detected! Order contains ${itemsList.length} items, but only ${verifiedItemIds.length} were verified in checklist. All items must be checked off before packing.`,
+                mismatch: true
+            });
+        }
+
+        // Generate 4-digit Pickup & Delivery OTPs
+        const pickupOtp = Math.floor(1000 + Math.random() * 9000).toString();
+        const deliveryOtp = Math.floor(1000 + Math.random() * 9000).toString();
+        const geoString = packing_geo || `Pack Hub | ${new Date().toLocaleTimeString()}`;
+
+        await queryRun(
+            `UPDATE orders SET 
+                status = 'packed',
+                packing_photo = ?,
+                packing_checklist = ?,
+                is_tamper_sealed = ?,
+                packing_geo = ?,
+                packed_at = CURRENT_TIMESTAMP,
+                pickup_otp = ?,
+                delivery_otp = ?
+             WHERE id = ?`,
+            [packing_photo, JSON.stringify(verifiedItemIds), is_tamper_sealed ? 1 : 0, geoString, pickupOtp, deliveryOtp, req.params.id]
+        );
+
+        const updatedOrder = await queryGet("SELECT * FROM orders WHERE id = ?", [req.params.id]);
+        res.json({
+            message: "Order packed and photo evidence verified successfully!",
+            order: updatedOrder,
+            pickup_otp: pickupOtp,
+            delivery_otp: deliveryOtp
+        });
+    } catch(e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// 9c. Linked Evidence Chain Endpoint
+router.get('/orders/:id/evidence-chain', async (req, res) => {
+    try {
+        const order = await queryGet("SELECT * FROM orders WHERE id = ?", [req.params.id]);
+        if (!order) return res.status(404).json({ error: "Order not found" });
+
+        const disputes = await queryAll("SELECT * FROM order_disputes WHERE order_id = ? ORDER BY created_at DESC", [req.params.id]);
+        const shop = await queryGet("SELECT name, logo, contact_phone FROM shops WHERE id = ?", [order.shop_id]);
+
+        let itemsParsed = [];
+        try { itemsParsed = JSON.parse(order.items || '[]'); } catch(e){}
+
+        res.json({
+            order_id: order.id,
+            status: order.status,
+            total: order.total,
+            items: itemsParsed,
+            created_at: order.created_at,
+            packed_at: order.packed_at,
+            picked_up_at: order.picked_up_at,
+            delivered_at: order.delivered_at,
+            packing_photo: order.packing_photo,
+            packing_checklist: order.packing_checklist ? JSON.parse(order.packing_checklist) : [],
+            is_tamper_sealed: order.is_tamper_sealed === 1,
+            packing_geo: order.packing_geo,
+            pickup_otp: order.pickup_otp,
+            delivery_otp: order.delivery_otp,
+            delivery_proof_photo: order.delivery_proof_photo,
+            shop: shop || {},
+            disputes: disputes || []
+        });
+    } catch(e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// 9d. Vendor Packing Accuracy & SLA Score Endpoint
+router.get('/packing-accuracy', requireVendor, async (req, res) => {
+    try {
+        const shop = await getVendorShop(req.vendorId);
+        if (!shop) return res.status(404).json({ error: "Shop profile not found." });
+
+        const packedOrdersRow = await queryGet("SELECT COUNT(*) as count FROM orders WHERE shop_id = ? AND packing_photo IS NOT NULL", [shop.id]);
+        const totalPacked = packedOrdersRow ? packedOrdersRow.count : 0;
+
+        const disputesRow = await queryGet("SELECT COUNT(*) as count FROM order_disputes WHERE shop_id = ?", [shop.id]);
+        const totalDisputes = disputesRow ? disputesRow.count : 0;
+
+        const resolvedVendorFavorRow = await queryGet("SELECT COUNT(*) as count FROM order_disputes WHERE shop_id = ? AND status = 'resolved_vendor_favor'", [shop.id]);
+        const vendorFavors = resolvedVendorFavorRow ? resolvedVendorFavorRow.count : 0;
+
+        const effectiveErrors = Math.max(0, totalDisputes - vendorFavors);
+        const accuracyScore = totalPacked > 0 ? parseFloat(Math.max(0, Math.min(100, (((totalPacked - effectiveErrors) / totalPacked) * 100))).toFixed(1)) : 100;
+
+        res.json({
+            total_packed_orders: totalPacked,
+            total_disputes: totalDisputes,
+            disputes_vendor_favor: vendorFavors,
+            accuracy_score: accuracyScore,
+            sla_avg_packing_mins: 8.5
+        });
+    } catch(e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// 9e. Vendor Disputes Management Endpoints
+router.get('/disputes', requireVendor, async (req, res) => {
+    try {
+        const shop = await getVendorShop(req.vendorId);
+        if (!shop) return res.status(404).json({ error: "Shop profile not found." });
+
+        const disputes = await queryAll(
+            `SELECT d.*, o.total, o.packing_photo, o.packing_checklist, u.full_name as customer_name, u.phone as customer_phone
+             FROM order_disputes d
+             JOIN orders o ON d.order_id = o.id
+             LEFT JOIN users u ON d.user_id = u.id
+             WHERE d.shop_id = ?
+             ORDER BY d.created_at DESC`,
+            [shop.id]
+        );
+
+        res.json(disputes || []);
+    } catch(e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/disputes/:id/resolve', requireVendor, async (req, res) => {
+    try {
+        const { status, resolution_notes } = req.body;
+        if (!status) return res.status(400).json({ error: "Status required." });
+
+        const shop = await getVendorShop(req.vendorId);
+        if (!shop) return res.status(404).json({ error: "Shop profile not found." });
+
+        await queryRun(
+            "UPDATE order_disputes SET status = ?, resolution_notes = ?, resolved_at = CURRENT_TIMESTAMP WHERE id = ? AND shop_id = ?",
+            [status, resolution_notes || '', req.params.id, shop.id]
+        );
+
+        res.json({ message: `Dispute marked as ${status}` });
+    } catch(e) {
+        res.status(500).json({ error: e.message });
     }
 });
 
@@ -493,15 +659,35 @@ router.get('/wallet', requireVendor, async (req, res) => {
         const shop = await getVendorShop(req.vendorId);
         if (!shop) return res.status(404).json({ error: "Shop profile not found." });
 
-        const wallet = await queryGet("SELECT * FROM vendor_wallets WHERE shop_id = ?", [shop.id]);
+        // Release eligible return-hold funds dynamically first
+        await releasePendingBalances(shop.id);
+
+        let wallet = await queryGet("SELECT * FROM vendor_wallets WHERE shop_id = ?", [shop.id]);
         if (!wallet) {
-            return res.status(404).json({ error: "Wallet not found." });
+            // Auto-initialize if missing
+            await queryRun("INSERT INTO vendor_wallets (shop_id, balance, revenue, pending_balance, total_balance, available_balance) VALUES (?, 0, 0, 0, 0, 0)", [shop.id]);
+            wallet = await queryGet("SELECT * FROM vendor_wallets WHERE shop_id = ?", [shop.id]);
         }
 
-        // Gather metrics: total orders count, pending orders count, active items count
+        // Gather metrics: total orders count, pending orders count, active products count
         const totalOrdersRow = await queryGet("SELECT COUNT(*) as count FROM orders WHERE shop_id = ?", [shop.id]);
         const pendingOrdersRow = await queryGet("SELECT COUNT(*) as count FROM orders WHERE shop_id = ? AND status = 'pending'", [shop.id]);
         const totalProductsRow = await queryGet("SELECT COUNT(*) as count FROM products WHERE shop_id = ?", [shop.id]);
+
+        // Fetch wallet sublogs
+        const orders = await queryAll(
+            `SELECT o.id, o.total, o.payment_method, o.status, o.wallet_status, o.hold_until, o.cod_collected, o.returned_or_replaced, o.delivered_at, o.created_at, u.full_name as customer_name 
+             FROM orders o 
+             LEFT JOIN users u ON o.user_id = u.id 
+             WHERE o.shop_id = ? 
+             ORDER BY o.id DESC`, 
+            [shop.id]
+        );
+
+        const transactions = await queryAll("SELECT * FROM wallet_transactions WHERE shop_id = ? ORDER BY id DESC", [shop.id]);
+        const returns = await queryAll("SELECT * FROM vendor_returns_replacements WHERE shop_id = ? ORDER BY id DESC", [shop.id]);
+        const settlements = await queryAll("SELECT * FROM settlement_logs WHERE shop_id = ? ORDER BY id DESC", [shop.id]);
+        const disputes = await queryAll("SELECT * FROM order_disputes WHERE shop_id = ? ORDER BY id DESC", [shop.id]);
 
         res.json({
             wallet,
@@ -509,9 +695,334 @@ router.get('/wallet', requireVendor, async (req, res) => {
                 totalOrders: totalOrdersRow ? totalOrdersRow.count : 0,
                 pendingOrders: pendingOrdersRow ? pendingOrdersRow.count : 0,
                 totalProducts: totalProductsRow ? totalProductsRow.count : 0
-            }
+            },
+            orders,
+            transactions,
+            returns,
+            settlements,
+            disputes
         });
     } catch(err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 10a. Update Payout Options & Bank/UPI details
+router.post('/wallet/settings', requireVendor, async (req, res) => {
+    try {
+        const shop = await getVendorShop(req.vendorId);
+        if (!shop) return res.status(404).json({ error: "Shop profile not found." });
+
+        const { withdrawal_mode, payout_threshold, return_hold_hours, bank_name, bank_account, bank_ifsc, bank_holder_name, upi_id } = req.body;
+
+        await queryRun(
+            `UPDATE vendor_wallets 
+             SET withdrawal_mode = ?, 
+                 payout_threshold = ?, 
+                 return_hold_hours = ?, 
+                 bank_name = ?, 
+                 bank_account = ?, 
+                 bank_ifsc = ?, 
+                 bank_holder_name = ?, 
+                 upi_id = ? 
+             WHERE shop_id = ?`,
+            [
+                withdrawal_mode || 'auto',
+                parseInt(payout_threshold, 10) || 1000,
+                parseInt(return_hold_hours, 10) || 24,
+                bank_name || '',
+                bank_account || '',
+                bank_ifsc || '',
+                bank_holder_name || '',
+                upi_id || '',
+                shop.id
+            ]
+        );
+
+        res.json({ message: "Wallet payout settings updated successfully!" });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 10b. Penny-drop Bank Account Verification Simulation
+router.post('/wallet/verify-bank', requireVendor, async (req, res) => {
+    try {
+        const shop = await getVendorShop(req.vendorId);
+        if (!shop) return res.status(404).json({ error: "Shop profile not found." });
+
+        const { bank_account, bank_ifsc, bank_holder_name } = req.body;
+        if (!bank_account || !bank_ifsc || !bank_holder_name) {
+            return res.status(400).json({ error: "Missing bank details for verification." });
+        }
+
+        // Simulate penny drop verification - Credit ₹1 to vendor
+        await queryRun(
+            `UPDATE vendor_wallets 
+             SET available_balance = available_balance + 1, 
+                 total_balance = total_balance + 1,
+                 upi_verified = 1
+             WHERE shop_id = ?`,
+            [shop.id]
+        );
+
+        // Record verification transaction log
+        await queryRun(
+            `INSERT INTO wallet_transactions (shop_id, order_id, type, amount, category, description) 
+             VALUES (?, NULL, 'credit', 1, 'adjustment', 'Simulated penny-drop bank account verification credit.')`,
+            [shop.id]
+        );
+
+        // Trigger notification
+        await queryRun(
+            `INSERT INTO notifications (message, is_important, target_role, target_shop_id) 
+             VALUES (?, 0, 'vendor', ?)`,
+            [`🎉 Bank account ending in ${bank_account.slice(-4)} successfully verified via ₹1 penny-drop!`, shop.id]
+        );
+
+        res.json({ message: "Bank Account Verified! ₹1 penny-drop successfully processed." });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 10c. Manual Withdrawal Payout Request
+router.post('/wallet/withdraw', requireVendor, async (req, res) => {
+    try {
+        const shop = await getVendorShop(req.vendorId);
+        if (!shop) return res.status(404).json({ error: "Shop profile not found." });
+
+        const wallet = await queryGet("SELECT * FROM vendor_wallets WHERE shop_id = ?", [shop.id]);
+        if (!wallet) return res.status(404).json({ error: "Wallet not found." });
+
+        if (wallet.withdrawal_mode !== 'manual') {
+            return res.status(400).json({ error: "Manual withdrawals are only allowed when withdrawal mode is set to Manual." });
+        }
+
+        const reqAmount = parseInt(req.body.amount, 10);
+        if (!reqAmount || reqAmount <= 0) {
+            return res.status(400).json({ error: "Invalid payout amount requested." });
+        }
+
+        if (reqAmount < wallet.payout_threshold) {
+            return res.status(400).json({ error: `Withdrawal amount must be at least the minimum threshold of ₹${wallet.payout_threshold}.` });
+        }
+
+        if (wallet.available_balance < reqAmount) {
+            return res.status(400).json({ error: `Insufficient Available Balance. Your available balance is ₹${wallet.available_balance}.` });
+        }
+
+        // Deduct from available balance immediately and place in settlement processing
+        await queryRun(
+            "UPDATE vendor_wallets SET available_balance = available_balance - ? WHERE shop_id = ?",
+            [reqAmount, shop.id]
+        );
+
+        // Log manual payout request
+        const refUTR = "MREQ" + Math.floor(100000000000 + Math.random() * 900000000000);
+        await queryRun(
+            `INSERT INTO settlement_logs (shop_id, amount, bank_utr, payment_mode, status, failure_reason) 
+             VALUES (?, ?, ?, 'manual', 'processing', 'Awaiting Super Admin Approval')`,
+            [shop.id, reqAmount, refUTR]
+        );
+
+        await queryRun(
+            `INSERT INTO notifications (message, is_important, target_role, target_shop_id) 
+             VALUES (?, 0, 'vendor', ?)`,
+            [`Payout request of ₹${reqAmount} submitted. Awaiting admin approval. Reference: ${refUTR}.`, shop.id]
+        );
+
+        res.json({ message: "Payout request submitted successfully!", available_balance: wallet.available_balance - reqAmount });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 10d. Confirm COD Collection
+router.post('/orders/:id/cod-collected', requireVendor, async (req, res) => {
+    try {
+        const shop = await getVendorShop(req.vendorId);
+        if (!shop) return res.status(404).json({ error: "Shop profile not found." });
+
+        const order = await queryGet("SELECT * FROM orders WHERE id = ? AND shop_id = ?", [req.params.id, shop.id]);
+        if (!order) return res.status(404).json({ error: "Order not found." });
+
+        const result = await confirmCodCollection(order.id);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 10e. Raise Dispute
+router.post('/orders/:id/raise-dispute', requireVendor, async (req, res) => {
+    try {
+        const shop = await getVendorShop(req.vendorId);
+        if (!shop) return res.status(404).json({ error: "Shop profile not found." });
+
+        const { reason_code, description } = req.body;
+        if (!reason_code) return res.status(400).json({ error: "Dispute reason is required." });
+
+        const order = await queryGet("SELECT * FROM orders WHERE id = ? AND shop_id = ?", [req.params.id, shop.id]);
+        if (!order) return res.status(404).json({ error: "Order not found." });
+
+        // Insert dispute
+        await queryRun(
+            `INSERT INTO order_disputes (order_id, user_id, shop_id, reason_code, description, status) 
+             VALUES (?, ?, ?, ?, ?, 'open')`,
+            [order.id, order.user_id, shop.id, reason_code, description || '']
+        );
+
+        // Alert super admin via notification
+        await queryRun(
+            `INSERT INTO notifications (message, is_important, target_role) 
+             VALUES (?, 1, 'admin')`,
+            [`🚨 Vendor of "${shop.name}" raised a dispute on Order #${order.id}. Reason: ${reason_code}.`]
+        );
+
+        res.json({ message: "Dispute raised successfully! Super Admin will review." });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 10f. Simulate Order Return (Deduction Flow)
+router.post('/orders/:id/simulate-return', requireVendor, async (req, res) => {
+    try {
+        const shop = await getVendorShop(req.vendorId);
+        if (!shop) return res.status(404).json({ error: "Shop profile not found." });
+
+        const order = await queryGet("SELECT * FROM orders WHERE id = ? AND shop_id = ?", [req.params.id, shop.id]);
+        if (!order) return res.status(404).json({ error: "Order not found." });
+
+        if (order.status !== 'delivered') {
+            return res.status(400).json({ error: "Only delivered orders are eligible for return." });
+        }
+
+        // Return Eligibility Deadline check: 7 days post-delivery
+        const deliveredDate = new Date(order.delivered_at);
+        const daysDiff = (new Date() - deliveredDate) / (1000 * 60 * 60 * 24);
+        if (daysDiff > 7) {
+            return res.status(400).json({ error: "Return period locked! Order delivered more than 7 days ago." });
+        }
+
+        const rateRow = await queryGet("SELECT commission_rate FROM shops WHERE id = ?", [shop.id]);
+        const commissionRate = (rateRow && rateRow.commission_rate !== undefined) ? rateRow.commission_rate : 5;
+        const vendorEarnings = Math.round(order.total * (1 - commissionRate / 100));
+
+        // Deduct from available balance (can go negative as requested)
+        await queryRun(
+            `UPDATE vendor_wallets 
+             SET available_balance = available_balance - ?, 
+                 total_balance = total_balance - ? 
+             WHERE shop_id = ?`,
+            [vendorEarnings, vendorEarnings, shop.id]
+        );
+
+        // Update order returned state
+        await queryRun(
+            "UPDATE orders SET returned_or_replaced = 'returned', wallet_status = 'returned' WHERE id = ?",
+            [order.id]
+        );
+
+        // Log transaction debit
+        await queryRun(
+            `INSERT INTO wallet_transactions (shop_id, order_id, type, amount, category, description) 
+             VALUES (?, ?, 'debit', ?, 'return_deduction', ?)`,
+            [shop.id, order.id, vendorEarnings, 'return_deduction', `Return deduction for Order #${order.id}. Reason: Customer requested refund.`]
+        );
+
+        // Log in return registry
+        await queryRun(
+            `INSERT INTO vendor_returns_replacements (shop_id, order_id, type, reason, amount, status, resolved_at) 
+             VALUES (?, ?, 'return', ?, ?, 'approved', CURRENT_TIMESTAMP)`,
+            [shop.id, order.id, req.body.reason || 'Customer Refund', vendorEarnings]
+        );
+
+        // Send alert notification
+        await queryRun(
+            `INSERT INTO notifications (message, is_important, target_role, target_shop_id) 
+             VALUES (?, 1, 'vendor', ?)`,
+            [`⚠️ Return Processed: ₹${vendorEarnings} has been deducted from your wallet for Order #${order.id}.`, shop.id]
+        );
+
+        res.json({ message: "Order return simulated successfully! Wallet balances updated." });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 10g. Simulate Order Replacement (Adjustment Flow)
+router.post('/orders/:id/simulate-replacement', requireVendor, async (req, res) => {
+    try {
+        const shop = await getVendorShop(req.vendorId);
+        if (!shop) return res.status(404).json({ error: "Shop profile not found." });
+
+        const order = await queryGet("SELECT * FROM orders WHERE id = ? AND shop_id = ?", [req.params.id, shop.id]);
+        if (!order) return res.status(404).json({ error: "Order not found." });
+
+        if (order.status !== 'delivered') {
+            return res.status(400).json({ error: "Only delivered orders are eligible for replacement." });
+        }
+
+        // Return Eligibility Deadline check: 7 days post-delivery
+        const deliveredDate = new Date(order.delivered_at);
+        const daysDiff = (new Date() - deliveredDate) / (1000 * 60 * 60 * 24);
+        if (daysDiff > 7) {
+            return res.status(400).json({ error: "Replacement period locked! Order delivered more than 7 days ago." });
+        }
+
+        // Price difference: positive if vendor earns more (credit), negative if vendor loses money (debit)
+        const priceDiff = parseInt(req.body.price_difference, 10) || 0; 
+        const rateRow = await queryGet("SELECT commission_rate FROM shops WHERE id = ?", [shop.id]);
+        const commissionRate = (rateRow && rateRow.commission_rate !== undefined) ? rateRow.commission_rate : 5;
+        
+        let adjustment = 0;
+        if (priceDiff !== 0) {
+            adjustment = Math.round(priceDiff * (1 - commissionRate / 100));
+            
+            // Adjust balances
+            await queryRun(
+                `UPDATE vendor_wallets 
+                 SET available_balance = available_balance + ?, 
+                     total_balance = total_balance + ? 
+                 WHERE shop_id = ?`,
+                [adjustment, adjustment, shop.id]
+            );
+
+            // Log transaction adjustment
+            const txType = adjustment > 0 ? 'credit' : 'debit';
+            const category = 'adjustment';
+            const absAmt = Math.abs(adjustment);
+            await queryRun(
+                `INSERT INTO wallet_transactions (shop_id, order_id, type, amount, category, description) 
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                [shop.id, order.id, txType, absAmt, category, `Price adjustment for replacement Order #${order.id}. Diff: ₹${adjustment}.`]
+            );
+        }
+
+        // Update order state
+        await queryRun(
+            "UPDATE orders SET returned_or_replaced = 'replaced' WHERE id = ?",
+            [order.id]
+        );
+
+        // Log replacement details
+        await queryRun(
+            `INSERT INTO vendor_returns_replacements (shop_id, order_id, type, reason, amount, status, resolved_at) 
+             VALUES (?, ?, 'replacement', ?, ?, 'approved', CURRENT_TIMESTAMP)`,
+            [shop.id, order.id, req.body.reason || 'Product Swap', adjustment]
+        );
+
+        // Send alert notification
+        await queryRun(
+            `INSERT INTO notifications (message, is_important, target_role, target_shop_id) 
+             VALUES (?, 0, 'vendor', ?)`,
+            [`🔄 Replacement Processed: Order #${order.id} replaced. Wallet adjustment of ₹${adjustment} applied.`, shop.id]
+        );
+
+        res.json({ message: "Order replacement simulated successfully!", adjustment });
+    } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
@@ -801,8 +1312,11 @@ router.delete('/support-messages/:id', requireVendor, async (req, res) => {
 router.get('/notifications', requireVendor, async (req, res) => {
     try {
         const { date } = req.query;
-        let sql = "SELECT * FROM notifications WHERE (target_role = 'vendor' OR target_role = 'all')";
-        let params = [];
+        const shop = await getVendorShop(req.vendorId);
+        const shopId = shop ? shop.id : null;
+
+        let sql = "SELECT * FROM notifications WHERE (target_role = 'vendor' OR target_role = 'all') AND (target_shop_id IS NULL OR target_shop_id = ?)";
+        let params = [shopId];
         if (date) {
             sql += " AND date(created_at) = date(?)";
             params.push(date);

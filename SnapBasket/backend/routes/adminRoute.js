@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../db');
 const { hashPassword, verifyPassword } = require('./authRoute');
+const { triggerAutoSettlement, releasePendingBalances } = require('../walletHelper');
 
 // Promise Helpers for SQLite
 const queryGet = (sql, params = []) => new Promise((resolve, reject) => {
@@ -21,6 +22,16 @@ function checkAdminAuth(req, res, next) {
         next();
     } else {
         res.status(403).json({ error: "Forbidden. Only Suresh is authorized to access Super Admin features." });
+    }
+}
+
+function checkAdminOrVendorAuth(req, res, next) {
+    const isSuperAdmin = (req.cookies.admin_auth === 'true' || req.cookies.role === 'super_admin') && req.cookies.username === '9490229108';
+    const isVendor = req.cookies.role === 'vendor';
+    if (isSuperAdmin || isVendor) {
+        next();
+    } else {
+        res.status(403).json({ error: "Forbidden. Admin or Vendor authentication required." });
     }
 }
 
@@ -208,6 +219,71 @@ router.get('/dashboard/stats', async (req, res) => {
     }
 });
 
+// Coupons
+router.get('/coupons/stats', checkAdminAuth, async (req, res) => {
+    try {
+        const stats = await queryGet(`
+            SELECT COALESCE(COUNT(id), 0) AS totalUses,
+                   COALESCE(SUM(discount_amount), 0) AS totalSaved
+            FROM orders
+            WHERE coupon_id IS NOT NULL
+        `);
+        res.json(stats || { totalUses: 0, totalSaved: 0 });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.get('/coupons', checkAdminAuth, async (req, res) => {
+    try {
+        const data = await queryAll(`
+            SELECT c.*, 
+                   COALESCE(COUNT(o.id), 0) AS useCount, 
+                   COALESCE(SUM(o.discount_amount), 0) AS totalSaved
+            FROM coupons c
+            LEFT JOIN orders o ON o.coupon_id = c.id
+            GROUP BY c.id
+        `);
+        res.json(data);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/coupons', checkAdminAuth, async (req, res) => {
+    const { code, discount_value, discount_type, min_amount, is_one_time, expiry_date, shop_id } = req.body;
+    try {
+        let finalShopId = shop_id ? parseInt(shop_id, 10) : null;
+        if (isNaN(finalShopId)) finalShopId = null;
+
+        await queryRun(
+            `INSERT INTO coupons (code, discount_value, discount_type, min_amount, is_one_time, expiry_date, shop_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [
+                code.toUpperCase(),
+                parseInt(discount_value) || 0,
+                discount_type,
+                parseInt(min_amount) || 0,
+                is_one_time ? 1 : 0,
+                expiry_date,
+                finalShopId
+            ]
+        );
+        res.status(201).json({ message: "Added" });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.delete('/coupons/:id', checkAdminAuth, async (req, res) => {
+    try {
+        await queryRun("DELETE FROM coupons WHERE id = ?", [req.params.id]);
+        res.json({ message: "Deleted" });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Protect all below routes with admin auth
 router.use(checkAdminAuth);
 
@@ -369,6 +445,8 @@ router.get('/settings', async (req, res) => {
 });
 
 router.patch('/settings', async (req, res) => {
+    console.log("PATCH /settings request body:", req.body);
+    console.log("Cookies received:", req.cookies);
     try {
         const updateData = { ...req.body };
         delete updateData.id;
@@ -377,10 +455,12 @@ router.patch('/settings', async (req, res) => {
             const setClause = keys.map(k => `${k} = ?`).join(", ");
             const values = Object.values(updateData);
             values.push(1);
+            console.log("Executing SQL: UPDATE settings SET", setClause, "with values:", values);
             await queryRun(`UPDATE settings SET ${setClause} WHERE id = ?`, values);
         }
         res.json({ message: "Updated" });
     } catch (err) {
+        console.error("PATCH /settings database error:", err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -775,46 +855,7 @@ router.delete('/brands/:id', async (req, res) => {
     }
 });
 
-// Coupons
-router.get('/coupons', async (req, res) => {
-    try {
-        const data = await queryAll("SELECT * FROM coupons");
-        res.json(data);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
 
-router.post('/coupons', async (req, res) => {
-    const { code, discount_value, discount_type, min_amount, is_one_time, expiry_date, shop_id } = req.body;
-    try {
-        await queryRun(
-            `INSERT INTO coupons (code, discount_value, discount_type, min_amount, is_one_time, expiry_date, shop_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [
-                code.toUpperCase(),
-                parseInt(discount_value) || 0,
-                discount_type,
-                parseInt(min_amount) || 0,
-                is_one_time ? 1 : 0,
-                expiry_date,
-                shop_id || null
-            ]
-        );
-        res.status(201).json({ message: "Added" });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-router.delete('/coupons/:id', async (req, res) => {
-    try {
-        await queryRun("DELETE FROM coupons WHERE id = ?", [req.params.id]);
-        res.json({ message: "Deleted" });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
 
 // Promo Banners
 router.get('/promo-banners', async (req, res) => {
@@ -1006,6 +1047,384 @@ router.get('/marketplace/analytics', async (req, res) => {
         });
     } catch (e) {
         res.status(500).json({ error: e.message });
+    }
+});
+
+// Super Admin — Vendor Settlements Dashboard Overview
+router.get('/vendor-settlements', checkAdminAuth, async (req, res) => {
+    try {
+        const shops = await queryAll("SELECT id, name, status FROM shops ORDER BY name ASC");
+        
+        // Dynamically run release balances for all shops to make sure metrics are 100% accurate
+        for (const shop of shops) {
+            await releasePendingBalances(shop.id);
+        }
+
+        // Fetch upgraded wallet details for each shop
+        const vendors = [];
+        for (const shop of shops) {
+            let wallet = await queryGet("SELECT * FROM vendor_wallets WHERE shop_id = ?", [shop.id]);
+            if (!wallet) {
+                await queryRun("INSERT INTO vendor_wallets (shop_id, balance, revenue, pending_balance, total_balance, available_balance) VALUES (?, 0, 0, 0, 0, 0)", [shop.id]);
+                wallet = await queryGet("SELECT * FROM vendor_wallets WHERE shop_id = ?", [shop.id]);
+            }
+
+            // Get last settlement date
+            const lastLog = await queryGet("SELECT created_at FROM settlement_logs WHERE shop_id = ? AND status = 'success' ORDER BY id DESC LIMIT 1", [shop.id]);
+            
+            vendors.push({
+                vendor_id: shop.id,
+                vendor_name: shop.name,
+                shop_status: shop.status,
+                upi_id: wallet.upi_id || '',
+                upi_verified: wallet.upi_verified || 0,
+                bank_name: wallet.bank_name || '',
+                bank_account: wallet.bank_account || '',
+                bank_ifsc: wallet.bank_ifsc || '',
+                bank_holder_name: wallet.bank_holder_name || '',
+                pending_balance: wallet.pending_balance || 0,
+                available_balance: wallet.available_balance || 0,
+                total_balance: wallet.total_balance || 0,
+                withdrawal_mode: wallet.withdrawal_mode || 'auto',
+                payout_threshold: wallet.payout_threshold || 1000,
+                today_settlement_amount: wallet.available_balance || 0,
+                last_settlement_date: lastLog ? lastLog.created_at : 'None'
+            });
+        }
+
+        // Calculate summary widget stats
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const todayStartStr = todayStart.toISOString().replace('T', ' ').split('.')[0];
+
+        const settledTodayRow = await queryGet("SELECT SUM(amount) as total FROM settlement_logs WHERE status = 'success' AND datetime(created_at) >= datetime(?)", [todayStartStr]);
+        const pendingAcrossAllRow = await queryGet("SELECT SUM(pending_balance) as total FROM vendor_wallets");
+        const failedTransfersRow = await queryGet("SELECT COUNT(*) as count FROM settlement_logs WHERE status = 'failed'");
+
+        // Fetch audit logs
+        const auditLogs = await queryAll(
+            `SELECT l.*, s.name as shop_name 
+             FROM settlement_logs l 
+             LEFT JOIN shops s ON l.shop_id = s.id 
+             ORDER BY l.id DESC LIMIT 100`
+        );
+
+        // Fetch active disputes
+        const disputes = await queryAll(
+            `SELECT d.*, s.name as shop_name 
+             FROM order_disputes d 
+             LEFT JOIN shops s ON d.shop_id = s.id 
+             ORDER BY d.id DESC`
+        );
+
+        res.json({
+            vendors,
+            summary: {
+                totalSettledToday: settledTodayRow ? (settledTodayRow.total || 0) : 0,
+                totalPendingAcrossAll: pendingAcrossAllRow ? (pendingAcrossAllRow.total || 0) : 0,
+                totalFailed: failedTransfersRow ? failedTransfersRow.count : 0
+            },
+            auditLogs,
+            disputes
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Manual Payment Override (Admin "Pay Now")
+router.post('/vendor-settlements/pay', checkAdminAuth, async (req, res) => {
+    try {
+        const { shop_id, amount, bank_utr, payment_mode, admin_name } = req.body;
+        if (!shop_id || !amount || !bank_utr || !payment_mode) {
+            return res.status(400).json({ error: "Missing required payout details." });
+        }
+
+        const wallet = await queryGet("SELECT available_balance FROM vendor_wallets WHERE shop_id = ?", [shop_id]);
+        if (!wallet) return res.status(404).json({ error: "Vendor wallet not found." });
+
+        if (wallet.available_balance < amount) {
+            return res.status(400).json({ error: `Deduction amount (₹${amount}) exceeds vendor's available balance (₹${wallet.available_balance}).` });
+        }
+
+        // Deduct from available balance
+        await queryRun(
+            "UPDATE vendor_wallets SET available_balance = available_balance - ? WHERE shop_id = ?",
+            [amount, shop_id]
+        );
+
+        // Record manual log in settlement_logs
+        await queryRun(
+            `INSERT INTO settlement_logs (shop_id, amount, bank_utr, payment_mode, status, admin_name) 
+             VALUES (?, ?, ?, ?, 'success', ?)`,
+            [shop_id, amount, bank_utr, payment_mode, admin_name || 'Admin']
+        );
+
+        // Update order wallet_status to settled
+        await queryRun(
+            "UPDATE orders SET wallet_status = 'settled' WHERE shop_id = ? AND wallet_status = 'available'",
+            [shop_id]
+        );
+
+        // Notify vendor
+        await queryRun(
+            `INSERT INTO notifications (message, is_important, target_role, target_shop_id) 
+             VALUES (?, 1, 'vendor', ?)`,
+            [`🎉 Manual payout of ₹${amount} completed by Administrator. Mode: ${payment_mode}. UTR: ${bank_utr}.`, shop_id]
+        );
+
+        res.json({ message: "Manual payout completed successfully!" });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Verify Vendor UPI ID
+router.post('/vendor-settlements/verify-upi', checkAdminAuth, async (req, res) => {
+    try {
+        const { shop_id } = req.body;
+        await queryRun("UPDATE vendor_wallets SET upi_verified = 1 WHERE shop_id = ?", [shop_id]);
+        
+        await queryRun(
+            `INSERT INTO notifications (message, is_important, target_role, target_shop_id) 
+             VALUES (?, 0, 'vendor', ?)`,
+            ["✅ Your UPI ID has been verified by the Administrator.", shop_id]
+        );
+
+        res.json({ message: "UPI ID marked as verified!" });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Update/Edit Vendor UPI ID
+router.post('/vendor-settlements/update-upi', checkAdminAuth, async (req, res) => {
+    try {
+        const { shop_id, upi_id } = req.body;
+        if (!upi_id) return res.status(400).json({ error: "UPI ID is required." });
+
+        await queryRun("UPDATE vendor_wallets SET upi_id = ?, upi_verified = 1 WHERE shop_id = ?", [upi_id, shop_id]);
+
+        await queryRun(
+            `INSERT INTO notifications (message, is_important, target_role, target_shop_id) 
+             VALUES (?, 0, 'vendor', ?)`,
+            [`✏️ Admin updated & verified your UPI ID to: ${upi_id}`, shop_id]
+        );
+
+        res.json({ message: "UPI ID updated and verified successfully!" });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Trigger Midnight Auto-Settlement Daemon (Simulation Trigger)
+router.post('/vendor-settlements/trigger-auto-cron', checkAdminAuth, async (req, res) => {
+    try {
+        const results = await triggerAutoSettlement();
+        res.json({ message: "Auto-settlement daemon executed successfully!", results });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Bulk Settle All eligible vendors
+router.post('/vendor-settlements/bulk-settle', checkAdminAuth, async (req, res) => {
+    try {
+        const wallets = await queryAll("SELECT * FROM vendor_wallets WHERE available_balance > 0");
+        const results = [];
+
+        for (const wallet of wallets) {
+            // Check if details are configured
+            if (!wallet.bank_account && !wallet.upi_id) continue;
+
+            const amount = wallet.available_balance;
+            const utr = "BULK" + Math.floor(100000000000 + Math.random() * 900000000000);
+
+            // Deduct
+            await queryRun("UPDATE vendor_wallets SET available_balance = available_balance - ? WHERE id = ?", [amount, wallet.id]);
+
+            // Log
+            await queryRun(
+                `INSERT INTO settlement_logs (shop_id, amount, bank_utr, payment_mode, status, admin_name) 
+                 VALUES (?, ?, ?, 'auto', 'success', 'System Bulk Settle')`,
+                [wallet.shop_id, amount, utr]
+            );
+
+            // Update orders
+            await queryRun(
+                "UPDATE orders SET wallet_status = 'settled' WHERE shop_id = ? AND wallet_status = 'available'",
+                [wallet.shop_id]
+            );
+
+            // Notify
+            await queryRun(
+                `INSERT INTO notifications (message, is_important, target_role, target_shop_id) 
+                 VALUES (?, 1, 'vendor', ?)`,
+                [`🎉 Bulk payout of ₹${amount} completed successfully. UTR: ${utr}.`, wallet.shop_id]
+            );
+
+            results.push({ shopId: wallet.shop_id, amount, utr });
+        }
+
+        res.json({ message: `Successfully settled ${results.length} vendors bulk-wise!`, results });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Resolve Vendor Dispute
+router.post('/vendor-settlements/resolve-dispute', checkAdminAuth, async (req, res) => {
+    try {
+        const { dispute_id, resolution, refund_amount, notes, admin_name } = req.body;
+        if (!dispute_id || !resolution) {
+            return res.status(400).json({ error: "Dispute ID and Resolution status are required." });
+        }
+
+        const dispute = await queryGet("SELECT * FROM order_disputes WHERE id = ?", [dispute_id]);
+        if (!dispute) return res.status(404).json({ error: "Dispute not found." });
+
+        const status = resolution === 'approve' ? 'approved' : 'rejected';
+        await queryRun(
+            "UPDATE order_disputes SET status = ?, resolution_notes = ?, resolved_at = CURRENT_TIMESTAMP WHERE id = ?",
+            [status, notes || '', dispute_id]
+        );
+
+        if (status === 'approved' && refund_amount && parseInt(refund_amount, 10) > 0) {
+            const refund = parseInt(refund_amount, 10);
+            
+            // Revert deduction by crediting available balance and total balance
+            await queryRun(
+                `UPDATE vendor_wallets 
+                 SET available_balance = available_balance + ?, 
+                     total_balance = total_balance + ? 
+                 WHERE shop_id = ?`,
+                [refund, refund, dispute.shop_id]
+            );
+
+            // Log dispute credit transaction
+            await queryRun(
+                `INSERT INTO wallet_transactions (shop_id, order_id, type, amount, category, description) 
+                 VALUES (?, ?, 'credit', ?, 'dispute_reversal', ?)`,
+                [dispute.shop_id, dispute.order_id, refund, 'dispute_reversal', `Dispute ID #${dispute.id} resolved in favor of vendor. Reversal credit.`]
+            );
+
+            await queryRun(
+                `INSERT INTO notifications (message, is_important, target_role, target_shop_id) 
+                 VALUES (?, 1, 'vendor', ?)`,
+                [`✅ Dispute on Order #${dispute.order_id} resolved in your favor: Credit of ₹${refund} added to your available balance.`, dispute.shop_id]
+            );
+        } else {
+            await queryRun(
+                `INSERT INTO notifications (message, is_important, target_role, target_shop_id) 
+                 VALUES (?, 0, 'vendor', ?)`,
+                [`❌ Dispute on Order #${dispute.order_id} was reviewed and rejected. Admin Notes: ${notes || 'No notes.'}`, dispute.shop_id]
+            );
+        }
+
+        res.json({ message: `Dispute resolved as ${status}.` });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Super Admin Support Chat Endpoints
+router.get('/support/chats', checkAdminAuth, async (req, res) => {
+    try {
+        const chats = await queryAll(
+            `SELECT 
+                COALESCE(user_id, session_id) AS chat_id,
+                user_id,
+                session_id,
+                user_name,
+                message AS last_message,
+                created_at,
+                (SELECT COUNT(*) FROM store_chat_messages 
+                 WHERE shop_id = 0 
+                   AND COALESCE(user_id, session_id) = COALESCE(m.user_id, m.session_id) 
+                   AND sender = 'user' 
+                   AND is_read = 0) AS unread_count
+             FROM store_chat_messages m
+             WHERE shop_id = 0
+               AND id IN (
+                   SELECT MAX(id) 
+                   FROM store_chat_messages 
+                   WHERE shop_id = 0 
+                   GROUP BY COALESCE(user_id, session_id)
+               )
+             ORDER BY created_at DESC`
+        );
+        res.json(chats || []);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.get('/support/chats/:chatId', checkAdminAuth, async (req, res) => {
+    try {
+        const chatId = req.params.chatId;
+        const isNumeric = /^\d+$/.test(chatId);
+        let messages;
+        if (isNumeric) {
+            const userId = parseInt(chatId, 10);
+            messages = await queryAll(
+                `SELECT * FROM store_chat_messages 
+                 WHERE shop_id = 0 AND (user_id = ? OR session_id = ?)
+                 ORDER BY created_at ASC`,
+                [userId, chatId]
+            );
+        } else {
+            messages = await queryAll(
+                `SELECT * FROM store_chat_messages 
+                 WHERE shop_id = 0 AND session_id = ? AND user_id IS NULL
+                 ORDER BY created_at ASC`,
+                [chatId]
+            );
+        }
+
+        // Mark as read
+        if (isNumeric) {
+            const userId = parseInt(chatId, 10);
+            await queryRun(
+                `UPDATE store_chat_messages 
+                 SET is_read = 1 
+                 WHERE shop_id = 0 AND (user_id = ? OR session_id = ?) AND sender = 'user'`,
+                [userId, chatId]
+            );
+        } else {
+            await queryRun(
+                `UPDATE store_chat_messages 
+                 SET is_read = 1 
+                 WHERE shop_id = 0 AND session_id = ? AND user_id IS NULL AND sender = 'user'`,
+                [chatId]
+            );
+        }
+
+        res.json(messages || []);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/support/chats/reply', checkAdminAuth, async (req, res) => {
+    try {
+        const { chat_id, message } = req.body;
+        if (!chat_id || !message) {
+            return res.status(400).json({ error: "Missing chat_id or message." });
+        }
+
+        const isNumeric = /^\d+$/.test(chat_id);
+        const userId = isNumeric ? parseInt(chat_id, 10) : null;
+        const sessionId = isNumeric ? null : chat_id;
+
+        const result = await queryRun(
+            `INSERT INTO store_chat_messages (shop_id, user_id, session_id, user_name, sender, message) 
+             VALUES (0, ?, ?, 'Super Admin', 'admin', ?)`,
+            [userId, sessionId, message]
+        );
+
+        res.status(201).json({ id: result.lastID, success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 

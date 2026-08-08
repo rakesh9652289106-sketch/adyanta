@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../db');
+const { handleOrderDelivery } = require('../walletHelper');
 
 // Middleware to check if user is logged in
 const checkUserAuth = (req, res, next) => {
@@ -60,7 +61,7 @@ router.get('/orders', (req, res) => {
 
 // 3. Address Management
 router.get('/addresses', (req, res) => {
-    db.all("SELECT * FROM addresses WHERE user_id = ? ORDER BY is_default DESC", [req.userId], (err, rows) => {
+    db.all("SELECT * FROM addresses WHERE user_id = ? ORDER BY sort_order ASC, is_default DESC", [req.userId], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows || []);
     });
@@ -76,32 +77,137 @@ router.post('/addresses', (req, res) => {
             addr.is_default = parseInt(addr.is_default || 0, 10);
         }
 
-        const proceedInsert = () => {
-            db.run(`INSERT INTO addresses (user_id, label, address_line, city, pincode, is_default) 
-                    VALUES (?, ?, ?, ?, ?, ?)`,
-                [req.userId, addr.label, addr.address_line, addr.city, addr.pincode, addr.is_default],
-                function(err) {
-                    if (err) return res.status(500).json({ error: err.message });
-                    const insertedId = this.lastID;
-                    db.get("SELECT * FROM addresses WHERE id = ?", [insertedId], (err, row) => {
-                        if (err) return res.status(500).json({ error: err.message });
-                        res.status(201).json(row);
-                    });
+        db.get("SELECT pincode_restriction_active, allowed_pincodes FROM settings LIMIT 1", (err, settings) => {
+            if (err) return res.status(500).json({ error: err.message });
+            
+            if (settings && settings.allowed_pincodes && settings.allowed_pincodes.trim().length > 0) {
+                const allowedArray = settings.allowed_pincodes.split(',').map(p => p.trim()).filter(p => p.length > 0);
+                if (allowedArray.length > 0 && !allowedArray.includes(addr.pincode)) {
+                    return res.status(400).json({ error: `Delivery not available in pincode ${addr.pincode}` });
                 }
-            );
-        };
+            }
 
-        if (addr.is_default === 1) {
-            db.run("UPDATE addresses SET is_default = 0 WHERE user_id = ?", [req.userId], (err) => {
-                if (err) return res.status(500).json({ error: err.message });
+            const proceedInsert = () => {
+                db.run(`INSERT INTO addresses (
+                            user_id, label, address_line, city, pincode, is_default,
+                            landmark, floor_number, apartment_name, delivery_instructions,
+                            contact_person, phone_number, latitude, longitude,
+                            entrance_latitude, entrance_longitude, entrance_type, photo_url,
+                            is_favorite, is_shared, sort_order
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                        req.userId, addr.label, addr.address_line, addr.city, addr.pincode, addr.is_default,
+                        addr.landmark || '', addr.floor_number || '', addr.apartment_name || '', addr.delivery_instructions || '',
+                        addr.contact_person || '', addr.phone_number || '', addr.latitude || null, addr.longitude || null,
+                        addr.entrance_latitude || null, addr.entrance_longitude || null, addr.entrance_type || '', addr.photo_url || '',
+                        addr.is_favorite ? 1 : 0, addr.is_shared ? 1 : 0, addr.sort_order || 0
+                    ],
+                    function(err) {
+                        if (err) return res.status(500).json({ error: err.message });
+                        const insertedId = this.lastID;
+                        db.get("SELECT * FROM addresses WHERE id = ?", [insertedId], (err, row) => {
+                            if (err) return res.status(500).json({ error: err.message });
+                            res.status(201).json(row);
+                        });
+                    }
+                );
+            };
+
+            if (addr.is_default === 1) {
+                db.run("UPDATE addresses SET is_default = 0 WHERE user_id = ?", [req.userId], (err) => {
+                    if (err) return res.status(500).json({ error: err.message });
+                    proceedInsert();
+                });
+            } else {
                 proceedInsert();
-            });
-        } else {
-            proceedInsert();
-        }
+            }
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
+});
+
+router.put('/addresses/:id', (req, res) => {
+    try {
+        const { id } = req.params;
+        const addr = req.body;
+        
+        if (typeof addr.is_default === 'boolean') {
+            addr.is_default = addr.is_default ? 1 : 0;
+        } else {
+            addr.is_default = parseInt(addr.is_default || 0, 10);
+        }
+
+        db.get("SELECT pincode_restriction_active, allowed_pincodes FROM settings LIMIT 1", (err, settings) => {
+            if (err) return res.status(500).json({ error: err.message });
+            
+            if (settings && settings.allowed_pincodes && settings.allowed_pincodes.trim().length > 0) {
+                const allowedArray = settings.allowed_pincodes.split(',').map(p => p.trim()).filter(p => p.length > 0);
+                if (allowedArray.length > 0 && !allowedArray.includes(addr.pincode)) {
+                    return res.status(400).json({ error: `Delivery not available in pincode ${addr.pincode}` });
+                }
+            }
+
+            const proceedUpdate = () => {
+                db.run(`UPDATE addresses SET 
+                            label = ?, address_line = ?, city = ?, pincode = ?, is_default = ?,
+                            landmark = ?, floor_number = ?, apartment_name = ?, delivery_instructions = ?,
+                            contact_person = ?, phone_number = ?, latitude = ?, longitude = ?,
+                            entrance_latitude = ?, entrance_longitude = ?, entrance_type = ?, photo_url = ?,
+                            is_favorite = ?, is_shared = ?, sort_order = ?
+                        WHERE id = ? AND user_id = ?`,
+                    [
+                        addr.label, addr.address_line, addr.city, addr.pincode, addr.is_default,
+                        addr.landmark || '', addr.floor_number || '', addr.apartment_name || '', addr.delivery_instructions || '',
+                        addr.contact_person || '', addr.phone_number || '', addr.latitude || null, addr.longitude || null,
+                        addr.entrance_latitude || null, addr.entrance_longitude || null, addr.entrance_type || '', addr.photo_url || '',
+                        addr.is_favorite ? 1 : 0, addr.is_shared ? 1 : 0, addr.sort_order || 0,
+                        id, req.userId
+                    ],
+                    function(err) {
+                        if (err) return res.status(500).json({ error: err.message });
+                        res.json({ message: "Address updated successfully" });
+                    }
+                );
+            };
+
+            if (addr.is_default === 1) {
+                db.run("UPDATE addresses SET is_default = 0 WHERE user_id = ?", [req.userId], (err) => {
+                    if (err) return res.status(500).json({ error: err.message });
+                    proceedUpdate();
+                });
+            } else {
+                proceedUpdate();
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.patch('/addresses/:id/favorite', (req, res) => {
+    const { id } = req.params;
+    const { is_favorite } = req.body;
+    db.run("UPDATE addresses SET is_favorite = ? WHERE id = ? AND user_id = ?", [is_favorite ? 1 : 0, id, req.userId], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: "Address favorite status updated" });
+    });
+});
+
+router.post('/addresses/reorder', (req, res) => {
+    const { order } = req.body; // Expect array of ids: [3, 1, 2]
+    if (!Array.isArray(order)) return res.status(400).json({ error: "Invalid order format" });
+
+    db.serialize(() => {
+        const stmt = db.prepare("UPDATE addresses SET sort_order = ? WHERE id = ? AND user_id = ?");
+        order.forEach((id, idx) => {
+            stmt.run(idx, id, req.userId);
+        });
+        stmt.finalize((err) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ message: "Address order updated" });
+        });
+    });
 });
 
 router.patch('/addresses/:id/default', (req, res) => {
@@ -261,6 +367,89 @@ router.patch('/settings', (req, res) => {
     db.run(`UPDATE users SET ${setClause} WHERE id = ?`, values, function(err) {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ message: "Settings updated" });
+    });
+});
+
+// 6. Customer Order Dispute & Evidence Chain Endpoints
+router.post('/orders/:id/dispute', (req, res) => {
+    const orderId = req.params.id;
+    const { reason_code, description, customer_unboxing_photo } = req.body;
+    if (!reason_code) {
+        return res.status(400).json({ error: "Dispute reason code is required." });
+    }
+
+    db.get("SELECT * FROM orders WHERE id = ? AND user_id = ?", [orderId, req.userId], (err, order) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!order) return res.status(404).json({ error: "Order not found." });
+
+        db.run(
+            `INSERT INTO order_disputes (order_id, user_id, shop_id, reason_code, description, customer_unboxing_photo, status) 
+             VALUES (?, ?, ?, ?, ?, ?, 'open')`,
+            [orderId, req.userId, order.shop_id || 1, reason_code, description || '', customer_unboxing_photo || null],
+            function(err2) {
+                if (err2) return res.status(500).json({ error: err2.message });
+                res.status(201).json({
+                    message: "Dispute discrepancy report submitted successfully. Vendor pack evidence is linked for audit.",
+                    dispute_id: this.lastID
+                });
+            }
+        );
+    });
+});
+
+router.get('/orders/:id/evidence', (req, res) => {
+    const orderId = req.params.id;
+    db.get("SELECT * FROM orders WHERE id = ? AND user_id = ?", [orderId, req.userId], (err, order) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!order) return res.status(404).json({ error: "Order not found." });
+
+        db.all("SELECT * FROM order_disputes WHERE order_id = ? ORDER BY created_at DESC", [orderId], (err2, disputes) => {
+            if (err2) return res.status(500).json({ error: err2.message });
+            db.get("SELECT name, logo, contact_phone FROM shops WHERE id = ?", [order.shop_id], (err3, shop) => {
+                res.json({
+                    order_id: order.id,
+                    status: order.status,
+                    packing_photo: order.packing_photo,
+                    packing_checklist: order.packing_checklist ? JSON.parse(order.packing_checklist) : [],
+                    is_tamper_sealed: order.is_tamper_sealed === 1,
+                    packing_geo: order.packing_geo,
+                    packed_at: order.packed_at,
+                    delivery_otp: order.delivery_otp,
+                    pickup_otp: order.pickup_otp,
+                    delivery_proof_photo: order.delivery_proof_photo,
+                    shop: shop || {},
+                    disputes: disputes || []
+                });
+            });
+        });
+    });
+});
+
+// Delivery OTP verification endpoint
+router.post('/orders/:id/verify-delivery', (req, res) => {
+    const orderId = req.params.id;
+    const { otp, delivery_proof_photo } = req.body;
+    
+    db.get("SELECT * FROM orders WHERE id = ?", [orderId], (err, order) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!order) return res.status(404).json({ error: "Order not found." });
+
+        if (order.delivery_otp && otp && order.delivery_otp.trim() !== otp.toString().trim()) {
+            return res.status(400).json({ error: "Invalid Delivery OTP code." });
+        }
+
+        db.run(
+            "UPDATE orders SET status = 'delivered', payment_status = 'paid', delivery_proof_photo = ?, delivered_at = CURRENT_TIMESTAMP WHERE id = ?",
+            [delivery_proof_photo || null, orderId],
+            async function(err2) {
+                if (err2) return res.status(500).json({ error: err2.message });
+                
+                // Process wallet flows (pending/return hold release status)
+                await handleOrderDelivery(orderId);
+                
+                res.json({ message: "Delivery confirmed and verified successfully!", status: 'delivered' });
+            }
+        );
     });
 });
 

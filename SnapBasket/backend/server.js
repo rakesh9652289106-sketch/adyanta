@@ -54,7 +54,11 @@ app.use(cors({
 }));
 
 app.use((req, res, next) => {
-    console.log(`${req.method} ${req.url}`);
+    const start = Date.now();
+    res.on('finish', () => {
+        const duration = Date.now() - start;
+        console.log(`${req.method} ${req.originalUrl || req.url} - ${res.statusCode} (${duration}ms)`);
+    });
     if (req.method === 'POST' || req.method === 'PATCH') console.log('Body:', req.body);
     next();
 });
@@ -92,6 +96,30 @@ app.get('/api/health', (req, res) => {
 app.get('/', (req, res) => {
     res.status(200).json({ status: 'active', message: 'ADYANTA Backend API is running' });
 });
+
+// Schedule Auto-Settlement at Midnight (Auto-Settlement Daemon)
+const { triggerAutoSettlement } = require('./walletHelper');
+function scheduleMidnightSettlement() {
+    const now = new Date();
+    const nextMidnight = new Date();
+    nextMidnight.setHours(24, 0, 0, 0); // Next midnight
+    const msUntilMidnight = nextMidnight.getTime() - now.getTime();
+
+    console.log(`[Auto-Settlement] Daemon scheduled to run in ${Math.round(msUntilMidnight / 1000 / 60)} minutes (at 12:00 AM).`);
+
+    setTimeout(() => {
+        triggerAutoSettlement()
+            .then(res => console.log(`[Auto-Settlement] Success:`, res))
+            .catch(err => console.error(`[Auto-Settlement] Error:`, err));
+
+        setInterval(() => {
+            triggerAutoSettlement()
+                .then(res => console.log(`[Auto-Settlement] Success:`, res))
+                .catch(err => console.error(`[Auto-Settlement] Error:`, err));
+        }, 24 * 60 * 60 * 1000);
+    }, msUntilMidnight);
+}
+scheduleMidnightSettlement();
 
 const server = app.listen(PORT, () => {
     console.log(`Professional API Server running on port ${PORT}`);

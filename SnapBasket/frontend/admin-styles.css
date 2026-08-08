@@ -396,3 +396,316 @@ input:checked + .slider:before { transform: translateX(20px); }
         gap: 0;
     }
 }
+
+/* Custom KYC Approvals Table & KPI Stats Styles */
+.kyc-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.kyc-stat-card {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 16px;
+    border: 1px solid #E2E8F0;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.kyc-stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+.kyc-stat-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+}
+
+.kyc-stat-info h3 {
+    margin: 0;
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #1E293B;
+    line-height: 1;
+}
+
+.kyc-stat-info p {
+    margin: 4px 0 0 0;
+    font-size: 0.85rem;
+    color: #64748B;
+    font-weight: 600;
+}
+
+.kyc-filters-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    background: white;
+    padding: 1rem;
+    border-radius: 12px;
+    border: 1px solid #E2E8F0;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+}
+
+.kyc-filters-row .search-box {
+    position: relative;
+    flex: 1;
+    min-width: 280px;
+}
+
+.kyc-filters-row .search-box i {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #94A3B8;
+    font-size: 1.1rem;
+}
+
+.kyc-filters-row .search-box input {
+    width: 100%;
+    padding: 0.65rem 1rem 0.65rem 2.5rem;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    outline: none;
+    font-family: inherit;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.kyc-filters-row .search-box input:focus {
+    border-color: #38BDF8;
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
+}
+
+.kyc-filters-row .filter-dropdowns {
+    display: flex;
+    gap: 1rem;
+}
+
+.kyc-filters-row .filter-dropdowns select {
+    padding: 0.65rem 1rem;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    font-weight: 600;
+    color: #475569;
+    background-color: #F8FAFC;
+    outline: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.kyc-filters-row .filter-dropdowns select:hover {
+    background-color: #F1F5F9;
+    border-color: #CBD5E1;
+}
+
+.kyc-approvals-table td {
+    vertical-align: middle;
+    padding: 1.1rem 1rem;
+}
+
+.shop-id-badge {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #475569;
+    background-color: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    padding: 0.25rem 0.5rem;
+    border-radius: 6px;
+}
+
+.shop-logo-img {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    object-fit: cover;
+    border: 1px solid #E2E8F0;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+    background: #F8FAFC;
+}
+
+.registered-shop-pill {
+    font-weight: 600;
+    color: #334155;
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    padding: 0.35rem 0.65rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+}
+
+.kyc-doc-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background-color: #EFF6FF;
+    color: #2563EB;
+    border: 1px solid #BFDBFE;
+    padding: 0.35rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.kyc-doc-btn:hover {
+    background-color: #2563EB;
+    color: white;
+    border-color: #2563EB;
+}
+
+.kyc-missing-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background-color: #FFF7ED;
+    color: #EA580C;
+    border: 1px solid #FFEDD5;
+    padding: 0.35rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.commission-input-group {
+    display: inline-flex;
+    align-items: center;
+    position: relative;
+    border: 1px solid #CBD5E1;
+    border-radius: 8px;
+    background: white;
+    padding: 2px;
+    max-width: 110px;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    transition: border-color 0.2s ease;
+}
+
+.commission-input-group:focus-within {
+    border-color: #38BDF8;
+    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.15);
+}
+
+.commission-input-group input {
+    width: 45px;
+    border: none !important;
+    outline: none !important;
+    padding: 0.25rem 0.35rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-align: center;
+    color: #1E293B;
+    background: transparent;
+}
+
+.commission-input-group .pct-addon {
+    font-size: 0.75rem;
+    color: #64748B;
+    font-weight: 600;
+    margin-right: 4px;
+}
+
+.commission-input-group button {
+    background: #0284C7;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 4px 6px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.commission-input-group button:hover {
+    background: #0369A1;
+}
+
+.kyc-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+}
+
+.kyc-status-badge.active {
+    background-color: #ECFDF5;
+    color: #059669;
+    border: 1px solid #A7F3D0;
+}
+
+.kyc-status-badge.pending {
+    background-color: #FFFBEB;
+    color: #D97706;
+    border: 1px solid #FDE68A;
+}
+
+.kyc-status-badge.suspended {
+    background-color: #FEF2F2;
+    color: #DC2626;
+    border: 1px solid #FCA5A5;
+}
+
+.btn-approve, .btn-suspend {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.75rem;
+    padding: 0.4rem 0.75rem;
+    border-radius: 8px;
+    font-weight: 700;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.btn-approve {
+    background-color: #10B981;
+    color: white;
+}
+
+.btn-approve:hover {
+    background-color: #059669;
+    transform: translateY(-1px);
+}
+
+.btn-suspend {
+    background-color: #FEE2E2;
+    color: #EF4444;
+    border: 1px solid #FCA5A5;
+}
+
+.btn-suspend:hover {
+    background-color: #EF4444;
+    color: white;
+    border-color: #EF4444;
+    transform: translateY(-1px);
+}
+

@@ -203,6 +203,11 @@
                 <h3>Visit Us</h3>
                 <p id="pAddress">123 Grocery Avenue, Mumbai, MH</p>
             </div>
+            <div class="support-card-page" style="cursor: pointer; border: 1px solid #4F46E5; background: rgba(79, 70, 229, 0.03);" onclick="location.href='/?open_admin_chat=true'">
+                <i class="ph ph-chat-circle-dots" style="color: #4F46E5;"></i>
+                <h3>Live Chat Support</h3>
+                <p>Chat in real-time with Adyanta Admin Support</p>
+            </div>
             <div class="support-card-page">
                 <i class="ph ph-code"></i>
                 <h3>Developed By</h3>
@@ -242,11 +247,8 @@
             <p>&copy; 2026 ADYANTA. All rights reserved.</p>
         </div>
     </footer>
-
     <script type="module">
-        const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-            ? `http://${window.location.hostname}:3000`
-            : '';
+        const API_BASE = '';
         
         async function loadSupportPage() {
             // Auto-fill logged in user info if available
