@@ -1428,4 +1428,65 @@ router.post('/support/chats/reply', checkAdminAuth, async (req, res) => {
     }
 });
 
+// Admin-Vendor Support Chat Endpoints
+router.get('/vendor-support/chats', checkAdminAuth, async (req, res) => {
+    try {
+        const chats = await queryAll(
+            `SELECT DISTINCT shop_id,
+                 (SELECT name FROM shops WHERE id = m.shop_id) AS shop_name,
+                 message AS last_message,
+                 created_at,
+                 (SELECT COUNT(*) FROM vendor_admin_messages WHERE shop_id = m.shop_id AND sender = 'vendor' AND is_read = 0) AS unread_count
+             FROM vendor_admin_messages m
+             WHERE id IN (
+                 SELECT MAX(id)
+                 FROM vendor_admin_messages
+                 GROUP BY shop_id
+             )
+             ORDER BY created_at DESC`
+        );
+        res.json(chats || []);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.get('/vendor-support/chats/:shopId', checkAdminAuth, async (req, res) => {
+    try {
+        const shopId = parseInt(req.params.shopId, 10);
+        const messages = await queryAll(
+            "SELECT * FROM vendor_admin_messages WHERE shop_id = ? ORDER BY created_at ASC",
+            [shopId]
+        );
+
+        // Mark as read
+        await queryRun(
+            "UPDATE vendor_admin_messages SET is_read = 1 WHERE shop_id = ? AND sender = 'vendor'",
+            [shopId]
+        );
+
+        res.json(messages || []);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/vendor-support/chats/reply', checkAdminAuth, async (req, res) => {
+    try {
+        const { shop_id, message } = req.body;
+        if (!shop_id || !message) {
+            return res.status(400).json({ error: "Missing shop_id or message." });
+        }
+
+        const result = await queryRun(
+            "INSERT INTO vendor_admin_messages (shop_id, sender, message) VALUES (?, 'admin', ?)",
+            [shop_id, message]
+        );
+
+        res.status(201).json({ id: result.lastID, success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;

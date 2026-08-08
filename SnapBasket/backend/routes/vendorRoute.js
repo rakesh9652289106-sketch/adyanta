@@ -1378,4 +1378,46 @@ router.put('/special-offers/:id', requireVendor, async (req, res) => {
     }
 });
 
+// Vendor-Admin Chat Support Routes
+router.get('/admin-chat/history', requireVendor, async (req, res) => {
+    try {
+        const shop = await getVendorShop(req.vendorId);
+        if (!shop) return res.status(404).json({ error: "Shop not found." });
+
+        const messages = await queryAll(
+            "SELECT * FROM vendor_admin_messages WHERE shop_id = ? ORDER BY created_at ASC",
+            [shop.id]
+        );
+
+        // Mark messages from admin as read
+        await queryRun(
+            "UPDATE vendor_admin_messages SET is_read = 1 WHERE shop_id = ? AND sender = 'admin'",
+            [shop.id]
+        );
+
+        res.json(messages || []);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/admin-chat/send', requireVendor, async (req, res) => {
+    try {
+        const shop = await getVendorShop(req.vendorId);
+        if (!shop) return res.status(404).json({ error: "Shop not found." });
+
+        const { message } = req.body;
+        if (!message) return res.status(400).json({ error: "Missing message." });
+
+        const result = await queryRun(
+            "INSERT INTO vendor_admin_messages (shop_id, sender, message) VALUES (?, 'vendor', ?)",
+            [shop.id, message]
+        );
+
+        res.status(201).json({ id: result.lastID, success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;

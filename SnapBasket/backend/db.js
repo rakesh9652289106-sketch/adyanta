@@ -155,6 +155,7 @@ function initDb() {
         db.run('DROP TABLE IF EXISTS vendor_wallets');
         db.run('DROP TABLE IF EXISTS feature_flags');
         db.run('DROP TABLE IF EXISTS promo_banners');
+        db.run('DROP TABLE IF EXISTS vendor_admin_messages');
 
         // Re-create dropped tables
         db.run(`CREATE TABLE IF NOT EXISTS shops (
@@ -811,13 +812,22 @@ function initDb() {
         db.run("ALTER TABLE support_messages ADD COLUMN replied_at DATETIME", (err) => {});
         db.run("ALTER TABLE support_messages ADD COLUMN shop_id INTEGER", (err) => {});
 
-        // Create Store Customer Support Chat Messages Table
         db.run(`CREATE TABLE IF NOT EXISTS store_chat_messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             shop_id INTEGER NOT NULL,
             user_id INTEGER,
             session_id TEXT,
             user_name TEXT,
+            sender TEXT NOT NULL,
+            message TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            is_read INTEGER DEFAULT 0
+        )`);
+
+        // Create Vendor-Admin Direct Chat Messages Table
+        db.run(`CREATE TABLE IF NOT EXISTS vendor_admin_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            shop_id INTEGER NOT NULL,
             sender TEXT NOT NULL,
             message TEXT NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

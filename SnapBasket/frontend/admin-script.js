@@ -84,6 +84,7 @@ function renderSidebarForRole(role) {
             <li onclick="showSection('view-brands')"><i class="ph ph-copyright"></i> Brand Partners</li>
             <li onclick="showSection('view-inquiries')"><i class="ph ph-chat-circle-text"></i> Customer Inquiries</li>
             <li onclick="showSection('view-admin-chats')"><i class="ph ph-chat-teardrop-dots"></i> Customer Support Chat</li>
+            <li onclick="showSection('view-super-vendor-chats')"><i class="ph ph-users-three"></i> Vendor Support Chat</li>
             <li onclick="showSection('view-reviews')"><i class="ph ph-star-half"></i> Product Reviews</li>
             <li onclick="showSection('view-payment')"><i class="ph ph-currency-circle-dollar"></i> Payment Tracking</li>
             <li onclick="showSection('view-vendor-settlements')"><i class="ph ph-handshake"></i> Vendor Settlements</li>
@@ -100,6 +101,7 @@ function renderSidebarForRole(role) {
         menu.innerHTML = `
             <li onclick="showSection('view-vendor-dashboard')"><i class="ph ph-chart-pie"></i> Store Dashboard</li>
             <li onclick="showSection('view-vendor-chats')"><i class="ph ph-chat-teardrop-dots"></i> Customer Support Chat</li>
+            <li onclick="showSection('view-vendor-admin-chat')"><i class="ph ph-handshake"></i> Help from Admin</li>
             <li onclick="showSection('view-orders')"><i class="ph ph-receipt"></i> Orders & Packing Verification</li>
             <li onclick="showSection('vendor-disputes')"><i class="ph ph-shield-alert"></i> Disputes & Packing Audits</li>
             <li onclick="showSection('view-products')"><i class="ph ph-package"></i> Manage Products & Inventory</li>
@@ -429,9 +431,13 @@ function showSection(sectionId, forFulfillment = false) {
         if (sectionId === 'view-vendor-settlements') fetchVendorSettlementsDashboard();
         if (sectionId === 'view-vendor-chats') loadVendorChats();
         if (sectionId === 'view-admin-chats') loadAdminChats();
+        if (sectionId === 'view-vendor-admin-chat') startVendorAdminChatPolling();
+        if (sectionId === 'view-super-vendor-chats') loadSuperVendorChats();
         if (sectionId === 'vendor-disputes') { loadVendorDisputes(); loadVendorPackingAccuracy(); }
         if (sectionId !== 'view-vendor-chats') stopVendorChatPolling();
         if (sectionId !== 'view-admin-chats') stopAdminChatPolling();
+        if (sectionId !== 'view-vendor-admin-chat') stopVendorAdminChatPolling();
+        if (sectionId !== 'view-super-vendor-chats') stopSuperVendorChatPolling();
     }
     
     // UI updates
@@ -4652,6 +4658,330 @@ function stopAdminChatPolling() {
     }
 }
 
+// ==========================================================================
+// VENDOR-ADMIN DIRECT HELP & SUPPORT CHAT SYSTEM
+// ==========================================================================
+
+// --- VENDOR SIDE ---
+let lastVendorAdminMessageCount = 0;
+let vendorAdminChatPollInterval = null;
+
+async function loadVendorAdminChatHistory(silent = false) {
+    try {
+        const res = await adminFetch(API_BASE + '/api/vendor/admin-chat/history');
+        if (!res.ok) return;
+        const messages = await res.json();
+        
+        if (messages.length !== lastVendorAdminMessageCount || !silent) {
+            lastVendorAdminMessageCount = messages.length;
+            renderVendorAdminChatMessages(messages);
+        }
+    } catch (err) {
+        console.error("Failed to load vendor-admin chat history:", err);
+    }
+}
+
+function renderVendorAdminChatMessages(messages) {
+    const container = document.getElementById('vendorAdminChatMessages');
+    if (!container) return;
+    
+    if (messages.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; color: #64748B; font-size: 0.85rem; padding: 3rem 1.5rem;">
+                <i class="ph ph-handshake" style="font-size: 3rem; color: #CBD5E1; margin-bottom: 1rem; display: block;"></i>
+                No messages yet. Send a message below to start chatting with the Adyanta Marketplace Administrator.
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = messages.map(m => {
+        const isVendor = m.sender === 'vendor';
+        const bg = isVendor ? '#06341D' : '#E2E8F0';
+        const color = isVendor ? 'white' : '#0F172A';
+        const align = isVendor ? 'flex-end' : 'flex-start';
+        const radius = isVendor ? '14px 14px 2px 14px' : '14px 14px 14px 2px';
+        const float = isVendor ? 'right' : 'left';
+        
+        return `
+            <div style="align-self: ${align}; max-width: 70%; background: ${bg}; color: ${color}; padding: 0.75rem 1rem; border-radius: ${radius}; font-size: 0.85rem; line-height: 1.4; box-shadow: 0 1px 2px rgba(0,0,0,0.05); margin-bottom: 2px;">
+                <div>${m.message}</div>
+                <div style="font-size: 0.6rem; opacity: 0.7; text-align: ${float}; margin-top: 4px;">
+                    ${new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    container.scrollTop = container.scrollHeight;
+}
+
+async function submitVendorAdminMessage(event) {
+    if (event) event.preventDefault();
+    
+    const input = document.getElementById('vendorAdminChatInput');
+    if (!input || !input.value.trim()) return;
+    
+    const message = input.value.trim();
+    input.value = '';
+    
+    try {
+        const res = await adminFetch(API_BASE + '/api/vendor/admin-chat/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message })
+        });
+        
+        if (res.ok) {
+            await loadVendorAdminChatHistory();
+        } else {
+            alert("Failed to send message.");
+        }
+    } catch (err) {
+        console.error("Error sending vendor-admin message:", err);
+    }
+}
+
+function startVendorAdminChatPolling() {
+    stopVendorAdminChatPolling();
+    vendorAdminChatPollInterval = setInterval(() => {
+        loadVendorAdminChatHistory(true);
+    }, 3000);
+}
+
+function stopVendorAdminChatPolling() {
+    if (vendorAdminChatPollInterval) {
+        clearInterval(vendorAdminChatPollInterval);
+        vendorAdminChatPollInterval = null;
+    }
+}
+
+
+// --- SUPER ADMIN SIDE ---
+let superVendorChats = [];
+let activeSuperVendorChatId = null;
+let activeSuperVendorChatShopName = '';
+let lastSuperVendorMessageCount = 0;
+let superVendorChatPollInterval = null;
+
+async function loadSuperVendorChats() {
+    try {
+        const res = await adminFetch(API_BASE + '/api/admin/vendor-support/chats');
+        if (!res.ok) return;
+        superVendorChats = await res.json();
+        renderSuperVendorChatsList();
+        
+        if (activeSuperVendorChatId) {
+            await fetchActiveSuperVendorChatHistory(true);
+        }
+    } catch (err) {
+        console.error("Failed to load super vendor chats:", err);
+    }
+}
+
+function renderSuperVendorChatsList() {
+    const listEl = document.getElementById('superVendorChatList');
+    if (!listEl) return;
+    
+    if (superVendorChats.length === 0) {
+        listEl.innerHTML = '<div style="padding: 2rem 1rem; text-align: center; color: #64748B; font-size: 0.85rem;">No active conversations</div>';
+        return;
+    }
+    
+    listEl.innerHTML = superVendorChats.map(c => {
+        const isActive = c.shop_id === activeSuperVendorChatId;
+        const activeBg = isActive ? '#E2E8F0' : '#ffffff';
+        const lastMsg = c.last_message || 'No messages';
+        const timeStr = c.created_at ? new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+        const unreadBadge = c.unread_count > 0 ? `<span style="background: #ef4444; color: white; font-size: 0.65rem; font-weight: 700; padding: 2px 6px; border-radius: 10px; min-width: 18px; text-align: center;">${c.unread_count}</span>` : '';
+        
+        return `
+            <div class="chat-item ${isActive ? 'active' : ''}" onclick="selectSuperVendorChat(${c.shop_id}, '${c.shop_name.replace(/'/g, "\\'")}')" style="padding: 1rem; border-bottom: 1px solid #E2E8F0; cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: background 0.2s; background: ${activeBg};">
+                <div style="flex: 1; min-width: 0;">
+                    <h5 style="margin: 0; font-size: 0.9rem; font-weight: 700; color: #0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${c.shop_name}</h5>
+                    <p style="margin: 4px 0 0 0; font-size: 0.75rem; color: #64748B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${lastMsg}</p>
+                </div>
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; margin-left: 8px;">
+                    <span style="font-size: 0.65rem; color: #94A3B8;">${timeStr}</span>
+                    ${unreadBadge}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function selectSuperVendorChat(shopId, shopName) {
+    activeSuperVendorChatId = shopId;
+    activeSuperVendorChatShopName = shopName;
+    lastSuperVendorMessageCount = 0;
+    
+    const placeholder = document.getElementById('superVendorChatPlaceholder');
+    const workspace = document.getElementById('superVendorChatWorkspace');
+    const userHeader = document.getElementById('superVendorActiveChatUser');
+    const chatIdInput = document.getElementById('superVendorActiveChatId');
+    
+    if (placeholder) placeholder.style.display = 'none';
+    if (workspace) workspace.style.display = 'flex';
+    if (userHeader) userHeader.innerText = shopName;
+    if (chatIdInput) chatIdInput.value = shopId;
+    
+    document.querySelectorAll('#superVendorChatList .chat-item').forEach(item => {
+        item.style.background = '#ffffff';
+        item.classList.remove('active');
+    });
+    
+    const items = Array.from(document.querySelectorAll('#superVendorChatList .chat-item'));
+    items.forEach(item => {
+        const clickAttr = item.getAttribute('onclick') || '';
+        if (clickAttr.includes(shopId.toString())) {
+            item.style.background = '#E2E8F0';
+            item.classList.add('active');
+        }
+    });
+    
+    await fetchActiveSuperVendorChatHistory();
+    startSuperVendorChatPolling();
+}
+
+async function fetchActiveSuperVendorChatHistory(silent = false) {
+    if (!activeSuperVendorChatId) return;
+    try {
+        const res = await adminFetch(API_BASE + `/api/admin/vendor-support/chats/${activeSuperVendorChatId}`);
+        if (!res.ok) return;
+        const messages = await res.json();
+        
+        if (messages.length !== lastSuperVendorMessageCount || !silent) {
+            lastSuperVendorMessageCount = messages.length;
+            renderSuperVendorChatMessages(messages);
+            
+            if (silent) {
+                const listRes = await adminFetch(API_BASE + '/api/admin/vendor-support/chats');
+                if (listRes.ok) {
+                    superVendorChats = await listRes.json();
+                    renderSuperVendorChatsList();
+                }
+            }
+        }
+    } catch (err) {
+        console.error("Failed to fetch super vendor chat history:", err);
+    }
+}
+
+function renderSuperVendorChatMessages(messages) {
+    const container = document.getElementById('superVendorChatMessages');
+    if (!container) return;
+    
+    if (messages.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: #64748B; font-size: 0.85rem; padding: 2rem;">No messages in this chat.</div>';
+        return;
+    }
+    
+    container.innerHTML = messages.map(m => {
+        const isAdmin = m.sender === 'admin';
+        const bg = isAdmin ? '#4F46E5' : '#E2E8F0';
+        const color = isAdmin ? 'white' : '#0F172A';
+        const align = isAdmin ? 'flex-end' : 'flex-start';
+        const radius = isAdmin ? '14px 14px 2px 14px' : '14px 14px 14px 2px';
+        const float = isAdmin ? 'right' : 'left';
+        
+        return `
+            <div style="align-self: ${align}; max-width: 70%; background: ${bg}; color: ${color}; padding: 0.75rem 1rem; border-radius: ${radius}; font-size: 0.85rem; line-height: 1.4; box-shadow: 0 1px 2px rgba(0,0,0,0.05); margin-bottom: 2px;">
+                <div>${m.message}</div>
+                <div style="font-size: 0.6rem; opacity: 0.7; text-align: ${float}; margin-top: 4px;">
+                    ${new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    container.scrollTop = container.scrollHeight;
+}
+
+async function submitSuperVendorReply(event) {
+    if (event) event.preventDefault();
+    
+    const chatIdInput = document.getElementById('superVendorActiveChatId');
+    const replyInput = document.getElementById('superVendorChatReplyInput');
+    if (!chatIdInput || !replyInput) return;
+    
+    const shopId = chatIdInput.value;
+    const message = replyInput.value.trim();
+    if (!shopId || !message) return;
+    
+    try {
+        const res = await adminFetch(API_BASE + '/api/admin/vendor-support/chats/reply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ shop_id: shopId, message })
+        });
+        
+        if (res.ok) {
+            replyInput.value = '';
+            await fetchActiveSuperVendorChatHistory();
+            const chatsRes = await adminFetch(API_BASE + '/api/admin/vendor-support/chats');
+            if (chatsRes.ok) {
+                superVendorChats = await chatsRes.json();
+                renderSuperVendorChatsList();
+            }
+        } else {
+            alert("Failed to send reply.");
+        }
+    } catch (err) {
+        console.error("Error sending super vendor reply:", err);
+    }
+}
+
+function filterSuperVendorChats(query) {
+    const listEl = document.getElementById('superVendorChatList');
+    if (!listEl) return;
+    
+    const lowerQuery = query.toLowerCase().trim();
+    const filtered = superVendorChats.filter(c => {
+        return (c.shop_name || '').toLowerCase().includes(lowerQuery) || (c.last_message || '').toLowerCase().includes(lowerQuery);
+    });
+    
+    if (filtered.length === 0) {
+        listEl.innerHTML = '<div style="padding: 2rem 1rem; text-align: center; color: #64748B; font-size: 0.85rem;">No matching conversations</div>';
+        return;
+    }
+    
+    listEl.innerHTML = filtered.map(c => {
+        const isActive = c.shop_id === activeSuperVendorChatId;
+        const activeBg = isActive ? '#E2E8F0' : '#ffffff';
+        const lastMsg = c.last_message || 'No messages';
+        const timeStr = c.created_at ? new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+        const unreadBadge = c.unread_count > 0 ? `<span style="background: #ef4444; color: white; font-size: 0.65rem; font-weight: 700; padding: 2px 6px; border-radius: 10px; min-width: 18px; text-align: center;">${c.unread_count}</span>` : '';
+        
+        return `
+            <div class="chat-item ${isActive ? 'active' : ''}" onclick="selectSuperVendorChat(${c.shop_id}, '${c.shop_name.replace(/'/g, "\\'")}')" style="padding: 1rem; border-bottom: 1px solid #E2E8F0; cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: background 0.2s; background: ${activeBg};">
+                <div style="flex: 1; min-width: 0;">
+                    <h5 style="margin: 0; font-size: 0.9rem; font-weight: 700; color: #0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${c.shop_name}</h5>
+                    <p style="margin: 4px 0 0 0; font-size: 0.75rem; color: #64748B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${lastMsg}</p>
+                </div>
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; margin-left: 8px;">
+                    <span style="font-size: 0.65rem; color: #94A3B8;">${timeStr}</span>
+                    ${unreadBadge}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function startSuperVendorChatPolling() {
+    stopSuperVendorChatPolling();
+    if (!activeSuperVendorChatId) return;
+    superVendorChatPollInterval = setInterval(() => {
+        fetchActiveSuperVendorChatHistory(true);
+    }, 3000);
+}
+
+function stopSuperVendorChatPolling() {
+    if (superVendorChatPollInterval) {
+        clearInterval(superVendorChatPollInterval);
+        superVendorChatPollInterval = null;
+    }
+}
+
 // GLOBAL EXPORTS
 window.fetchFeatureFlags = fetchFeatureFlags;
 window.toggleFeatureFlag = toggleFeatureFlag;
@@ -4705,6 +5035,15 @@ window.selectAdminChat = selectAdminChat;
 window.submitAdminReply = submitAdminReply;
 window.stopAdminChatPolling = stopAdminChatPolling;
 window.filterAdminChats = filterAdminChats;
+
+window.loadVendorAdminChatHistory = loadVendorAdminChatHistory;
+window.submitVendorAdminMessage = submitVendorAdminMessage;
+window.stopVendorAdminChatPolling = stopVendorAdminChatPolling;
+window.loadSuperVendorChats = loadSuperVendorChats;
+window.selectSuperVendorChat = selectSuperVendorChat;
+window.submitSuperVendorReply = submitSuperVendorReply;
+window.stopSuperVendorChatPolling = stopSuperVendorChatPolling;
+window.filterSuperVendorChats = filterSuperVendorChats;
 
 // ==========================================================================
 // PACKED ORDER PHOTO CONFIRMATION & EVIDENCE AUDIT TRAIL SYSTEM
