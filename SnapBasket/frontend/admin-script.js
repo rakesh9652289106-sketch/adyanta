@@ -4432,8 +4432,6 @@ function startVendorChatPolling() {
     }, 3000);
 }
 
-}
-
 let adminChats = [];
 let activeAdminChatId = null;
 let activeAdminChatUserName = '';
