@@ -107,8 +107,12 @@ function setupNavMenu() {
 
         const adminLink = document.getElementById('sidebarAdminLink');
         if (adminLink) {
-            if (role === 'vendor' || (role === 'super_admin' && username === '9490229108')) {
+            if (role === 'super_admin' && username === '9490229108') {
                 adminLink.style.display = 'flex';
+                adminLink.href = 'admin.html';
+            } else if (role === 'vendor') {
+                adminLink.style.display = 'flex';
+                adminLink.href = 'vendor.html';
             } else {
                 adminLink.style.display = 'none';
             }

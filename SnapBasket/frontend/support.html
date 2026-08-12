@@ -212,8 +212,63 @@
                 <i class="ph ph-code"></i>
                 <h3>Developed By</h3>
                 <p style="font-weight: 600; color: var(--primary);">P RAKESH KUMAR</p>
-            </div>
         </div>
+
+        <!-- Premium FAQ Accordion -->
+        <section class="premium-faq-section">
+            <h2>Frequently Asked Questions</h2>
+            <div class="section-subtitle">Get quick answers to common queries or send us a message below.</div>
+            
+            <div class="faq-accordion">
+                <div class="faq-item">
+                    <button class="faq-question">
+                        <span>How fast is the delivery in Nellore?</span>
+                        <i class="ph ph-caret-down"></i>
+                    </button>
+                    <div class="faq-answer">
+                        <div class="faq-answer-inner">
+                            We deliver groceries within 15-45 minutes. Actual delivery times vary depending on your distance from the selected vendor's shop. Delivery charges are dynamically computed based on travel distance.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="faq-item">
+                    <button class="faq-question">
+                        <span>What payment methods do you support?</span>
+                        <i class="ph ph-caret-down"></i>
+                    </button>
+                    <div class="faq-answer">
+                        <div class="faq-answer-inner">
+                            We support online payments via Credit Card, Debit Card, Net Banking, Unified Payment Interface (UPI via Razorpay), and Cash on Delivery (COD).
+                        </div>
+                    </div>
+                </div>
+
+                <div class="faq-item">
+                    <button class="faq-question">
+                        <span>Can I cancel or modify my order after placing it?</span>
+                        <i class="ph ph-caret-down"></i>
+                    </button>
+                    <div class="faq-answer">
+                        <div class="faq-answer-inner">
+                            Orders can be cancelled or modified within 3 minutes of placement (before the vendor starts packaging). Please navigate to your Profile -> My Orders to cancel or contact live support.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="faq-item">
+                    <button class="faq-question">
+                        <span>How can I contact a vendor directly?</span>
+                        <i class="ph ph-caret-down"></i>
+                    </button>
+                    <div class="faq-answer">
+                        <div class="faq-answer-inner">
+                            You can view the phone number for each store directly in the "Stores Catalog" page under the store details, or send a direct contact inquiry using the form below.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
 
         <section class="contact-section">
             <h2>Send us a Message</h2>
@@ -297,6 +352,22 @@
                     console.error("Failed to load storefront support header details", e);
                 }
             }
+
+            // Bind FAQ accordion click toggles
+            const faqQuestions = document.querySelectorAll(".faq-question");
+            faqQuestions.forEach(question => {
+                question.addEventListener("click", () => {
+                    const item = question.parentElement;
+                    const isActive = item.classList.contains("active");
+                    
+                    // Collapse all others
+                    document.querySelectorAll(".faq-item").forEach(el => el.classList.remove("active"));
+                    
+                    if (!isActive) {
+                        item.classList.add("active");
+                    }
+                });
+            });
         }
 
         const contactForm = document.getElementById('contactForm');

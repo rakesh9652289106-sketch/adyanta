@@ -17,7 +17,7 @@ let currentAdmin = null;
 let revenueChart = null;
 let tempVariants = [];
 let currentEditVariants = [];
-let currentPortalRole = 'super_admin';
+let currentPortalRole = 'vendor';
 let vendorChatPollInterval = null;
 let kycVendorsList = [];
 let kycListenersBound = false;
@@ -42,15 +42,19 @@ function switchPortalRole(role) {
     const username = getCookie('username');
     const isSuresh = userRole === 'super_admin' && username === '9490229108';
 
-    if (role === 'vendor') {
-        window.location.href = 'vendor.html';
+    if (role === 'super_admin') {
+        if (!isSuresh) {
+            alert("Access Denied: Only Suresh is authorized to access the Super Admin Panel.");
+            return;
+        }
+        window.location.href = 'admin.html';
         return;
     }
 
-    currentPortalRole = 'super_admin';
-    localStorage.setItem('admin_portal_role', 'super_admin');
-    renderSidebarForRole('super_admin');
-    showSection('view-dashboard');
+    currentPortalRole = 'vendor';
+    localStorage.setItem('admin_portal_role', 'vendor');
+    renderSidebarForRole('vendor');
+    showSection('view-vendor-dashboard');
 }
 
 // Dynamically render sidebar items based on current portal role
@@ -61,8 +65,10 @@ function renderSidebarForRole(role) {
     if (role === 'super_admin') {
         menu.innerHTML = `
             <li onclick="showSection('view-dashboard')"><i class="ph ph-chart-pie"></i> Dashboard Overview</li>
-            <li onclick="showSection('view-orders')"><i class="ph ph-receipt"></i> Recent Orders</li>
-            <li onclick="showSection('view-products')"><i class="ph ph-package"></i> Manage Products</li>
+            <li onclick="showSection('view-feature-switchboard')"><i class="ph ph-toggle-left"></i> Feature Switchboard</li>
+            <li onclick="showSection('view-vendor-approvals')"><i class="ph ph-seal-check"></i> Vendor KYC Approvals</li>
+            <li onclick="showSection('view-orders')"><i class="ph ph-receipt"></i> Global Orders</li>
+            <li onclick="showSection('view-products')"><i class="ph ph-package"></i> Global Products</li>
             <li onclick="showSection('view-notifications')"><i class="ph ph-bell"></i> Push Notifications</li>
             <li onclick="showSection('view-promo')"><i class="ph ph-presentation"></i> Promotional Ads</li>
             <li onclick="showSection('view-categories')"><i class="ph ph-list-bullets"></i> Product Categories</li>
@@ -72,9 +78,10 @@ function renderSidebarForRole(role) {
             <li onclick="showSection('view-super-vendor-chats')"><i class="ph ph-users-three"></i> Vendor Support Chat</li>
             <li onclick="showSection('view-reviews')"><i class="ph ph-star-half"></i> Product Reviews</li>
             <li onclick="showSection('view-payment')"><i class="ph ph-currency-circle-dollar"></i> Payment Tracking</li>
+            <li onclick="showSection('view-vendor-settlements')"><i class="ph ph-handshake"></i> Vendor Settlements</li>
             <li onclick="showSection('view-cancelled-orders')"><i class="ph ph-prohibit"></i> Cancelled Payments</li>
             <li onclick="showSection('view-users')"><i class="ph ph-users"></i> Manage Users</li>
-            <li onclick="showSection('view-coupons')"><i class="ph ph-ticket"></i> Coupon Codes</li>
+            <li onclick="showSection('view-coupons')"><i class="ph ph-ticket"></i> Global & Shop Coupons</li>
             <li onclick="showSection('view-loyalty')"><i class="ph ph-coins"></i> Loyalty Program</li>
             <li onclick="showSection('view-settings')"><i class="ph ph-gear"></i> App Settings</li>
             <li onclick="showSection('view-orders', true)"><i class="ph ph-truck"></i> Manage Delivery</li>
@@ -153,16 +160,13 @@ async function checkInitialAuth() {
     const userRole = getCookie('role');
     const username = getCookie('username');
 
+    // Restrict access: Only Suresh (super_admin) or Vendors can access the admin panel page
     const isSuresh = userRole === 'super_admin' && username === '9490229108';
     const isVendor = userRole === 'vendor';
 
-    if (!isSuresh) {
-        if (isVendor) {
-            window.location.href = 'vendor.html';
-        } else {
-            alert("Access Denied: You do not have permissions to access the Admin Panel.");
-            window.location.href = 'login.html';
-        }
+    if (!isSuresh && !isVendor) {
+        alert("Access Denied: You do not have permissions to access the Admin Panel.");
+        window.location.href = 'login.html';
         return;
     }
 
@@ -175,16 +179,27 @@ async function checkInitialAuth() {
     // Multi-Vendor Role Setup
     const roleSelector = document.getElementById('portalRoleSelector');
     
-    currentPortalRole = 'super_admin';
-    localStorage.setItem('admin_portal_role', 'super_admin');
-    if (roleSelector) {
-        roleSelector.value = 'super_admin';
-        const container = document.getElementById('roleSelectorContainer');
-        if (container) container.style.display = 'block';
+    if (isVendor) {
+        currentPortalRole = 'vendor';
+        localStorage.setItem('admin_portal_role', 'vendor');
+        if (roleSelector) {
+            roleSelector.value = 'vendor';
+            roleSelector.disabled = true;
+            const container = document.getElementById('roleSelectorContainer');
+            if (container) container.style.display = 'none';
+        }
+    } else if (isSuresh) {
+        currentPortalRole = 'vendor';
+        localStorage.setItem('admin_portal_role', 'vendor');
+        if (roleSelector) {
+            roleSelector.value = 'vendor';
+            const container = document.getElementById('roleSelectorContainer');
+            if (container) container.style.display = 'block';
+        }
     }
     
-    renderSidebarForRole('super_admin');
-    startSuperVendorNotificationDotPolling();
+    renderSidebarForRole('vendor');
+    startVendorHelpdeskNotificationDotPolling();
     initDashboard();
 }
 
@@ -4417,7 +4432,7 @@ let adminChatPollInterval = null;
 
 async function loadAdminChats() {
     try {
-        const res = await adminFetch(API_BASE + '/api/admin/support/chats');
+        const res = await adminFetch(API_BASE + '/api/vendor/support/chats');
         if (!res.ok) return;
         adminChats = await res.json();
         renderAdminChatsList();
@@ -4426,7 +4441,7 @@ async function loadAdminChats() {
             await fetchActiveAdminChatHistory(true);
         }
     } catch (err) {
-        console.error("Failed to load admin chats:", err);
+        console.error("Failed to load vendor customer chats:", err);
     }
 }
 
@@ -4497,7 +4512,7 @@ async function selectAdminChat(chatId, userName) {
 async function fetchActiveAdminChatHistory(silent = false) {
     if (!activeAdminChatId) return;
     try {
-        const res = await adminFetch(API_BASE + `/api/admin/support/chats/${activeAdminChatId}`);
+        const res = await adminFetch(API_BASE + `/api/vendor/support/chats/${activeAdminChatId}`);
         if (!res.ok) return;
         const messages = await res.json();
         
@@ -4506,7 +4521,7 @@ async function fetchActiveAdminChatHistory(silent = false) {
             renderAdminChatMessages(messages);
             
             if (silent) {
-                const listRes = await adminFetch(API_BASE + '/api/admin/support/chats');
+                const listRes = await adminFetch(API_BASE + '/api/vendor/support/chats');
                 if (listRes.ok) {
                     adminChats = await listRes.json();
                     renderAdminChatsList();
@@ -4514,7 +4529,7 @@ async function fetchActiveAdminChatHistory(silent = false) {
             }
         }
     } catch (err) {
-        console.error("Failed to fetch admin chat history:", err);
+        console.error("Failed to fetch vendor chat history:", err);
     }
 }
 
@@ -4528,7 +4543,7 @@ function renderAdminChatMessages(messages) {
     }
     
     container.innerHTML = messages.map(m => {
-        const isAdmin = m.sender === 'admin';
+        const isAdmin = m.sender === 'admin' || m.sender === 'vendor';
         const bg = isAdmin ? '#4F46E5' : '#E2E8F0';
         const color = isAdmin ? 'white' : '#0F172A';
         const align = isAdmin ? 'flex-end' : 'flex-start';
@@ -4560,7 +4575,7 @@ async function submitAdminReply(event) {
     if (!chatId || !message) return;
     
     try {
-        const res = await adminFetch(API_BASE + '/api/admin/support/chats/reply', {
+        const res = await adminFetch(API_BASE + '/api/vendor/support/chats/reply', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ chat_id: chatId, message })
@@ -4569,7 +4584,7 @@ async function submitAdminReply(event) {
         if (res.ok) {
             replyInput.value = '';
             await fetchActiveAdminChatHistory();
-            const chatsRes = await adminFetch(API_BASE + '/api/admin/support/chats');
+            const chatsRes = await adminFetch(API_BASE + '/api/vendor/support/chats');
             if (chatsRes.ok) {
                 adminChats = await chatsRes.json();
                 renderAdminChatsList();
@@ -4578,7 +4593,7 @@ async function submitAdminReply(event) {
             alert("Failed to send reply.");
         }
     } catch (err) {
-        console.error("Error sending admin reply:", err);
+        console.error("Error sending vendor customer reply:", err);
     }
 }
 
@@ -4643,18 +4658,21 @@ let vendorAdminChatPollInterval = null;
 
 async function loadVendorAdminChatHistory(silent = false) {
     try {
-        const res = await adminFetch(API_BASE + '/api/vendor/admin-chat/history');
+        const res = await adminFetch(API_BASE + '/api/vendor/admin-chat/history?t=' + Date.now(), { cache: 'no-store' });
         if (!res.ok) return;
         const messages = await res.json();
         
-        if (messages.length !== lastVendorAdminMessageCount || !silent) {
-            lastVendorAdminMessageCount = messages.length;
-            renderVendorAdminChatMessages(messages);
+        if (Array.isArray(messages)) {
+            if (messages.length !== lastVendorAdminMessageCount || !silent) {
+                lastVendorAdminMessageCount = messages.length;
+                renderVendorAdminChatMessages(messages);
+            }
         }
     } catch (err) {
         console.error("Failed to load vendor-admin chat history:", err);
     }
 }
+window.loadVendorAdminChatHistory = loadVendorAdminChatHistory;
 
 function renderVendorAdminChatMessages(messages) {
     const container = document.getElementById('vendorAdminChatMessages');
@@ -4677,6 +4695,276 @@ function renderVendorAdminChatMessages(messages) {
         const align = isVendor ? 'flex-end' : 'flex-start';
         const radius = isVendor ? '14px 14px 2px 14px' : '14px 14px 14px 2px';
         const float = isVendor ? 'right' : 'left';
+        const senderTag = isVendor ? '👤 You (Vendor)' : '👑 Super Admin';
+        
+        const dateObj = m.created_at ? new Date(m.created_at.replace(' ', 'T')) : new Date();
+        const timeStr = isNaN(dateObj.getTime()) ? '' : dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        
+        return `
+            <div style="align-self: ${align}; max-width: 75%; display: flex; flex-direction: column; align-items: ${align}; margin-bottom: 4px;">
+                <span style="font-size: 0.65rem; color: #94A3B8; font-weight: 600; margin-bottom: 2px; padding: 0 4px;">${senderTag}</span>
+                <div style="background: ${bg}; color: ${color}; padding: 0.75rem 1rem; border-radius: ${radius}; font-size: 0.85rem; line-height: 1.4; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                    <div style="word-break: break-word;">${m.message}</div>
+                    <div style="font-size: 0.6rem; opacity: 0.75; text-align: ${float}; margin-top: 4px;">
+                        ${timeStr}
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    container.scrollTop = container.scrollHeight;
+}
+window.renderVendorAdminChatMessages = renderVendorAdminChatMessages;
+
+async function submitVendorAdminMessage(event) {
+    if (event) {
+        if (typeof event.preventDefault === 'function') event.preventDefault();
+        if (typeof event.stopPropagation === 'function') event.stopPropagation();
+    }
+    
+    const input = document.getElementById('vendorAdminChatInput');
+    if (!input || !input.value.trim()) return false;
+    
+    const message = input.value.trim();
+    input.value = '';
+    
+    // Instant Optimistic UI Update
+    const container = document.getElementById('vendorAdminChatMessages');
+    if (container) {
+        const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const newMsgHtml = `
+            <div style="align-self: flex-end; max-width: 75%; display: flex; flex-direction: column; align-items: flex-end; margin-bottom: 4px;">
+                <span style="font-size: 0.65rem; color: #94A3B8; font-weight: 600; margin-bottom: 2px; padding: 0 4px;">👤 You (Vendor)</span>
+                <div style="background: #06341D; color: white; padding: 0.75rem 1rem; border-radius: 14px 14px 2px 14px; font-size: 0.85rem; line-height: 1.4; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                    <div style="word-break: break-word;">${message}</div>
+                    <div style="font-size: 0.6rem; opacity: 0.75; text-align: right; margin-top: 4px;">
+                        ${timeStr}
+                    </div>
+                </div>
+            </div>
+        `;
+        // Clear placeholder if present
+        if (container.innerText.includes('No messages yet')) {
+            container.innerHTML = newMsgHtml;
+        } else {
+            container.insertAdjacentHTML('beforeend', newMsgHtml);
+        }
+        container.scrollTop = container.scrollHeight;
+    }
+    
+    try {
+        const res = await adminFetch(API_BASE + '/api/vendor/admin-chat/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message })
+        });
+        
+        if (res.ok) {
+            await loadVendorAdminChatHistory(true);
+        } else {
+            console.warn("Server response failed for vendor message send.");
+        }
+    } catch (err) {
+        console.error("Error sending vendor-admin message:", err);
+    }
+    return false;
+}
+window.submitVendorAdminMessage = submitVendorAdminMessage;
+    } catch (err) {
+        console.error("Error sending vendor-admin message:", err);
+    }
+    return false;
+}
+
+let vendorHelpdeskNotificationDotInterval = null;
+
+async function updateVendorHelpdeskNotificationDot() {
+    try {
+        const res = await adminFetch(API_BASE + '/api/vendor/admin-chat/unread-count?t=' + Date.now(), { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        const unread = data.unread_count || 0;
+        
+        const sidebarItems = document.querySelectorAll('.sidebar-menu li');
+        sidebarItems.forEach(li => {
+            const onclick = li.getAttribute('onclick') || '';
+            if (onclick.includes('view-vendor-admin-chat')) {
+                let dot = li.querySelector('.helpdesk-green-dot');
+                if (unread > 0) {
+                    if (!dot) {
+                        dot = document.createElement('span');
+                        dot.className = 'helpdesk-green-dot';
+                        li.appendChild(dot);
+                    }
+                    dot.title = `${unread} new reply from Admin`;
+                    dot.style.display = 'inline-block';
+                } else if (dot) {
+                    dot.remove();
+                }
+            }
+        });
+    } catch (e) {
+        // silent fail
+    }
+}
+
+function startVendorHelpdeskNotificationDotPolling() {
+    if (vendorHelpdeskNotificationDotInterval) clearInterval(vendorHelpdeskNotificationDotInterval);
+    updateVendorHelpdeskNotificationDot();
+    vendorHelpdeskNotificationDotInterval = setInterval(updateVendorHelpdeskNotificationDot, 4000);
+}
+
+function startVendorAdminChatPolling() {
+    stopVendorAdminChatPolling();
+    loadVendorAdminChatHistory();
+    updateVendorHelpdeskNotificationDot();
+    vendorAdminChatPollInterval = setInterval(() => {
+        loadVendorAdminChatHistory(true);
+        updateVendorHelpdeskNotificationDot();
+    }, 3000);
+}
+
+function stopVendorAdminChatPolling() {
+    if (vendorAdminChatPollInterval) {
+        clearInterval(vendorAdminChatPollInterval);
+        vendorAdminChatPollInterval = null;
+    }
+    updateVendorHelpdeskNotificationDot();
+}
+
+
+// --- SUPER ADMIN SIDE ---
+let superVendorChats = [];
+let activeSuperVendorChatId = null;
+let activeSuperVendorChatShopName = '';
+let lastSuperVendorMessageCount = 0;
+let superVendorChatPollInterval = null;
+
+async function loadSuperVendorChats() {
+    try {
+        const res = await adminFetch(API_BASE + '/api/admin/vendor-support/chats');
+        if (!res.ok) return;
+        superVendorChats = await res.json();
+        renderSuperVendorChatsList();
+        
+        if (activeSuperVendorChatId) {
+            await fetchActiveSuperVendorChatHistory(true);
+        }
+    } catch (err) {
+        console.error("Failed to load super vendor chats:", err);
+    }
+}
+
+function renderSuperVendorChatsList() {
+    const listEl = document.getElementById('superVendorChatList');
+    if (!listEl) return;
+    
+    if (!Array.isArray(superVendorChats)) {
+        superVendorChats = [];
+    }
+    
+    if (superVendorChats.length === 0) {
+        listEl.innerHTML = '<div style="padding: 2rem 1rem; text-align: center; color: #64748B; font-size: 0.85rem;">No active conversations</div>';
+        return;
+    }
+    
+    listEl.innerHTML = superVendorChats.map(c => {
+        const isActive = c.shop_id === activeSuperVendorChatId;
+        const activeBg = isActive ? '#E2E8F0' : '#ffffff';
+        const lastMsg = c.last_message || 'No messages';
+        
+        const dateObj = c.created_at ? new Date(c.created_at.replace(' ', 'T')) : null;
+        const timeStr = (dateObj && !isNaN(dateObj.getTime())) ? dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+        const unreadBadge = c.unread_count > 0 ? `<span style="background: #ef4444; color: white; font-size: 0.65rem; font-weight: 700; padding: 2px 6px; border-radius: 10px; min-width: 18px; text-align: center;">${c.unread_count}</span>` : '';
+        
+        const escapedShopName = (c.shop_name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        
+        return `
+            <div class="chat-item ${isActive ? 'active' : ''}" data-shop-id="${c.shop_id}" onclick="selectSuperVendorChat(${c.shop_id}, '${escapedShopName}')" style="padding: 1rem; border-bottom: 1px solid #E2E8F0; cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: background 0.2s; background: ${activeBg};">
+                <div style="flex: 1; min-width: 0;">
+                    <h5 style="margin: 0; font-size: 0.9rem; font-weight: 700; color: #0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${c.shop_name || 'Unknown Store'}</h5>
+                    <p style="margin: 4px 0 0 0; font-size: 0.75rem; color: #64748B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${lastMsg}</p>
+                </div>
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; margin-left: 8px;">
+                    <span style="font-size: 0.65rem; color: #94A3B8;">${timeStr}</span>
+                    ${unreadBadge}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function selectSuperVendorChat(shopId, shopName) {
+    activeSuperVendorChatId = shopId;
+    activeSuperVendorChatShopName = shopName;
+    lastSuperVendorMessageCount = 0;
+    
+    const placeholder = document.getElementById('superVendorChatPlaceholder');
+    const workspace = document.getElementById('superVendorChatWorkspace');
+    const userHeader = document.getElementById('superVendorActiveChatUser');
+    const chatIdInput = document.getElementById('superVendorActiveChatId');
+    
+    if (placeholder) placeholder.style.display = 'none';
+    if (workspace) workspace.style.display = 'flex';
+    if (userHeader) userHeader.innerText = shopName;
+    if (chatIdInput) chatIdInput.value = shopId;
+    
+    document.querySelectorAll('#superVendorChatList .chat-item').forEach(item => {
+        const itemShopId = parseInt(item.getAttribute('data-shop-id'), 10);
+        if (itemShopId === shopId) {
+            item.style.background = '#E2E8F0';
+            item.classList.add('active');
+        } else {
+            item.style.background = '#ffffff';
+            item.classList.remove('active');
+        }
+    });
+    
+    await fetchActiveSuperVendorChatHistory();
+    startSuperVendorChatPolling();
+}
+
+async function fetchActiveSuperVendorChatHistory(silent = false) {
+    if (!activeSuperVendorChatId) return;
+    try {
+        const res = await adminFetch(API_BASE + `/api/admin/vendor-support/chats/${activeSuperVendorChatId}`);
+        if (!res.ok) return;
+        const messages = await res.json();
+        
+        if (messages.length !== lastSuperVendorMessageCount || !silent) {
+            lastSuperVendorMessageCount = messages.length;
+            renderSuperVendorChatMessages(messages);
+            
+            if (silent) {
+                const listRes = await adminFetch(API_BASE + '/api/admin/vendor-support/chats');
+                if (listRes.ok) {
+                    superVendorChats = await listRes.json();
+                    renderSuperVendorChatsList();
+                }
+            }
+        }
+    } catch (err) {
+        console.error("Failed to fetch super vendor chat history:", err);
+    }
+}
+
+function renderSuperVendorChatMessages(messages) {
+    const container = document.getElementById('superVendorChatMessages');
+    if (!container) return;
+    
+    if (!Array.isArray(messages) || messages.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: #64748B; font-size: 0.85rem; padding: 2rem;">No messages in this chat.</div>';
+        return;
+    }
+    
+    container.innerHTML = messages.map(m => {
+        const isAdmin = m.sender === 'admin';
+        const bg = isAdmin ? '#4F46E5' : '#E2E8F0';
+        const color = isAdmin ? 'white' : '#0F172A';
+        const align = isAdmin ? 'flex-end' : 'flex-start';
+        const radius = isAdmin ? '14px 14px 2px 14px' : '14px 14px 14px 2px';
+        const float = isAdmin ? 'right' : 'left';
         
         const dateObj = m.created_at ? new Date(m.created_at.replace(' ', 'T')) : new Date();
         const timeStr = isNaN(dateObj.getTime()) ? '' : dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -4694,267 +4982,16 @@ function renderVendorAdminChatMessages(messages) {
     container.scrollTop = container.scrollHeight;
 }
 
-async function submitVendorAdminMessage(event) {
-    if (event) event.preventDefault();
-    
-    const input = document.getElementById('vendorAdminChatInput');
-    if (!input || !input.value.trim()) return;
-    
-    const message = input.value.trim();
-    input.value = '';
-    
-    try {
-        const res = await adminFetch(API_BASE + '/api/vendor/admin-chat/send', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message })
-        });
-        
-        if (res.ok) {
-            await loadVendorAdminChatHistory();
-        } else {
-            alert("Failed to send message.");
-        }
-    } catch (err) {
-        console.error("Error sending vendor-admin message:", err);
-    }
-}
-
-function startVendorAdminChatPolling() {
-    stopVendorAdminChatPolling();
-    loadVendorAdminChatHistory();
-    vendorAdminChatPollInterval = setInterval(() => {
-        loadVendorAdminChatHistory(true);
-    }, 3000);
-}
-
-function stopVendorAdminChatPolling() {
-    if (vendorAdminChatPollInterval) {
-        clearInterval(vendorAdminChatPollInterval);
-        vendorAdminChatPollInterval = null;
-    }
-}
-
-
-// --- SUPER ADMIN SIDE ---
-let superVendorChats = [];
-let activeSuperVendorChatId = null;
-let activeSuperVendorChatShopName = '';
-let lastSuperVendorMessageCount = 0;
-let superVendorChatPollInterval = null;
-
-
-function renderSuperVendorChatsList() {
-    const listEl = document.getElementById('superVendorChatList');
-    if (!listEl) return;
-    
-    if (!Array.isArray(superVendorChats)) {
-        superVendorChats = [];
-    }
-    
-    if (superVendorChats.length === 0) {
-        listEl.innerHTML = '<div style="padding: 2rem 1rem; text-align: center; color: #64748B; font-size: 0.85rem;"><i class="ph ph-storefront" style="font-size: 2rem; display: block; margin-bottom: 0.5rem; opacity: 0.5;"></i>No active vendor tickets</div>';
-        return;
-    }
-    
-    listEl.innerHTML = superVendorChats.map(c => {
-        const isActive = c.shop_id === activeSuperVendorChatId;
-        const activeBg = isActive ? '#EEF2FF' : '#ffffff';
-        const borderColor = isActive ? '#6366F1' : 'transparent';
-        
-        let lastMsg = 'No messages yet';
-        if (c.last_message) {
-            const senderTag = c.last_sender === 'vendor' ? '👤 Vendor: ' : '👑 You: ';
-            lastMsg = senderTag + c.last_message;
-        }
-        
-        const dateObj = c.created_at ? new Date(c.created_at.replace(' ', 'T')) : null;
-        const timeStr = (dateObj && !isNaN(dateObj.getTime())) ? dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-        const unreadBadge = c.unread_count > 0 
-            ? `<span style="background: #EF4444; color: white; font-size: 0.65rem; font-weight: 800; padding: 2px 7px; border-radius: 10px; display: inline-flex; align-items: center; gap: 3px; box-shadow: 0 1px 3px rgba(239, 68, 68, 0.3);"><span style="width: 5px; height: 5px; background: white; border-radius: 50%;"></span>${c.unread_count} New</span>` 
-            : '';
-        
-        const ownerInfo = c.vendor_owner_name ? `<span style="font-size: 0.72rem; color: #64748B; display: flex; align-items: center; gap: 4px; margin-top: 2px;"><i class="ph ph-user"></i> ${c.vendor_owner_name} ${c.vendor_phone ? `(${c.vendor_phone})` : ''}</span>` : '';
-        const escapedShopName = (c.shop_name || 'Vendor Store').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-        const escapedOwnerName = (c.vendor_owner_name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-        const escapedPhone = (c.vendor_phone || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-        
-        return `
-            <div class="chat-item ${isActive ? 'active' : ''}" data-shop-id="${c.shop_id}" onclick="selectSuperVendorChat(${c.shop_id}, '${escapedShopName}', '${escapedOwnerName}', '${escapedPhone}')" style="padding: 0.9rem 1.1rem; border-bottom: 1px solid #E2E8F0; border-left: 3px solid ${borderColor}; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; transition: all 0.2s; background: ${activeBg};">
-                <div style="flex: 1; min-width: 0; padding-right: 8px;">
-                    <div style="display: flex; align-items: center; gap: 6px;">
-                        <i class="ph ph-storefront" style="color: #4F46E5; font-size: 1rem; flex-shrink: 0;"></i>
-                        <h5 style="margin: 0; font-size: 0.9rem; font-weight: 700; color: #0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${c.shop_name || 'Unknown Store'}</h5>
-                    </div>
-                    ${ownerInfo}
-                    <p style="margin: 4px 0 0 0; font-size: 0.76rem; color: ${c.unread_count > 0 ? '#1E293B' : '#64748B'}; font-weight: ${c.unread_count > 0 ? '600' : '400'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${lastMsg}</p>
-                </div>
-                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0;">
-                    <span style="font-size: 0.65rem; color: #94A3B8;">${timeStr}</span>
-                    ${unreadBadge}
-                </div>
-            </div>
-        `;
-    }).join('');
-}
-
-async function selectSuperVendorChat(shopId, shopName, ownerName = '', phone = '') {
-    activeSuperVendorChatId = shopId;
-    activeSuperVendorChatShopName = shopName;
-    lastSuperVendorMessageCount = 0;
-    
-    const placeholder = document.getElementById('superVendorChatPlaceholder');
-    const workspace = document.getElementById('superVendorChatWorkspace');
-    const userHeader = document.getElementById('superVendorActiveChatUser');
-    const statusHeader = document.getElementById('superVendorActiveChatStatus');
-    const chatIdInput = document.getElementById('superVendorActiveChatId');
-    
-    if (placeholder) placeholder.style.display = 'none';
-    if (workspace) workspace.style.display = 'flex';
-    if (userHeader) {
-        userHeader.innerHTML = `<i class="ph ph-storefront" style="color: #4F46E5;"></i> ${shopName}`;
-    }
-    if (statusHeader) {
-        const contactDetails = ownerName ? ` · Owner: ${ownerName} ${phone ? `(${phone})` : ''}` : '';
-        statusHeader.innerHTML = `<span style="width: 6px; height: 6px; background: #22C55E; border-radius: 50%;"></span> Shop ID: #${shopId}${contactDetails}`;
-    }
-    if (chatIdInput) chatIdInput.value = shopId;
-    
-    document.querySelectorAll('#superVendorChatList .chat-item').forEach(item => {
-        const itemShopId = parseInt(item.getAttribute('data-shop-id'), 10);
-        if (itemShopId === shopId) {
-            item.style.background = '#EEF2FF';
-            item.style.borderLeftColor = '#6366F1';
-            item.classList.add('active');
-        } else {
-            item.style.background = '#ffffff';
-            item.style.borderLeftColor = 'transparent';
-            item.classList.remove('active');
-        }
-    });
-    
-    await fetchActiveSuperVendorChatHistory();
-    startSuperVendorChatPolling();
-}
-
-async function loadSuperVendorChats() {
-    try {
-        const res = await adminFetch(API_BASE + '/api/admin/vendor-support/chats?t=' + Date.now(), { cache: 'no-store' });
-        if (!res.ok) return;
-        superVendorChats = await res.json();
-        renderSuperVendorChatsList();
-        updateSuperVendorNotificationDot();
-    } catch (err) {
-        console.error("Failed to load super vendor chats:", err);
-    }
-}
-
-async function fetchActiveSuperVendorChatHistory(silent = false) {
-    if (!activeSuperVendorChatId) return;
-    try {
-        const res = await adminFetch(API_BASE + `/api/admin/vendor-support/chats/${activeSuperVendorChatId}?t=` + Date.now(), { cache: 'no-store' });
-        if (!res.ok) return;
-        const messages = await res.json();
-        
-        if (Array.isArray(messages)) {
-            if (messages.length !== lastSuperVendorMessageCount || !silent) {
-                lastSuperVendorMessageCount = messages.length;
-                renderSuperVendorChatMessages(messages);
-                
-                if (silent) {
-                    const listRes = await adminFetch(API_BASE + '/api/admin/vendor-support/chats?t=' + Date.now(), { cache: 'no-store' });
-                    if (listRes.ok) {
-                        superVendorChats = await listRes.json();
-                        renderSuperVendorChatsList();
-                        updateSuperVendorNotificationDot();
-                    }
-                }
-            }
-        }
-    } catch (err) {
-        console.error("Failed to fetch super vendor chat history:", err);
-    }
-}
-
-function renderSuperVendorChatMessages(messages) {
-    const container = document.getElementById('superVendorChatMessages');
-    if (!container) return;
-    
-    if (!Array.isArray(messages) || messages.length === 0) {
-        container.innerHTML = `
-            <div style="text-align: center; color: #64748B; font-size: 0.85rem; padding: 3rem 1rem;">
-                <i class="ph ph-chat-circle-dots" style="font-size: 2.5rem; color: #CBD5E1; margin-bottom: 0.75rem; display: block;"></i>
-                No messages in this vendor thread yet.<br>Send a message below to reach out directly to this vendor.
-            </div>
-        `;
-        return;
-    }
-    
-    container.innerHTML = messages.map(m => {
-        const isAdmin = m.sender === 'admin';
-        const bg = isAdmin ? '#4F46E5' : '#FFFFFF';
-        const color = isAdmin ? '#ffffff' : '#0F172A';
-        const align = isAdmin ? 'flex-end' : 'flex-start';
-        const radius = isAdmin ? '14px 14px 2px 14px' : '14px 14px 14px 2px';
-        const border = isAdmin ? 'none' : '1px solid #E2E8F0';
-        const senderLabel = isAdmin ? '👑 Super Admin' : `🏬 ${activeSuperVendorChatShopName || 'Vendor'}`;
-        
-        const dateObj = m.created_at ? new Date(m.created_at.replace(' ', 'T')) : new Date();
-        const timeStr = isNaN(dateObj.getTime()) ? '' : dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        
-        return `
-            <div style="align-self: ${align}; max-width: 75%; display: flex; flex-direction: column; align-items: ${align}; margin-bottom: 4px;">
-                <span style="font-size: 0.65rem; color: #94A3B8; font-weight: 600; margin-bottom: 2px; padding: 0 4px;">${senderLabel}</span>
-                <div style="background: ${bg}; color: ${color}; padding: 0.75rem 1rem; border-radius: ${radius}; border: ${border}; font-size: 0.85rem; line-height: 1.4; box-shadow: 0 1px 3px rgba(0,0,0,0.06);">
-                    <div style="word-break: break-word;">${m.message}</div>
-                    <div style="font-size: 0.6rem; opacity: 0.75; text-align: ${isAdmin ? 'right' : 'left'}; margin-top: 4px;">
-                        ${timeStr}
-                    </div>
-                </div>
-            </div>
-        `;
-    }).join('');
-    
-    container.scrollTop = container.scrollHeight;
-}
-
 async function submitSuperVendorReply(event) {
-    if (event) {
-        if (typeof event.preventDefault === 'function') event.preventDefault();
-        if (typeof event.stopPropagation === 'function') event.stopPropagation();
-    }
+    if (event) event.preventDefault();
     
     const chatIdInput = document.getElementById('superVendorActiveChatId');
     const replyInput = document.getElementById('superVendorChatReplyInput');
-    if (!chatIdInput || !replyInput) return false;
+    if (!chatIdInput || !replyInput) return;
     
     const shopId = chatIdInput.value;
     const message = replyInput.value.trim();
-    if (!shopId || !message) return false;
-    replyInput.value = '';
-    
-    // Instant Optimistic UI Update
-    const container = document.getElementById('superVendorChatMessages');
-    if (container) {
-        const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const newMsgHtml = `
-            <div style="align-self: flex-end; max-width: 75%; display: flex; flex-direction: column; align-items: flex-end; margin-bottom: 4px;">
-                <span style="font-size: 0.65rem; color: #94A3B8; font-weight: 600; margin-bottom: 2px; padding: 0 4px;">👑 Super Admin</span>
-                <div style="background: #4F46E5; color: #ffffff; padding: 0.75rem 1rem; border-radius: 14px 14px 2px 14px; font-size: 0.85rem; line-height: 1.4; box-shadow: 0 1px 3px rgba(0,0,0,0.06);">
-                    <div style="word-break: break-word;">${message}</div>
-                    <div style="font-size: 0.6rem; opacity: 0.75; text-align: right; margin-top: 4px;">
-                        ${timeStr}
-                    </div>
-                </div>
-            </div>
-        `;
-        if (container.innerText.includes('No messages in this vendor thread yet')) {
-            container.innerHTML = newMsgHtml;
-        } else {
-            container.insertAdjacentHTML('beforeend', newMsgHtml);
-        }
-        container.scrollTop = container.scrollHeight;
-    }
+    if (!shopId || !message) return;
     
     try {
         const res = await adminFetch(API_BASE + '/api/admin/vendor-support/chats/reply', {
@@ -4964,20 +5001,19 @@ async function submitSuperVendorReply(event) {
         });
         
         if (res.ok) {
-            await fetchActiveSuperVendorChatHistory(true);
-            const chatsRes = await adminFetch(API_BASE + '/api/admin/vendor-support/chats?t=' + Date.now(), { cache: 'no-store' });
+            replyInput.value = '';
+            await fetchActiveSuperVendorChatHistory();
+            const chatsRes = await adminFetch(API_BASE + '/api/admin/vendor-support/chats');
             if (chatsRes.ok) {
                 superVendorChats = await chatsRes.json();
                 renderSuperVendorChatsList();
-                updateSuperVendorNotificationDot();
             }
         } else {
-            console.warn("Failed to send reply to vendor.");
+            alert("Failed to send reply.");
         }
     } catch (err) {
         console.error("Error sending super vendor reply:", err);
     }
-    return false;
 }
 
 function filterSuperVendorChats(query) {
@@ -4990,48 +5026,32 @@ function filterSuperVendorChats(query) {
     
     const lowerQuery = query.toLowerCase().trim();
     const filtered = superVendorChats.filter(c => {
-        return (c.shop_name || '').toLowerCase().includes(lowerQuery) || 
-               (c.vendor_owner_name || '').toLowerCase().includes(lowerQuery) || 
-               (c.vendor_phone || '').includes(lowerQuery) || 
-               (c.last_message || '').toLowerCase().includes(lowerQuery);
+        return (c.shop_name || '').toLowerCase().includes(lowerQuery) || (c.last_message || '').toLowerCase().includes(lowerQuery);
     });
     
     if (filtered.length === 0) {
-        listEl.innerHTML = '<div style="padding: 2rem 1rem; text-align: center; color: #64748B; font-size: 0.85rem;">No matching vendor stores</div>';
+        listEl.innerHTML = '<div style="padding: 2rem 1rem; text-align: center; color: #64748B; font-size: 0.85rem;">No matching conversations</div>';
         return;
     }
     
     listEl.innerHTML = filtered.map(c => {
         const isActive = c.shop_id === activeSuperVendorChatId;
-        const activeBg = isActive ? '#EEF2FF' : '#ffffff';
-        const borderColor = isActive ? '#6366F1' : 'transparent';
-        
-        let lastMsg = 'No messages yet';
-        if (c.last_message) {
-            const senderTag = c.last_sender === 'vendor' ? '👤 Vendor: ' : '👑 You: ';
-            lastMsg = senderTag + c.last_message;
-        }
+        const activeBg = isActive ? '#E2E8F0' : '#ffffff';
+        const lastMsg = c.last_message || 'No messages';
         
         const dateObj = c.created_at ? new Date(c.created_at.replace(' ', 'T')) : null;
         const timeStr = (dateObj && !isNaN(dateObj.getTime())) ? dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-        const unreadBadge = c.unread_count > 0 ? `<span style="background: #EF4444; color: white; font-size: 0.65rem; font-weight: 800; padding: 2px 7px; border-radius: 10px; min-width: 18px; text-align: center;">${c.unread_count} New</span>` : '';
+        const unreadBadge = c.unread_count > 0 ? `<span style="background: #ef4444; color: white; font-size: 0.65rem; font-weight: 700; padding: 2px 6px; border-radius: 10px; min-width: 18px; text-align: center;">${c.unread_count}</span>` : '';
         
-        const ownerInfo = c.vendor_owner_name ? `<span style="font-size: 0.72rem; color: #64748B; display: flex; align-items: center; gap: 4px; margin-top: 2px;"><i class="ph ph-user"></i> ${c.vendor_owner_name}</span>` : '';
-        const escapedShopName = (c.shop_name || 'Vendor Store').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-        const escapedOwnerName = (c.vendor_owner_name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-        const escapedPhone = (c.vendor_phone || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        const escapedShopName = (c.shop_name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
         
         return `
-            <div class="chat-item ${isActive ? 'active' : ''}" data-shop-id="${c.shop_id}" onclick="selectSuperVendorChat(${c.shop_id}, '${escapedShopName}', '${escapedOwnerName}', '${escapedPhone}')" style="padding: 0.9rem 1.1rem; border-bottom: 1px solid #E2E8F0; border-left: 3px solid ${borderColor}; cursor: pointer; display: flex; align-items: flex-start; justify-content: space-between; transition: all 0.2s; background: ${activeBg};">
-                <div style="flex: 1; min-width: 0; padding-right: 8px;">
-                    <div style="display: flex; align-items: center; gap: 6px;">
-                        <i class="ph ph-storefront" style="color: #4F46E5; font-size: 1rem; flex-shrink: 0;"></i>
-                        <h5 style="margin: 0; font-size: 0.9rem; font-weight: 700; color: #0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${c.shop_name || 'Unknown Store'}</h5>
-                    </div>
-                    ${ownerInfo}
-                    <p style="margin: 4px 0 0 0; font-size: 0.76rem; color: #64748B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${lastMsg}</p>
+            <div class="chat-item ${isActive ? 'active' : ''}" data-shop-id="${c.shop_id}" onclick="selectSuperVendorChat(${c.shop_id}, '${escapedShopName}')" style="padding: 1rem; border-bottom: 1px solid #E2E8F0; cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: background 0.2s; background: ${activeBg};">
+                <div style="flex: 1; min-width: 0;">
+                    <h5 style="margin: 0; font-size: 0.9rem; font-weight: 700; color: #0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${c.shop_name || 'Unknown Store'}</h5>
+                    <p style="margin: 4px 0 0 0; font-size: 0.75rem; color: #64748B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${lastMsg}</p>
                 </div>
-                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0;">
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; margin-left: 8px;">
                     <span style="font-size: 0.65rem; color: #94A3B8;">${timeStr}</span>
                     ${unreadBadge}
                 </div>
@@ -5057,44 +5077,6 @@ function stopSuperVendorChatPolling() {
 
 let superVendorChatsListPollInterval = null;
 
-let superVendorNotificationDotInterval = null;
-
-async function updateSuperVendorNotificationDot() {
-    try {
-        const res = await adminFetch(API_BASE + '/api/admin/vendor-support/unread-count?t=' + Date.now(), { cache: 'no-store' });
-        if (!res.ok) return;
-        const data = await res.json();
-        const unread = data.total_unread || 0;
-        
-        const sidebarItems = document.querySelectorAll('.sidebar-menu li');
-        sidebarItems.forEach(li => {
-            const onclick = li.getAttribute('onclick') || '';
-            if (onclick.includes('view-super-vendor-chats')) {
-                let dot = li.querySelector('.helpdesk-green-dot');
-                if (unread > 0) {
-                    if (!dot) {
-                        dot = document.createElement('span');
-                        dot.className = 'helpdesk-green-dot';
-                        li.appendChild(dot);
-                    }
-                    dot.title = `${unread} unread vendor helpdesk message(s)`;
-                    dot.style.display = 'inline-block';
-                } else if (dot) {
-                    dot.remove();
-                }
-            }
-        });
-    } catch (e) {
-        // silent fail
-    }
-}
-
-function startSuperVendorNotificationDotPolling() {
-    if (superVendorNotificationDotInterval) clearInterval(superVendorNotificationDotInterval);
-    updateSuperVendorNotificationDot();
-    superVendorNotificationDotInterval = setInterval(updateSuperVendorNotificationDot, 4000);
-}
-
 async function loadSuperVendorChatsListSilent() {
     try {
         const res = await adminFetch(API_BASE + '/api/admin/vendor-support/chats');
@@ -5103,7 +5085,6 @@ async function loadSuperVendorChatsListSilent() {
         if (Array.isArray(chats)) {
             superVendorChats = chats;
             renderSuperVendorChatsList();
-            updateSuperVendorNotificationDot();
         }
     } catch (err) {
         console.error("Failed to silently load super vendor chats list:", err);
@@ -5114,7 +5095,7 @@ function startSuperVendorChatsListPolling() {
     stopSuperVendorChatsListPolling();
     superVendorChatsListPollInterval = setInterval(() => {
         loadSuperVendorChatsListSilent();
-    }, 4000);
+    }, 5000);
 }
 
 function stopSuperVendorChatsListPolling() {

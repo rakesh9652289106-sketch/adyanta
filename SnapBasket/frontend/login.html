@@ -626,7 +626,7 @@
                             }
                         } else if (data.role === 'vendor') {
                             localStorage.setItem('admin_portal_role', 'vendor');
-                            window.location.href = 'admin.html';
+                            window.location.href = 'vendor.html';
                         } else {
                             window.location.href = '/';
                         }
@@ -691,7 +691,7 @@
                     setTimeout(() => {
                         if (role === 'vendor') {
                             localStorage.setItem('admin_portal_role', 'vendor');
-                            window.location.href = 'admin.html';
+                            window.location.href = 'vendor.html';
                         } else {
                             window.location.href = '/';
                         }
@@ -803,6 +803,15 @@
                 showAuthError("Reset password request failed.");
             }
         }
+
+        // Check for error in URL parameters on load
+        window.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const errorMsg = urlParams.get('error');
+            if (errorMsg) {
+                showAuthError(errorMsg);
+            }
+        });
     </script>
 </body>
 </html>

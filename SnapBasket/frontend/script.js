@@ -77,33 +77,29 @@ function updateSupportLinks(shopId) {
     });
 }
 
-document.addEventListener("DOMContentLoaded", async () => {
-    console.log("DOM Content Loaded - Initializing ADYANTA...");
-    await initSupabase();
+async function initApp() {
+    console.log("Initializing ADYANTA Storefront...");
+    try { await initSupabase(); } catch(e) { console.warn("Supabase init error", e); }
     try {
         console.log("Fetching data from Local API Server...");
         
         // Fetch Products
         const prodRes = await fetch(API_BASE + '/api/products');
-        if (!prodRes.ok) throw new Error(`HTTP error! status: ${prodRes.status}`);
-        products = await prodRes.json();
+        if (prodRes.ok) products = await prodRes.json();
         console.log(`Loaded ${products.length} products.`);
 
         // Fetch Categories
         const catRes = await fetch(API_BASE + '/api/categories');
-        if (!catRes.ok) throw new Error(`HTTP error! status: ${catRes.status}`);
-        categories = await catRes.json();
+        if (catRes.ok) categories = await catRes.json();
         console.log(`Loaded ${categories.length} categories.`);
         
         // Fetch Brands
         const brandRes = await fetch(API_BASE + '/api/brands');
-        if (!brandRes.ok) throw new Error(`HTTP error! status: ${brandRes.status}`);
-        brands = await brandRes.json();
+        if (brandRes.ok) brands = await brandRes.json();
         console.log(`Loaded ${brands.length} brands.`);
 
     } catch(e) {
         console.error("CRITICAL: Failed fetching data from Local API Server", e);
-        // Fallback to direct Supabase query if API fails (optional)
         try {
             if (supabase) {
                 console.log("Attempting direct Supabase fallback...");
@@ -122,69 +118,73 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     console.log("Initializing UI components...");
-    fetchBanners();
-    fetchPromoBanners();
-    fetchSpecialOffers();
-    populateCategories();
+    try { fetchBanners(); } catch(e){ console.warn(e); }
+    try { fetchPromoBanners(); } catch(e){ console.warn(e); }
+    try { fetchSpecialOffers(); } catch(e){ console.warn(e); }
+    try { populateCategories(); } catch(e){ console.warn(e); }
     
     console.log("Populating main product grid (Daily Essentials)...");
-    const dailyEssentials = products.filter(p => p.is_daily_essential !== 0);
-    populateProducts("productGrid", dailyEssentials);
+    try {
+        const dailyEssentials = products.filter(p => p.is_daily_essential !== 0);
+        populateProducts("productGrid", dailyEssentials);
+    } catch(e){ console.warn(e); }
     
-
-    // Populate Trending: Use is_trending flag, fallback to top 12 if none to ensure overflow & auto-scroll
-    const trendingProducts = products.filter(p => p.is_trending === 1);
-    console.log(`Populating trending list with ${trendingProducts.length} items...`);
-    populateProducts("trendingList", trendingProducts.length ? trendingProducts : products.slice(0, 12));
+    // Populate Trending
+    try {
+        const trendingProducts = products.filter(p => p.is_trending === 1);
+        populateProducts("trendingList", trendingProducts.length ? trendingProducts : products.slice(0, 12));
+    } catch(e){ console.warn(e); }
     
-    // Populate Brands using the harmonized grid format
-    console.log("Populating brands grid...");
-    populateBrands();
+    // Populate Brands
+    try { populateBrands(); } catch(e){ console.warn(e); }
 
-    setupCartInteractions();
-    updateCartSidebar(); 
-    // setupThemeToggle(); // Now handled by theme-manager.js automatically
-    setupSearchFunctionality();
-    setupAuth();
-    setupGoogleAuth();
-    setupNotifications();
-    fetchDynamicNotification(); 
-    setInterval(fetchDynamicNotification, 30000); // Poll marquee every 30 seconds
-    checkOrderStatus();
-    setInterval(checkOrderStatus, 60000); // Check every minute
-    setupLocation();
-    setupReviews();
-    updateWishlistBadge();
-    fetchUserWishlist(); // Sync with backend if logged in
-    setupCarousels();
-    setupCustomerService();
-    populateTestimonials();
-    setupNavMenu();
-    setupFeatureModal();
+    try { setupCartInteractions(); } catch(e){ console.warn(e); }
+    try { updateCartSidebar(); } catch(e){ console.warn(e); }
+    try { setupSearchFunctionality(); } catch(e){ console.warn(e); }
+    try { setupAuth(); } catch(e){ console.warn(e); }
+    try { setupGoogleAuth(); } catch(e){ console.warn(e); }
+    try { setupNotifications(); } catch(e){ console.warn(e); }
+    try { fetchDynamicNotification(); } catch(e){ console.warn(e); }
+    setInterval(() => { try { fetchDynamicNotification(); } catch(e){} }, 30000);
+    try { checkOrderStatus(); } catch(e){ console.warn(e); }
+    setInterval(() => { try { checkOrderStatus(); } catch(e){} }, 60000);
+    try { setupLocation(); } catch(e){ console.warn(e); }
+    try { setupReviews(); } catch(e){ console.warn(e); }
+    try { updateWishlistBadge(); } catch(e){ console.warn(e); }
+    try { fetchUserWishlist(); } catch(e){ console.warn(e); }
+    try { setupCarousels(); } catch(e){ console.warn(e); }
+    try { setupCustomerService(); } catch(e){ console.warn(e); }
+    try { populateTestimonials(); } catch(e){ console.warn(e); }
+    try { setupNavMenu(); } catch(e){ console.warn(e); }
+    try { setupFeatureModal(); } catch(e){ console.warn(e); }
     
     // Initialize Translation
-    const savedLang = localStorage.getItem('language') || 'en';
-    if (window.applyTranslations) {
-        window.applyTranslations(savedLang);
-    }
+    try {
+        const savedLang = localStorage.getItem('language') || 'en';
+        if (window.applyTranslations) {
+            window.applyTranslations(savedLang);
+        }
+    } catch(e){ console.warn(e); }
     
     // Check for brand filter in URL
-    const urlParams = new URLSearchParams(window.location.search);
-    const brandFilter = urlParams.get('brand');
-    if (brandFilter) {
-        console.log(`Applying URL Brand Filter: ${brandFilter}`);
-        applyFilter('brand', brandFilter);
-    }
+    try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const brandFilter = urlParams.get('brand');
+        if (brandFilter) {
+            applyFilter('brand', brandFilter);
+        }
+    } catch(e){ console.warn(e); }
 
     // Automatically restore storefront context on reload
-    const activeShopId = localStorage.getItem('active_shop_id');
-    if (activeShopId) {
-        console.log(`Restoring active storefront: ${activeShopId}`);
-        updateSupportLinks(activeShopId);
-        await enterEcosystemStorefront(activeShopId);
-    } else {
-        toggleStorefrontSections(false);
-    }
+    try {
+        const activeShopId = localStorage.getItem('active_shop_id');
+        if (activeShopId) {
+            updateSupportLinks(activeShopId);
+            await enterEcosystemStorefront(activeShopId);
+        } else {
+            toggleStorefrontSections(false);
+        }
+    } catch(e){ console.warn(e); }
 
     console.log("ADYANTA Initialization Complete.");
 
@@ -198,20 +198,15 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (!ticking) {
                 window.requestAnimationFrame(() => {
                     const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-                    const scrollDelta = scrollTop - lastScrollTop;
-                    
                     if (scrollTop <= 50) {
                         if (mainHeader.classList.contains('sticky')) {
-                            console.log("Sticky Header: OFF (Top)");
                             mainHeader.classList.remove('sticky');
                         }
                     } else {
                         if (!mainHeader.classList.contains('sticky')) {
-                            console.log("Sticky Header: ON");
                             mainHeader.classList.add('sticky');
                         }
                     }
-                    
                     lastScrollTop = scrollTop <= 0 ? 0 : scrollTop;
                     ticking = false;
                 });
@@ -221,8 +216,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     // Initialize Mobile Features after data is loaded
-    initProfessionalMobileFeatures();
-});
+    try { initProfessionalMobileFeatures(); } catch(e){ console.warn(e); }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener("DOMContentLoaded", initApp);
+} else {
+    initApp();
+}
+
 
 // Re-order Functionality
 window.reorder = async function(itemsJson) {
@@ -656,15 +658,23 @@ function setupNavMenu() {
         const role = getCookie('role');
         const displayName = name && name !== 'undefined' ? decodeURIComponent(name) : (username ? decodeURIComponent(username) : null);
         
+        const targetUsernameEl = document.getElementById('sidebarUserName') || document.getElementById('sidebarUsername');
         if (displayName) {
-            if (sidebarUsername) sidebarUsername.innerText = displayName;
+            if (targetUsernameEl) targetUsernameEl.innerText = displayName;
             if (sidebarLogout) sidebarLogout.style.display = 'flex';
         }
 
         const adminLink = document.getElementById('sidebarAdminLink');
         if (adminLink) {
-            if (role === 'vendor' || (role === 'super_admin' && username === '9490229108')) {
+            const spanText = adminLink.querySelector('span');
+            if (role === 'super_admin' && username === '9490229108') {
                 adminLink.style.display = 'flex';
+                adminLink.href = 'admin.html';
+                if (spanText) spanText.innerText = '👑 Super Admin Panel';
+            } else if (role === 'vendor') {
+                adminLink.style.display = 'flex';
+                adminLink.href = 'vendor.html';
+                if (spanText) spanText.innerText = '🏬 Vendor Portal';
             } else {
                 adminLink.style.display = 'none';
             }
@@ -1050,11 +1060,9 @@ function setupLocation() {
     const allowBtn = document.getElementById('onboardingAllowLocationBtn');
     const denyBtn = document.getElementById('onboardingDenyLocationBtn');
 
-    // Onboarding modal check
-    if (onboardingModal && !localStorage.getItem('firstLaunchLocationRequested')) {
-        setTimeout(() => {
-            onboardingModal.style.display = 'flex';
-        }, 1500);
+    // Onboarding modal setup
+    if (onboardingModal) {
+        onboardingModal.style.display = 'none';
     }
 
     if (allowBtn) {
@@ -1618,7 +1626,7 @@ function setupAuth() {
                         localStorage.setItem('admin_portal_role', 'vendor');
                         Toast.show("Vendor authenticated! Redirecting to panel...", "success");
                         authModal.classList.remove('active');
-                        setTimeout(() => window.location.href = 'admin.html', 1000);
+                        setTimeout(() => window.location.href = 'vendor.html', 1000);
                     }
                     return;
                 }
@@ -2402,7 +2410,7 @@ async function setupCartInteractions() {
         
         if (typeof window.google === 'undefined' || typeof window.google.maps === 'undefined') {
             const script = document.createElement('script');
-            const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+            const apiKey = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GOOGLE_MAPS_API_KEY) || '';
             const keyParam = apiKey ? `&key=${apiKey}` : '';
             script.src = `https://maps.googleapis.com/maps/api/js?callback=initCheckoutMap${keyParam}`;
             script.async = true;

@@ -10,6 +10,7 @@ export default defineConfig(({ mode }) => {
           main: resolve(__dirname, 'index.html'),
           category: resolve(__dirname, 'category.html'),
           admin: resolve(__dirname, 'admin.html'),
+          vendor: resolve(__dirname, 'vendor.html'),
           brands: resolve(__dirname, 'brands.html'),
           profile: resolve(__dirname, 'profile.html'),
           support: resolve(__dirname, 'support.html'),
@@ -20,7 +21,7 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       proxy: {
-        '/api': env.VITE_API_URL || 'http://localhost:3000'
+        '/api': env.VITE_API_URL || 'http://localhost:3001'
       }
     }
   };

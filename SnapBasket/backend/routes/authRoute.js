@@ -3,6 +3,7 @@ const router = express.Router();
 const crypto = require('crypto');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+const { generateToken, verifyToken } = require('../tokenHelper');
 
 const dbPath = path.join(__dirname, '../database.sqlite');
 const db = new sqlite3.Database(dbPath);
@@ -52,6 +53,17 @@ router.post('/register', async (req, res) => {
                 if (err) return res.status(500).json({ error: err.message });
                 const insertedId = this.lastID.toString();
 
+                const token = generateToken({ user_id: insertedId, username: phone, role: assignedRole });
+                if (assignedRole === 'vendor') {
+                    res.cookie('vendor_token', token, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: true, path: '/' });
+                    res.clearCookie('admin_token', { path: '/' });
+                    res.clearCookie('customer_token', { path: '/' });
+                } else {
+                    res.cookie('customer_token', token, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: true, path: '/' });
+                    res.clearCookie('admin_token', { path: '/' });
+                    res.clearCookie('vendor_token', { path: '/' });
+                }
+
                 res.cookie('user_id', insertedId, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
                 res.cookie('username', phone, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
                 res.cookie('full_name', full_name, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
@@ -62,7 +74,7 @@ router.post('/register', async (req, res) => {
                     username: phone, 
                     full_name, 
                     role: assignedRole,
-                    token: insertedId 
+                    token: token
                 });
             }
         );
@@ -138,19 +150,36 @@ router.post('/recovery/verify-and-login', async (req, res) => {
             (user.security_a2 && user.security_a2 === providedAnswer)) {
             
             const userIdStr = user.id.toString();
+            const userRole = user.role || 'customer';
+            const token = generateToken({ user_id: userIdStr, username: user.username, role: userRole });
+
+            if (userRole === 'vendor') {
+                res.cookie('vendor_token', token, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: true, path: '/' });
+                res.clearCookie('admin_token', { path: '/' });
+                res.clearCookie('customer_token', { path: '/' });
+            } else if (userRole === 'super_admin') {
+                res.cookie('admin_token', token, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: true, path: '/' });
+                res.clearCookie('vendor_token', { path: '/' });
+                res.clearCookie('customer_token', { path: '/' });
+            } else {
+                res.cookie('customer_token', token, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: true, path: '/' });
+                res.clearCookie('admin_token', { path: '/' });
+                res.clearCookie('vendor_token', { path: '/' });
+            }
+
             res.cookie('user_id', userIdStr, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
             res.cookie('username', user.username, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
             res.cookie('full_name', user.full_name, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
-            res.cookie('role', user.role || 'customer', { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
+            res.cookie('role', userRole, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
 
             res.json({ 
                 message: "Login successful", 
                 username: user.username, 
                 full_name: user.full_name, 
                 language: user.language,
-                role: user.role || 'customer',
+                role: userRole,
                 user_id: userIdStr,
-                token: userIdStr
+                token: token
             });
         } else {
             res.status(401).json({ error: "Incorrect security answer." });
@@ -189,62 +218,81 @@ router.post('/login', async (req, res) => {
     if (!username || !password || !full_name) {
         return res.status(400).json({ error: "Full Name, Mobile Number and Password are required." });
     }
-    
-    // 1. Attempt user login from SQLite users table
-    db.get("SELECT * FROM users WHERE phone = ? OR username = ?", [username, username], (err, userProfile) => {
+
+    const providedName = (full_name || '').toLowerCase().trim();
+
+    // 1. Check admin_users table first
+    db.get("SELECT * FROM admin_users WHERE phone = ?", [username], (err, adminUser) => {
         if (err) return res.status(500).json({ error: err.message });
 
-        if (userProfile && verifyPassword(password, userProfile.password)) {
-            const dbName = (userProfile.full_name || '').toLowerCase().trim();
-            const providedName = (full_name || '').toLowerCase().trim();
-
+        if (adminUser && verifyPassword(password, adminUser.password)) {
+            const dbName = (adminUser.full_name || '').toLowerCase().trim();
             if (dbName === providedName) {
-                if (userProfile.status !== 'active') {
-                    return res.status(403).json({ error: "Account is inactive. Please contact support." });
-                }
+                const adminIdStr = adminUser.id.toString();
+                const role = adminUser.role || 'super_admin';
+                const token = generateToken({ user_id: adminIdStr, username: adminUser.phone, role: role });
 
-                const userIdStr = userProfile.id.toString();
-                res.cookie('user_id', userIdStr, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
-                res.cookie('username', userProfile.username, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
-                res.cookie('full_name', userProfile.full_name, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
-                res.cookie('role', userProfile.role || 'customer', { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
-                
-                return res.json({ 
-                    message: "Login successful", 
-                    username: userProfile.username, 
-                    full_name: userProfile.full_name, 
-                    language: userProfile.language,
-                    user_id: userIdStr,
-                    role: userProfile.role || 'customer',
-                    token: userIdStr,
-                    is_admin: userProfile.role === 'super_admin'
+                res.cookie('admin_token', token, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: true, path: '/' });
+                res.clearCookie('vendor_token', { path: '/' });
+                res.clearCookie('customer_token', { path: '/' });
+
+                // Set standard cookies for frontend ease
+                res.cookie('user_id', adminIdStr, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
+                res.cookie('username', adminUser.phone, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
+                res.cookie('full_name', adminUser.full_name, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
+                res.cookie('role', role, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
+
+                return res.json({
+                    message: "Admin Login successful",
+                    username: adminUser.phone,
+                    full_name: adminUser.full_name,
+                    is_admin: true,
+                    role: role,
+                    user_id: adminIdStr,
+                    token: token
                 });
             }
         }
 
-        // 2. Fallback to admin_users table (Legacy/Separate Admin)
-        db.get("SELECT * FROM admin_users WHERE phone = ?", [username], (err, adminUser) => {
+        // 2. Check users table
+        db.get("SELECT * FROM users WHERE phone = ? OR username = ?", [username, username], (err, userProfile) => {
             if (err) return res.status(500).json({ error: err.message });
 
-            if (adminUser && verifyPassword(password, adminUser.password)) {
-                const dbName = (adminUser.full_name || '').toLowerCase().trim();
-                const providedName = (full_name || '').toLowerCase().trim();
-
+            if (userProfile && verifyPassword(password, userProfile.password)) {
+                const dbName = (userProfile.full_name || '').toLowerCase().trim();
                 if (dbName === providedName) {
-                    const adminIdStr = adminUser.id.toString();
-                    res.cookie('admin_auth', 'true', { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
-                    res.cookie('user_id', adminIdStr, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
-                    res.cookie('username', adminUser.phone, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
-                    res.cookie('full_name', adminUser.full_name, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
-                    res.cookie('role', 'super_admin', { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
+                    if (userProfile.status !== 'active') {
+                        return res.status(403).json({ error: "Account is inactive. Please contact support." });
+                    }
+
+                    const userIdStr = userProfile.id.toString();
+                    const role = userProfile.role || 'customer';
+                    const token = generateToken({ user_id: userIdStr, username: userProfile.username, role: role });
+
+                    if (role === 'vendor') {
+                        res.cookie('vendor_token', token, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: true, path: '/' });
+                        res.clearCookie('admin_token', { path: '/' });
+                        res.clearCookie('customer_token', { path: '/' });
+                    } else {
+                        res.cookie('customer_token', token, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: true, path: '/' });
+                        res.clearCookie('admin_token', { path: '/' });
+                        res.clearCookie('vendor_token', { path: '/' });
+                    }
+
+                    res.cookie('user_id', userIdStr, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
+                    res.cookie('username', userProfile.username, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
+                    res.cookie('full_name', userProfile.full_name, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
+                    res.cookie('role', role, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
 
                     return res.json({
-                        message: "Admin Login successful",
-                        username: adminUser.phone,
-                        full_name: adminUser.full_name,
-                        is_admin: true,
-                        role: "super_admin",
-                        token: adminIdStr
+                        message: "Login successful",
+                        username: userProfile.username,
+                        full_name: userProfile.full_name,
+                        language: userProfile.language,
+                        user_id: userIdStr,
+                        role: role,
+                        token: token,
+                        is_admin: role === 'super_admin'
                     });
                 }
             }
@@ -260,6 +308,9 @@ router.post('/logout', (req, res) => {
     res.clearCookie('username', { path: '/' });
     res.clearCookie('full_name', { path: '/' });
     res.clearCookie('role', { path: '/' });
+    res.clearCookie('admin_token', { path: '/' });
+    res.clearCookie('vendor_token', { path: '/' });
+    res.clearCookie('customer_token', { path: '/' });
     res.json({ message: "Logged out" });
 });
 

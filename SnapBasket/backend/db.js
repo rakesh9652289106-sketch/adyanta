@@ -76,7 +76,23 @@ function initDb() {
             security_q1 TEXT,
             security_a1 TEXT,
             security_q2 TEXT,
-            security_a2 TEXT
+            security_a2 TEXT,
+            role TEXT DEFAULT 'super_admin'
+        )`);
+
+        db.run("ALTER TABLE admin_users ADD COLUMN role TEXT DEFAULT 'super_admin'", (err) => {
+            // Column might already exist, ignore errors
+        });
+
+        // Create Failed Access Logs Table
+        db.run(`CREATE TABLE IF NOT EXISTS failed_access_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT,
+            attempted_role TEXT,
+            actual_role TEXT,
+            ip_address TEXT,
+            user_agent TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )`);
 
         // Create Shops Table

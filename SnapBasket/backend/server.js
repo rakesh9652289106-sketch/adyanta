@@ -4,7 +4,7 @@ const cors = require('cors');
 const cookieParser = require('cookie-parser');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = 3001;
 // Supabase is initialized in individual route files via supabaseClient.js
 
 const { initDb } = require('./db');
@@ -82,6 +82,78 @@ app.use('/api', indexRouter);
 // Admin routes are now handled by adminRouter
 
 // User Profile logic is now handled by userRouter at /api/user
+
+// Page-level Guards for Isolated Dashboards
+const { verifyToken } = require('./tokenHelper');
+const { db } = require('./db');
+
+function logFailedAccess(username, attemptedRole, actualRole, req) {
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+    const ua = req.headers['user-agent'] || 'unknown';
+    db.run(
+        "INSERT INTO failed_access_logs (username, attempted_role, actual_role, ip_address, user_agent) VALUES (?, ?, ?, ?, ?)",
+        [username || 'anonymous', attemptedRole, actualRole, ip, ua],
+        (err) => {
+            if (err) console.error("Failed to log access attempt:", err.message);
+        }
+    );
+    console.warn(`[UNAUTHORIZED ACCESS ATTEMPT] User: ${username || 'anonymous'} (Actual Role: ${actualRole}) tried to access ${attemptedRole} page from IP: ${ip}`);
+}
+
+function requireAdminPage(req, res, next) {
+    const adminToken = req.cookies.admin_token;
+    const payload = verifyToken(adminToken);
+    
+    if (payload && payload.role === 'super_admin' && payload.username === '9490229108') {
+        next();
+    } else {
+        let actualRole = 'guest';
+        let username = 'anonymous';
+        
+        const vendorPayload = verifyToken(req.cookies.vendor_token);
+        const customerPayload = verifyToken(req.cookies.customer_token);
+        
+        if (vendorPayload) {
+            actualRole = 'vendor';
+            username = vendorPayload.username;
+        } else if (customerPayload) {
+            actualRole = 'customer';
+            username = customerPayload.username;
+        }
+        
+        logFailedAccess(username, 'super_admin_panel', actualRole, req);
+        res.redirect('/login.html?error=Unauthorized%20Access');
+    }
+}
+
+function requireVendorPage(req, res, next) {
+    const vendorToken = req.cookies.vendor_token;
+    const payload = verifyToken(vendorToken);
+    
+    if (payload && payload.role === 'vendor') {
+        next();
+    } else {
+        let actualRole = 'guest';
+        let username = 'anonymous';
+        
+        const adminPayload = verifyToken(req.cookies.admin_token);
+        const customerPayload = verifyToken(req.cookies.customer_token);
+        
+        if (adminPayload) {
+            actualRole = 'super_admin';
+            username = adminPayload.username;
+        } else if (customerPayload) {
+            actualRole = 'customer';
+            username = customerPayload.username;
+        }
+        
+        logFailedAccess(username, 'vendor_panel', actualRole, req);
+        res.redirect('/login.html?error=Unauthorized%20Access');
+    }
+}
+
+app.get('/admin.html', requireAdminPage);
+app.get('/vendor.html', requireVendorPage);
 
 // Static Files - Serve frontend
 const path = require('path');

@@ -3,14 +3,19 @@ const router = express.Router();
 const { db } = require('../db');
 const { handleOrderDelivery } = require('../walletHelper');
 
+const { verifyToken } = require('../tokenHelper');
+
 // Middleware to check if user is logged in
 const checkUserAuth = (req, res, next) => {
-    const userId = (req.cookies && req.cookies.user_id) || req.headers['x-user-id'] || req.query.user_id || req.body?.user_id;
-    if (!userId) {
+    const token = req.cookies.customer_token;
+    const payload = verifyToken(token);
+    
+    if (payload && payload.role === 'customer') {
+        req.userId = parseInt(payload.user_id, 10);
+        next();
+    } else {
         return res.status(401).json({ error: "Please log in to continue." });
     }
-    req.userId = parseInt(userId, 10);
-    next();
 };
 
 router.use(checkUserAuth);

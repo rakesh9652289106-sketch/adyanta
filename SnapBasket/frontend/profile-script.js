@@ -778,7 +778,7 @@ function loadGoogleMapsScript(callback) {
         return;
     }
     const script = document.createElement('script');
-    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+    const apiKey = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GOOGLE_MAPS_API_KEY) || '';
     const keyParam = apiKey ? `&key=${apiKey}` : '';
     script.src = `https://maps.googleapis.com/maps/api/js?callback=initProfileMap${keyParam}`;
     script.async = true;

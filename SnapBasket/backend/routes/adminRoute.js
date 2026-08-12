@@ -15,22 +15,72 @@ const queryRun = (sql, params = []) => new Promise((resolve, reject) => {
     db.run(sql, params, function(err) { err ? reject(err) : resolve(this); });
 });
 
+const { verifyToken } = require('../tokenHelper');
+
+function logFailedAccess(username, attemptedRole, actualRole, req) {
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+    const ua = req.headers['user-agent'] || 'unknown';
+    db.run(
+        "INSERT INTO failed_access_logs (username, attempted_role, actual_role, ip_address, user_agent) VALUES (?, ?, ?, ?, ?)",
+        [username || 'anonymous', attemptedRole, actualRole, ip, ua],
+        (err) => {
+            if (err) console.error("Failed to log access attempt:", err.message);
+        }
+    );
+    console.warn(`[UNAUTHORIZED ACCESS ATTEMPT] User: ${username || 'anonymous'} (Actual Role: ${actualRole}) tried to access ${attemptedRole} API from IP: ${ip}`);
+}
+
 // Admin Auth Middleware
 function checkAdminAuth(req, res, next) {
-    const isSuperAdmin = (req.cookies.admin_auth === 'true' || req.cookies.role === 'super_admin') && req.cookies.username === '9490229108';
-    if (isSuperAdmin) {
+    const adminToken = req.cookies.admin_token;
+    const payload = verifyToken(adminToken);
+    
+    if (payload && payload.role === 'super_admin' && payload.username === '9490229108') {
+        req.adminUser = payload;
         next();
     } else {
+        // Log mismatch if they are logged in with another valid token
+        let actualRole = 'guest';
+        let username = 'anonymous';
+        
+        const vendorPayload = verifyToken(req.cookies.vendor_token);
+        const customerPayload = verifyToken(req.cookies.customer_token);
+        
+        if (vendorPayload) {
+            actualRole = 'vendor';
+            username = vendorPayload.username;
+        } else if (customerPayload) {
+            actualRole = 'customer';
+            username = customerPayload.username;
+        }
+        
+        logFailedAccess(username, 'super_admin', actualRole, req);
         res.status(403).json({ error: "Forbidden. Only Suresh is authorized to access Super Admin features." });
     }
 }
 
 function checkAdminOrVendorAuth(req, res, next) {
-    const isSuperAdmin = (req.cookies.admin_auth === 'true' || req.cookies.role === 'super_admin') && req.cookies.username === '9490229108';
-    const isVendor = req.cookies.role === 'vendor';
+    const adminToken = req.cookies.admin_token;
+    const adminPayload = verifyToken(adminToken);
+    const vendorToken = req.cookies.vendor_token;
+    const vendorPayload = verifyToken(vendorToken);
+    
+    const isSuperAdmin = adminPayload && adminPayload.role === 'super_admin' && adminPayload.username === '9490229108';
+    const isVendor = vendorPayload && vendorPayload.role === 'vendor';
+    
     if (isSuperAdmin || isVendor) {
+        if (isSuperAdmin) req.adminUser = adminPayload;
+        if (isVendor) req.vendorId = parseInt(vendorPayload.user_id, 10);
         next();
     } else {
+        let actualRole = 'guest';
+        let username = 'anonymous';
+        const customerPayload = verifyToken(req.cookies.customer_token);
+        if (customerPayload) {
+            actualRole = 'customer';
+            username = customerPayload.username;
+        }
+        logFailedAccess(username, 'admin_or_vendor', actualRole, req);
         res.status(403).json({ error: "Forbidden. Admin or Vendor authentication required." });
     }
 }
@@ -92,6 +142,10 @@ router.post('/login', async (req, res) => {
 
         if (verifyPassword(password, row.password)) {
             res.cookie('admin_auth', 'true', { httpOnly: false, path: '/' });
+            res.cookie('username', row.phone, { httpOnly: false, path: '/' });
+            res.cookie('role', 'super_admin', { httpOnly: false, path: '/' });
+            res.cookie('user_id', row.id.toString(), { httpOnly: false, path: '/' });
+            res.cookie('full_name', row.full_name, { httpOnly: false, path: '/' });
             res.json({ message: "Admin authenticated successfully." });
         } else {
             res.status(401).json({ error: "Invalid password." });
@@ -1429,21 +1483,58 @@ router.post('/support/chats/reply', checkAdminAuth, async (req, res) => {
 });
 
 // Admin-Vendor Support Chat Endpoints
+router.get('/vendor-support/unread-count', checkAdminAuth, async (req, res) => {
+    res.set({
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+    });
+    try {
+        const row = await queryGet(
+            "SELECT COUNT(*) AS total_unread FROM vendor_admin_messages WHERE sender = 'vendor' AND is_read = 0"
+        );
+        const stores = await queryAll(
+            "SELECT DISTINCT shop_id FROM vendor_admin_messages WHERE sender = 'vendor' AND is_read = 0"
+        );
+        res.json({
+            total_unread: row ? (row.total_unread || 0) : 0,
+            unread_shop_ids: (stores || []).map(s => s.shop_id)
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 router.get('/vendor-support/chats', checkAdminAuth, async (req, res) => {
+    res.set({
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+    });
     try {
         const chats = await queryAll(
-            `SELECT DISTINCT shop_id,
-                 (SELECT name FROM shops WHERE id = m.shop_id) AS shop_name,
-                 message AS last_message,
-                 created_at,
-                 (SELECT COUNT(*) FROM vendor_admin_messages WHERE shop_id = m.shop_id AND sender = 'vendor' AND is_read = 0) AS unread_count
-             FROM vendor_admin_messages m
-             WHERE id IN (
-                 SELECT MAX(id)
-                 FROM vendor_admin_messages
-                 GROUP BY shop_id
+            `SELECT 
+                 s.id AS shop_id,
+                 s.name AS shop_name,
+                 s.category AS shop_category,
+                 u.full_name AS vendor_owner_name,
+                 u.phone AS vendor_phone,
+                 m.message AS last_message,
+                 m.sender AS last_sender,
+                 m.created_at,
+                 (SELECT COUNT(*) FROM vendor_admin_messages WHERE shop_id = s.id AND sender = 'vendor' AND is_read = 0) AS unread_count
+             FROM shops s
+             LEFT JOIN users u ON s.vendor_id = u.id
+             LEFT JOIN vendor_admin_messages m ON m.id = (
+                 SELECT MAX(id) 
+                 FROM vendor_admin_messages 
+                 WHERE shop_id = s.id
              )
-             ORDER BY created_at DESC`
+             WHERE s.status = 'active'
+             ORDER BY 
+                 (CASE WHEN (SELECT COUNT(*) FROM vendor_admin_messages WHERE shop_id = s.id AND sender = 'vendor' AND is_read = 0) > 0 THEN 1 ELSE 0 END) DESC,
+                 COALESCE(m.created_at, '1970-01-01') DESC,
+                 s.name ASC`
         );
         res.json(chats || []);
     } catch (err) {
@@ -1452,18 +1543,26 @@ router.get('/vendor-support/chats', checkAdminAuth, async (req, res) => {
 });
 
 router.get('/vendor-support/chats/:shopId', checkAdminAuth, async (req, res) => {
+    res.set({
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+    });
     try {
         const shopId = parseInt(req.params.shopId, 10);
+        const peek = req.query.peek === 'true';
         const messages = await queryAll(
             "SELECT * FROM vendor_admin_messages WHERE shop_id = ? ORDER BY created_at ASC",
             [shopId]
         );
 
-        // Mark as read
-        await queryRun(
-            "UPDATE vendor_admin_messages SET is_read = 1 WHERE shop_id = ? AND sender = 'vendor'",
-            [shopId]
-        );
+        if (!peek) {
+            // Mark as read
+            await queryRun(
+                "UPDATE vendor_admin_messages SET is_read = 1 WHERE shop_id = ? AND sender = 'vendor'",
+                [shopId]
+            );
+        }
 
         res.json(messages || []);
     } catch (err) {
@@ -1472,15 +1571,21 @@ router.get('/vendor-support/chats/:shopId', checkAdminAuth, async (req, res) => 
 });
 
 router.post('/vendor-support/chats/reply', checkAdminAuth, async (req, res) => {
+    res.set({
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+    });
     try {
         const { shop_id, message } = req.body;
         if (!shop_id || !message) {
             return res.status(400).json({ error: "Missing shop_id or message." });
         }
 
+        const shopIdInt = parseInt(shop_id, 10);
         const result = await queryRun(
-            "INSERT INTO vendor_admin_messages (shop_id, sender, message) VALUES (?, 'admin', ?)",
-            [shop_id, message]
+            "INSERT INTO vendor_admin_messages (shop_id, sender, message, is_read) VALUES (?, 'admin', ?, 0)",
+            [shopIdInt, message]
         );
 
         res.status(201).json({ id: result.lastID, success: true });
